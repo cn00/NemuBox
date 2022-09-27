@@ -1,0 +1,76 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the device and driver samples.
+#
+
+#
+# Copyright (C) 2009-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+#
+# NemuSampleDevice - A sample device module.
+#
+DLLS += NemuSampleDevice
+NemuSampleDevice_TEMPLATE = NEMUR3
+NemuSampleDevice_INSTTYPE = none
+NemuSampleDevice_SOURCES  = \
+	NemuSampleDevice.cpp
+NemuSampleDevice_LIBS     = \
+	$(LIB_RUNTIME) \
+	$(LIB_VMM) \
+	$(LIB_REM)
+
+#
+# NemuSampleDriver - A sample driver module.
+#
+DLLS += NemuSampleDriver
+NemuSampleDriver_TEMPLATE = NEMUR3
+NemuSampleDriver_INSTTYPE = none
+NemuSampleDriver_SOURCES  = \
+	DrvStorageFilter.cpp
+NemuSampleDriver_LIBS     = \
+	$(LIB_RUNTIME) \
+	$(LIB_VMM) \
+	$(LIB_REM)
+
+include $(FILE_KBUILD_SUB_FOOTER)
+
+
+#
+# Installs the filter.
+#
+install-filter:
+	$(if-expr "$(NEMU_MANAGE)" == "",$(error NEMU_MANAGE is not defined,))
+	$(if-expr "$(NEMU_VMNAME)" == "",$(error NEMU_VMNAME is not defined,))
+# Make Nemu load the driver
+	$(NEMU_MANAGE) setextradata "$(NEMU_VMNAME)" "NemuInternal/PDM/Drivers/NemuSampleDriver/Path" \
+		"$(if $(NemuSampleDriver_1_INST_TARGET),$(NemuSampleDriver_1_INST_TARGET),$(NemuSampleDriver_1_TARGET))"
+# Configure the matching.
+	$(NEMU_MANAGE) setextradata "$(NEMU_VMNAME)" "NemuInternal/PDM/DriverTransformations/StorageFilter/AboveDriver" \
+		"VD"
+# The config of the injected driver.
+	$(NEMU_MANAGE) setextradata "$(NEMU_VMNAME)" "NemuInternal/PDM/DriverTransformations/StorageFilter/AttachedDriver/Driver" \
+		"StorageFilter"
+	$(NEMU_MANAGE) setextradata "$(NEMU_VMNAME)" "NemuInternal/PDM/DriverTransformations/StorageFilter/AttachedDriver/Config/AsyncIOSupported" \
+		"1"
+
+uninstall-filter:
+	$(if-expr "$(NEMU_MANAGE)" == "",$(error NEMU_MANAGE is not defined,))
+	$(if-expr "$(NEMU_VMNAME)" == "",$(error NEMU_VMNAME is not defined,))
+	$(NEMU_MANAGE) showvminfo "$(NEMU_VMNAME)"
+	$(NEMU_MANAGE) setextradata "$(NEMU_VMNAME)" "NemuInternal/PDM/Drivers/NemuSampleDriver/Path"
+	$(NEMU_MANAGE) setextradata "$(NEMU_VMNAME)" "NemuInternal/PDM/DriverTransformations/StorageFilter/AboveDriver"
+	$(NEMU_MANAGE) setextradata "$(NEMU_VMNAME)" "NemuInternal/PDM/DriverTransformations/StorageFilter/AttachedDriver/Config/AsyncIOSupported"
+

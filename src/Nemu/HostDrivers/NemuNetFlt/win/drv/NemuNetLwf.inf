@@ -1,0 +1,98 @@
+; $Id: NemuNetLwf.inf $
+; @file
+; NemuNetLwf.inf - VirtualBox Bridged Networking Driver inf file
+;
+;
+; Copyright (C) 2014-2015 Oracle Corporation
+;
+; This file is part of VirtualBox Open Source Edition (OSE), as
+; available from http://www.virtualbox.org. This file is free software;
+; you can redistribute it and/or modify it under the terms of the GNU
+; General Public License (GPL) as published by the Free Software
+; Foundation, in version 2 as it comes in the "COPYING" file of the
+; VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+; hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+;
+
+[Version]
+Signature   = "$Windows NT$"
+;cat  CatalogFile = NemuNetLwf.cat
+Class       = NetService
+ClassGUID   = {4D36E974-E325-11CE-BFC1-08002BE10318}
+Provider    = %Provider%
+;edit-DriverVer=10/23/2014,1.0.1.0
+
+
+[Manufacturer]
+%Provider% = Nemu,NTx86,NTamd64
+
+[ControlFlags]
+
+[Nemu]
+%NemuNetLwf_Desc% = NemuNetLwf.ndi, oracle_NemuNetLwf
+
+[Nemu.NTx86]
+%NemuNetLwf_Desc% = NemuNetLwf.ndi, oracle_NemuNetLwf
+
+[Nemu.NTamd64]
+%NemuNetLwf_Desc% = NemuNetLwf.ndi, oracle_NemuNetLwf
+
+[NemuNetLwf.ndi]
+AddReg           = NemuNetLwf.ndi.AddReg, NemuNetLwf.AddReg
+Characteristics  = 0x40000 ;  NCF_LW_FILTER
+CopyFiles        = NemuNetLwf.Files.Sys
+NetCfgInstanceId = "{7af6b074-048d-4444-bfce-1ecc8bc5cb76}"
+
+[NemuNetLwf.ndi.Remove.Services]
+DelService       = NemuNetLwf,0x200 ; Stop the service before uninstalling
+
+[NemuNetLwf.ndi.Services]
+AddService = NemuNetLwf,, NemuNetLwf.AddService
+
+[NemuNetLwf.AddService]
+DisplayName    = %NemuNetLwfService_Desc%
+ServiceType    = 1 ;SERVICE_KERNEL_DRIVER
+StartType      = 1 ;SERVICE_SYSTEM_START
+ErrorControl   = 1 ;SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\NemuNetLwf.sys
+LoadOrderGroup = NDIS
+AddReg         = NemuNetLwf.AddService.AddReg
+
+[NemuNetLwf.AddService.AddReg]
+
+[SourceDisksNames]
+1=%DiskDescription%,"",,
+
+[SourceDisksFiles]
+NemuNetLwf.sys=1
+
+[DestinationDirs]
+DefaultDestDir = 12
+NemuNetLwf.Files.Sys   = 12   ; %windir%\System32\drivers
+
+[NemuNetLwf.Files.Sys]
+NemuNetLwf.sys,,,2
+
+
+[NemuNetLwf.ndi.AddReg]
+HKR, Ndi, HelpText, , %NemuNetLwf_HELP%
+HKR, Ndi,            ClsID,              0, {f374d1a0-bf08-4bdc-9cb2-c15ddaeef955}
+;HKR, Ndi,            ComponentDll,        , NemuNetLwfNobj.dll
+HKR, Ndi,            FilterClass,         , compression
+HKR, Ndi,            FilterType,   0x10001, 0x2
+HKR, Ndi,            FilterRunType,0x10001, 2 ; OPTIONAL, to prevent unbinding of protocol drivers
+HKR, Ndi,            Service,             , NemuNetLwf
+HKR, Ndi,            CoServices,   0x10000, NemuNetLwf
+HKR, Ndi\Interfaces, UpperRange,          , noupper
+HKR, Ndi\Interfaces, LowerRange,          , nolower
+HKR, Ndi\Interfaces, FilterMediaTypes,    , ethernet
+
+[NemuNetLwf.AddReg]
+;HKR, Parameters, Param1, 0, 4
+
+[Strings]
+Provider = "Oracle Corporation"
+DiskDescription = "VirtualBox NDIS6 Bridged Networking Driver"
+NemuNetLwf_Desc = "VirtualBox NDIS6 Bridged Networking Driver"
+NemuNetLwf_HELP = "VirtualBox NDIS6 Bridged Networking Driver"
+NemuNetLwfService_Desc = "VirtualBox NDIS6 Bridged Networking Service"

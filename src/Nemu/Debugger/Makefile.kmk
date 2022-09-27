@@ -1,0 +1,139 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Nemu debugger.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# The targets.
+#
+ifdef NEMU_WITH_DEBUGGER
+ LIBRARIES += Debugger
+ ifdef NEMU_WITH_TESTCASES
+  PROGRAMS += tstDBGCParser
+ endif
+endif # NEMU_WITH_DEBUGGER
+
+
+#
+# Debugger library - linked into NemuVMM.
+#
+Debugger_TEMPLATE  = NEMUR3
+Debugger_DEFS      = IN_VMM_R3 IN_DBG_R3 IN_DIS
+ifneq ($(KBUILD_TYPE),release)
+ Debugger_DEFS    += NEMU_WITH_DEBUGGER_TCP_BY_DEFAULT
+endif
+Debugger_SOURCES   = \
+	DBGConsole.cpp \
+	DBGCEval.cpp \
+	DBGCBuiltInSymbols.cpp \
+	DBGCCmdHlp.cpp \
+	DBGCCmdWorkers.cpp \
+	DBGCCommands.cpp \
+	DBGCFunctions.cpp \
+	DBGCEmulateCodeView.cpp \
+	DBGCOps.cpp \
+	DBGCGdbRemoteStub.cpp \
+	DBGCTcp.cpp
+
+#
+# The diggers plug-in.
+#
+DLLS += DbgPlugInDiggers
+DbgPlugInDiggers_TEMPLATE = NEMUR3
+DbgPlugInDiggers_SOURCES = \
+	DBGPlugInDiggers.cpp \
+	DBGPlugInDarwin.cpp \
+	DBGPlugInLinux.cpp \
+	DBGPlugInSolaris.cpp \
+	DBGPlugInWinNt.cpp \
+	DBGPlugInOS2.cpp \
+	DBGPlugInCommonELF.cpp
+DbgPlugInDiggers_LIBS = \
+	$(if-expr "$(LIB_VMM)" == "$(NEMU_LIB_VMM_LAZY)",$(LIB_REM),) \
+	$(NEMU_LIB_VMM_LAZY) \
+	$(LIB_RUNTIME)
+$(call NEMU_SET_VER_INFO_DLL,DbgPlugInDiggers,VirtualBox Debugger Guest OS Digger Plug-in)
+
+
+#
+# The DBGC parser testcase.
+# This stubs all the NemuVMM APIs.
+#
+tstDBGCParser_TEMPLATE = NEMUR3TSTEXE
+tstDBGCParser_DEFS = IN_VMM_R3
+tstDBGCParser_CXXFLAGS = $(NEMU_C_CXX_FLAGS_NO_UNUSED_PARAMETERS)
+tstDBGCParser_SOURCES = \
+	testcase/tstDBGCParser.cpp \
+	testcase/tstDBGCStubs.cpp
+tstDBGCParser_LIBS = \
+	$(Debugger_1_TARGET) \
+	$(LIB_RUNTIME)
+
+
+if defined(NEMU_WITH_QTGUI) && defined(NEMU_WITH_DEBUGGER_GUI)
+#
+# Debugger GUI component (Qt4).
+#
+USES += qt4
+DLLS += NemuDbg
+NemuDbg_TEMPLATE = NEMUQT4GUI
+NemuDbg_DEFS = IN_DBG_R3 NEMUDBG_USE_QT4
+NemuDbg_INCS = .
+NemuDbg_QT_MODULES = Core Gui
+NemuDbg_QT_MOCHDRS = \
+	NemuDbgGui.h \
+	NemuDbgConsole.h \
+	NemuDbgStatsQt4.h
+NemuDbg_SOURCES = \
+	NemuDbg.cpp \
+	NemuDbgGui.cpp \
+	NemuDbgBase.cpp \
+	NemuDbgConsole.cpp \
+	NemuDbgStatsQt4.cpp
+NemuDbg_LIBS = \
+	$(NEMU_LIB_VMM_LAZY)
+NemuDbg_LDFLAGS.darwin = \
+	-install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuDbg.dylib
+$(call NEMU_SET_VER_INFO_DLL,NemuDbg,VirtualBox Debugger GUI)
+
+ ifdef NEMU_WITH_TESTCASES
+#
+# The NemuDbg testcase (Qt4).
+#
+PROGRAMS += tstNemuDbg
+tstNemuDbg_TEMPLATE     = NEMUQT4GUIEXE
+tstNemuDbg_USES         = qt4
+tstNemuDbg_QTTOOL       = QT4
+tstNemuDbg_QT_MODULES   = Core Gui
+tstNemuDbg_SOURCES      = testcase/tstNemuDbg.cpp
+tstNemuDbg_LIBS         = \
+	$(LIB_VMM) \
+	$(LIB_RUNTIME)
+  ifeq ($(KBUILD_TARGET),win)
+tstNemuDbg_LIBS        += \
+	$(PATH_STAGE_LIB)/NemuDbg.lib
+  else
+tstNemuDbg_LIBS        += \
+	$(PATH_STAGE_BIN)/NemuDbg$(NEMU_SUFF_DLL)
+  endif
+ endif # TESTCASES
+endif # Qt4
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

@@ -1,0 +1,202 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Windows guest miniport driver.
+#
+
+#
+# Copyright (C) 2011-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# NemuVideo - Windows Guest Additions XPDM Miniport Video Driver
+#
+# Note. This has to run on NT4! (*_NT4 => *_W2K3 when targeting 64-bit.)
+#
+SYSMODS += NemuVideo
+NemuVideo_TEMPLATE      = NEMUGUESTR0
+NemuVideo_SDKS          = ReorderCompilerIncs $(NEMU_WINDDK_GST_NT4)
+NemuVideo_DEFS          = NEMU_XPDM_MINIPORT NEMU_WITH_8BPP_MODES NEMU_USING_$(NEMU_WINDDK_GST_NT4)
+NemuVideo_DEFS         += LOG_TO_BACKDOOR #LOG_ENABLED
+NemuVideo_DEFS         += NEMU_SVN_REV=$(NEMU_SVN_REV)
+ifdef NEMU_WITH_VIDEOHWACCEL
+ NemuVideo_DEFS        += NEMU_WITH_VIDEOHWACCEL
+endif
+NemuVideo_INCS          = ../../../include .. .
+NemuVideo_LDFLAGS.x86   = /Entry:DriverEntry@8
+NemuVideo_LDFLAGS.amd64 = /Entry:DriverEntry
+NemuVideo_SOURCES       = \
+	xpdm/NemuMPDriver.cpp \
+	xpdm/NemuMP.def \
+	xpdm/NemuMP.rc \
+	xpdm/NemuMPVideoPortAPI.cpp \
+	xpdm/NemuMPInternal.cpp \
+	xpdm/NemuMPRegistry.cpp \
+	xpdm/NemuMPIOCTL.cpp \
+	common/NemuMPUtils.cpp \
+	common/NemuMPCommon.cpp \
+	common/NemuMPHGSMI.cpp \
+	common/NemuMPVidModes.cpp \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/HGSMIBase.cpp \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/Modesetting.cpp
+NemuVideo_LIBS          = \
+	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/videoprt.lib \
+	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/ntoskrnl.lib \
+	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/hal.lib \
+	$(NEMU_LIB_VBGL_R0) \
+	$(NEMU_LIB_IPRT_GUEST_R0_NT4) \
+	$(NEMU_PATH_ADDITIONS_LIB)/HGSMIGuestR0Lib$(NEMU_SUFF_LIB)
+NemuVideo_LIBS.x86      = \
+	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/exsup.lib
+
+ifdef NEMU_WITH_WDDM
+ #
+ # NemuVideoWddm - Windows Guest Additions WDDM Miniport Video Driver
+ #
+ SYSMODS += NemuVideoWddm
+ NemuVideoWddm_TEMPLATE    = NEMUGUESTR0
+ NemuVideoWddm_SDKS        = ReorderCompilerIncs $(NEMU_WINDDK_GST_WLH)
+ NemuVideoWddm_DEFS       += NEMU_WITH_8BPP_MODES DXGKDDI_INTERFACE_VERSION=0x1053
+ NemuVideoWddm_DEFS       += NEMU_WDDM_MINIPORT NEMU_WITH_WDDM NEMU_WITH_HGCM
+ ifdef NEMU_WITH_VIDEOHWACCEL
+  NemuVideoWddm_DEFS      += NEMU_WITH_VIDEOHWACCEL
+ endif
+ ifdef NEMUWDDM_WITH_VBVA
+  NemuVideoWddm_DEFS      += NEMUWDDM_WITH_VBVA
+  NemuVideoWddm_DEFS      += NEMUWDDM_RENDER_FROM_SHADOW
+  ifdef NEMUVDMA_WITH_VBVA
+   NemuVideoWddm_DEFS     += NEMUVDMA_WITH_VBVA
+  endif
+ endif
+ ifdef NEMU_WITH_VDMA
+  NemuVideoWddm_DEFS      += NEMU_WITH_VDMA
+ endif
+ ifdef NEMU_WITH_CRHGSMI
+  NemuVideoWddm_DEFS      += NEMU_WITH_CRHGSMI
+ endif
+ ifdef DEBUG_misha
+  NemuVideoWddm_DEFS      += LOG_ENABLED
+ endif
+ NemuVideoWddm_DEFS       += LOG_TO_BACKDOOR
+ NemuVideoWddm_DEFS       += NEMU_SVN_REV=$(NEMU_SVN_REV)
+ ifdef NEMU_VDMA_WITH_WATCHDOG
+  NemuVideoWddm_DEFS      += NEMU_VDMA_WITH_WATCHDOG
+ endif
+ NemuVideoWddm_INCS       += \
+ 	../../../include \
+ 	.. \
+ 	. \
+ 	$(NEMU_PATH_CROGL_INCLUDE) \
+ 	$(NEMU_PATH_CROGL_GENFILES) \
+ 	$(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/packer
+
+ NemuVideoWddm_LDFLAGS.x86 += /Entry:DriverEntry@8
+ NemuVideoWddm_LDFLAGS.amd64 += /Entry:DriverEntry
+
+ NemuVideoWddm_SOURCES     = \
+ 	wddm/NemuMPWddm.cpp \
+	wddm/NemuMPVidPn.cpp \
+	wddm/NemuMPVdma.cpp \
+	wddm/NemuMPShgsmi.cpp \
+ 	wddm/NemuMPCm.cpp \
+ 	wddm/NemuMPCr.cpp \
+ 	wddm/NemuMPMisc.cpp \
+ 	wddm/NemuMPWddm.rc \
+ 	wddm/NemuMPRegistry.cpp \
+ 	wddm/NemuMPVModes.cpp \
+ 	common/NemuMPUtils.cpp \
+ 	common/NemuMPCommon.cpp \
+ 	common/NemuMPHGSMI.cpp \
+ 	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/HGSMIBase.cpp \
+ 	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/VBVABase.cpp \
+ 	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/Modesetting.cpp
+
+   NemuVideoWddm_SOURCES   += \
+	$(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/util/sortarray.cpp
+
+ if defined(NEMU_WITH_CROGL)
+   NemuVideoWddm_SOURCES   += \
+	$(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/util/vreg.cpp \
+ 	$(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/packer/pack_buffer.c \
+ 	$(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/packer/pack_bounds.c \
+ 	$(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/packer/pack_visibleregion.c \
+ 	$(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/packer/pack_misc.c \
+ 	$(NEMU_PATH_CROGL_GENFILES)/pack_bounds_swap.c \
+ 	$(NEMU_PATH_CROGL_GENFILES)/packer.c \
+ 	wddm/NemuMPCrUtil.cpp
+   NemuVideoWddm_DEFS      += NEMU_WITH_CROGL
+ endif
+ ifdef NEMUWDDM_WITH_VBVA
+  NemuVideoWddm_SOURCES   += \
+    wddm/NemuMPVbva.cpp
+ endif
+ ifdef NEMU_WITH_VIDEOHWACCEL
+  NemuVideoWddm_SOURCES   += \
+    wddm/NemuMPVhwa.cpp
+ endif
+
+ NemuVideoWddm_LIBS.x86   = \
+ 	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/BufferOverflowK.lib
+ #NemuVideoWddm_LIBS.x86   += \
+ #	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/exsup.lib
+ NemuVideoWddm_LIBS        = \
+ 	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/ntoskrnl.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/hal.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/displib.lib \
+ 	$(NEMU_LIB_VBGL_R0) \
+ 	$(NEMU_LIB_IPRT_GUEST_R0) \
+ 	$(NEMU_PATH_ADDITIONS_LIB)/HGSMIGuestR0Lib$(NEMU_SUFF_LIB)
+
+ ifdef NEMU_WITH_WDDM_W8
+  #
+  # NemuVideoW8 - Windows Guest Additions WDDM 1.2 Miniport Video Driver for Win8
+  #
+  SYSMODS += NemuVideoW8
+  NemuVideoW8_EXTENDS    = NemuVideoWddm
+  NemuVideoW8_TEMPLATE   = NEMUGUESTR0
+  NemuVideoW8_SDKS       = $(NEMU_WINDDK_GST_W8) # No ReorderCompilerIncs here!
+  NemuVideoW8_DEFS       = $(subst DXGKDDI_INTERFACE_VERSION=0x1053,DXGKDDI_INTERFACE_VERSION=0x300E,$(NemuVideoWddm_DEFS)) NEMU_WDDM_WIN8
+  NemuVideoW8_SOURCES    = $(subst NemuMPWddm.rc,NemuMPW8.rc,$(NemuVideoWddm_SOURCES))
+  NemuVideoW8_LIBS.x86   = $(NO_SUCH_VARIABLE)
+  NemuVideoW8_LIBS.amd64 = $(NO_SUCH_VARIABLE)
+  NemuVideoW8_LIBS       = \
+  	$(NEMU_LIB_VBGL_R0) \
+  	$(NEMU_LIB_IPRT_GUEST_R0) \
+  	$(NEMU_PATH_ADDITIONS_LIB)/HGSMIGuestR0Lib$(NEMU_SUFF_LIB) \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST_W8)_LIB)/ntoskrnl.lib \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST_W8)_LIB)/hal.lib \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST_W8)_LIB)/displib.lib \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST_W8)_LIB)/BufferOverflowK.lib
+ endif # NEMU_WITH_WDDM_W8
+
+endif # NEMU_WITH_WDDM
+
+#
+# Signing requires both miniport and display drivers
+# so it'd be dealt with in the parent makefile.
+#
+ifdef NEMU_SIGN_ADDITIONS
+ NemuVideo_INSTTYPE            = none
+ NemuVideo_DEBUG_INSTTYPE      = both
+ ifdef NEMU_WITH_WDDM
+  NemuVideoWddm_INSTTYPE       = none
+  NemuVideoWddm_DEBUG_INSTTYPE = both
+  ifdef NEMU_WITH_WDDM_W8
+   NemuVideoW8_INSTTYPE        = none
+   NemuVideoW8_DEBUG_INSTTYPE  = both
+  endif
+ endif
+endif # NEMU_SIGN_ADDITIONS
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

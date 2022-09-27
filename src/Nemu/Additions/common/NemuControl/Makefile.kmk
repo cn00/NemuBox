@@ -1,0 +1,48 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Guest Additions Command Line Management Interface.
+#
+
+#
+# Copyright (C) 2010-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include sub-makefile(s).
+include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+
+#
+# NemuControl
+#
+PROGRAMS += NemuControl
+NemuControl_TEMPLATE = NewNemuGuestR3Exe
+ifeq ($(KBUILD_TARGET),win)
+ ifdef NEMU_SIGN_ADDITIONS # (See the main Windows Additions makefile.)
+  NemuControl_INSTTYPE = none
+  NemuControl_DEBUG_INSTTYPE = both
+ endif
+endif
+NemuControl_DEFS     += \
+	$(if $(NEMU_WITH_HGCM),NEMU_WITH_HGCM,) \
+	$(if $(NEMU_WITH_GUEST_PROPS),NEMU_WITH_GUEST_PROPS,) \
+	$(if $(NEMU_WITH_SHARED_FOLDERS),NEMU_WITH_SHARED_FOLDERS,)
+NemuControl_DEFS.win += \
+	$(if $(NEMU_WITH_DPC_LATENCY_CHECKER),NEMU_WITH_DPC_LATENCY_CHECKER,)
+NemuControl_SOURCES = \
+	NemuControl.cpp
+NemuControl_SOURCES.win = \
+	NemuControl.rc
+NemuControl_LDFLAGS.darwin = -framework IOKit
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

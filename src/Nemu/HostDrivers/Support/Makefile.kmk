@@ -1,0 +1,755 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the support library and the drivers/modules/kexts it uses.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Targets
+#
+LIBRARIES += SUPR3 SUPR3Static
+ifdef NEMU_WITH_HARDENING
+ LIBRARIES += SUPR3HardenedStatic
+endif
+DLLS.win += NemuSupLib
+ifdef NEMU_WITH_32_ON_64_MAIN_API
+ LIBRARIES += SUPR3-x86
+endif
+ifndef NEMU_ONLY_DOCS
+ if1of ($(NEMU_LDR_FMT), pe lx)
+  LIBRARIES += SUPR0
+ endif
+endif
+if !defined(NEMU_ONLY_BUILD) && defined(NEMU_WITH_RAW_MODE)
+ LIBRARIES += SUPRC
+endif
+if  !defined(NEMU_ONLY_DOCS) \
+ && !defined(NEMU_ONLY_EXTPACKS) \
+ && !defined(NEMU_ONLY_VALIDATIONKIT)
+ ifdef NEMU_WITH_SUPSVC
+  PROGRAMS += NemuSupSvc
+ endif
+ ifdef NEMU_WITH_NEMUDRV
+  LIBRARIES       += SUPR0IdcClient
+  SYSMODS.os2     += NemuDrv
+ endif
+ INSTALLS.linux   += nemudrv-mod
+ INSTALLS.freebsd += nemudrv-mod
+
+ #
+ # Include sub-makefile(s).
+ #
+ include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+
+ #
+ # Populate FILES_NEMUDRV_NOBIN and FILES_NEMUDRV_BIN
+ #
+ ifeq ($(KBUILD_TARGET),linux)
+  include $(PATH_SUB_CURRENT)/linux/files_nemudrv
+ endif
+ ifeq ($(KBUILD_TARGET),freebsd)
+  include $(PATH_SUB_CURRENT)/freebsd/files_nemudrv
+ endif
+endif # !NEMU_ONLY_DOCS && !NEMU_ONLY_EXTPACKS && !NEMU_ONLY_VALIDATIONKIT
+
+#
+# Authenticode related trust anchors and certificates -> .cpp
+#
+NEMU_SUP_WIN_CERTS_FILE = $(SUPR3_0_OUTDIR)/TrustAnchorsAndCerts.cpp
+NEMU_SUP_WIN_CERTS := \
+       SpcRootMicrosoft0=SpcRoot-MicrosoftAuthenticodeTmRootAuthority-01.taf \
+       SpcRootMicrosoft1=SpcRoot-MicrosoftRootAuthority-00c1008b3c3c8811d13ef663ecdf40.taf \
+       SpcRootMicrosoft2=SpcRoot-MicrosoftRootCertificateAuthority-79ad16a14aa0a5ad4c7358f407132e65.taf \
+       SpcRootMicrosoft3=SpcRoot-MicrosoftRootCertificateAuthority2010-28cc3a25bfba44ac449a9b586b4339aa.taf \
+       SpcRootMicrosoft4=SpcRoot-MicrosoftRootCertificateAuthority2011-3f8bc8b5fc9fb29643b569d66c42e144.taf \
+       SpcRootMicrosoft5=SpcRoot-MicrosoftDigitalMediaAuthority2005-6eff330eb6e7569740680870104baaba.taf \
+       SpcRootMicrosoft6=SpcRoot-MicrosoftDevelopmentRootCertificateAuthority2014-078f0a9d03df119e434e4fec1bf0235a.taf \
+       NtRootMicrosoft7=NtRoot-MicrosoftCodeVerificationRoot-729404101f3e0ca347837fca175a8438.taf \
+       TimeRootMicrosoft0=Timestamp-CopyrightC1997MicrosoftCorp-01.taf \
+       TrustedCertNemu0=Trusted-OracleCorporationVirtualBox-51ca009816fdbd80f120e015ee75823e.taf
+NEMU_SUP_WIN_CERT_NAMES := $(foreach cert,$(NEMU_SUP_WIN_CERTS),$(firstword $(subst =,$(SPACE) ,$(cert))))
+NEMU_PATH_SUPR3_CERTIFICATES := $(PATH_SUB_CURRENT)/win/Certificates
+
+# 1=name, 2=filter, 3=buildcert?.
+if "$(KBUILD_TARGET)" == "win" && defined(NEMU_WITH_HARDENING)
+ NEMU_SUP_GEN_CERT_MACRO = 'SUPTAENTRY const g_aSUP$(1)TAs[] =' '{' \
+       $(if-expr "$(3)" == "",,'    SUPTAENTRY_GEN(g_abSUPBuildCert),') \
+	$(foreach certnm,$(filter $(2),$(NEMU_SUP_WIN_CERT_NAMES)), '    SUPTAENTRY_GEN(g_abSUP$(certnm)),') \
+	'};' 'unsigned const g_cSUP$(1)TAs = RT_ELEMENTS(g_aSUP$(1)TAs);' '' ''
+else
+ NEMU_SUP_GEN_CERT_MACRO = 'SUPTAENTRY const g_aSUP$(1)TAs[] =' '{' \
+	$(foreach certnm,$(filter $(2),$(NEMU_SUP_WIN_CERT_NAMES)), '    SUPTAENTRY_GEN(g_abSUP$(certnm)),') \
+	'};' 'unsigned const g_cSUP$(1)TAs = RT_ELEMENTS(g_aSUP$(1)TAs);' '' ''
+endif
+
+$$(NEMU_SUP_WIN_CERTS_FILE): $(MAKEFILE_CURRENT) \
+		$(foreach cert,$(NEMU_SUP_WIN_CERTS),$(NEMU_PATH_SUPR3_CERTIFICATES)/$(lastword $(subst =,$(SPACE) ,$(cert)))) \
+		$(NEMU_BIN2C) \
+		$(if-expr  "$(KBUILD_TARGET)" == "win" && defined(NEMU_WITH_HARDENING),$(NEMU_RTSIGNTOOL)) \
+		| $$(dir $$@)
+	$(QUIET)$(RM) -f -- $@ $@.cer
+	$(QUIET)$(APPEND) -n "$@" \
+       	'' \
+       	'#include <Nemu/sup.h>' \
+               ''
+	$(foreach cert,$(NEMU_SUP_WIN_CERTS), $(NLTAB)$(NEMU_BIN2C) -ascii --append \
+		"SUP$(firstword $(subst =,$(SP) ,$(cert)))" \
+		"$(NEMU_PATH_SUPR3_CERTIFICATES)/$(lastword $(subst =,$(SP) ,$(cert)))" \
+		"$@")
+# The build certificate.
+if "$(KBUILD_TARGET)" == "win" && defined(NEMU_WITH_HARDENING) && defined(NEMU_SIGNING_MODE)
+	$(NEMU_RTSIGNTOOL) extract-exe-signer-cert --exe $(NEMU_RTSIGNTOOL) --output "$@.cer" --der
+	$(NEMU_BIN2C) -ascii --append SUPBuildCert "$@.cer" $@
+	$(QUIET)$(RM) -f -- $@.cer
+endif
+# Generate certificate lists.
+	$(QUIET)$(APPEND) -n "$@" '' \
+               $(call NEMU_SUP_GEN_CERT_MACRO,All,%,build) \
+               $(call NEMU_SUP_GEN_CERT_MACRO,SpcRoot,SpcRoot%) \
+               $(call NEMU_SUP_GEN_CERT_MACRO,NtKernelRoot,NtRoot%) \
+               $(call NEMU_SUP_GEN_CERT_MACRO,Timestamp,TimeRoot%) \
+               $(call NEMU_SUP_GEN_CERT_MACRO,Trusted,TrustedCert%,build)
+
+tst: $(NEMU_SUP_WIN_CERTS_FILE)
+
+
+#
+# The Ring-3 Support Library (this is linked into the IPRT dll, NemuRT).
+#
+SUPR3_TEMPLATE      = NEMUR3
+SUPR3_DEFS          = \
+	IN_SUP_R3 IN_RT_R3 \
+	$(if $(NEMU_WITH_SUPSVC),NEMU_WITH_SUPSVC) \
+	$(if $(NEMU_WITH_MAIN),NEMU_WITH_MAIN,) \
+	$(if $(NEMU_WITH_RAW_MODE),NEMU_WITH_RAW_MODE,) \
+	NEMU_PERMIT_MORE \
+	NEMU_PERMIT_EVEN_MORE
+SUPR3_INCS         := $(PATH_SUB_CURRENT)
+SUPR3_SOURCES       = \
+	SUPLib.cpp \
+	SUPLibLdr.cpp \
+	SUPLibSem.cpp \
+	SUPLibTracerA.asm \
+	SUPLibAll.cpp \
+	SUPR3HardenedIPRT.cpp \
+	SUPR3HardenedVerify.cpp \
+	$(KBUILD_TARGET)/SUPLib-$(KBUILD_TARGET).cpp \
+ 	$(NEMU_SUP_WIN_CERTS_FILE)
+ifdef NEMU_WITH_HARDENING
+ SUPR3_SOURCES.win  = \
+ 	win/SUPHardenedVerifyImage-win.cpp
+endif
+
+SUPR3-x86_TEMPLATE = NemuR3Dll-x86
+SUPR3-x86_EXTENDS  = SUPR3
+
+
+#
+# Static version of SUPR3.  This is more of a stub than anything else in a
+# hardened build, at least on windows.
+#
+SUPR3Static_TEMPLATE = NEMUR3STATIC
+SUPR3Static_EXTENDS = SUPR3
+SUPR3Static_DEFS = $(SUPR3_DEFS) IN_SUP_R3_STATIC
+SUPR3Static_SOURCES.win = $(filter-out win/SUPHardenedVerifyImage-win.cpp, $(SUPR3_SOURCES.win))
+
+
+#
+# The static part of the hardened support library (ring-3).
+#
+NEMU_PATH_RUNTIME_SRC ?= $(PATH_ROOT)/src/Nemu/Runtime
+SUPR3HardenedStatic_TEMPLATE = NEMUR3HARDENEDLIB
+SUPR3HardenedStatic_DEFS     = IN_SUP_HARDENED_R3
+SUPR3HardenedStatic_DEFS    += \
+	$(if $(NEMU_WITH_SUPSVC),NEMU_WITH_SUPSVC,) \
+	$(if $(NEMU_WITH_MAIN),NEMU_WITH_MAIN,) \
+	$(if $(NEMU_WITH_RAW_MODE),NEMU_WITH_RAW_MODE,) \
+	$(if $(NEMU_WITHOUT_DEBUGGER_CHECKS),NEMU_WITHOUT_DEBUGGER_CHECKS,) \
+	$(if $(NEMU_PERMIT_VISUAL_STUDIO_PROFILING),NEMU_PERMIT_VISUAL_STUDIO_PROFILING,) \
+	NEMU_PERMIT_MORE \
+	NEMU_PERMIT_EVEN_MORE
+ifdef NEMU_WITH_VISTA_NO_SP
+ SUPR3HardenedStatic_DEFS.win += NEMU_WITH_VISTA_NO_SP
+endif
+SUPR3HardenedStatic_INCS     = .
+SUPR3HardenedStatic_SOURCES  = \
+	SUPR3HardenedMain.cpp \
+	SUPR3HardenedVerify.cpp \
+	SUPR3HardenedNoCrt.cpp \
+	$(KBUILD_TARGET)/SUPLib-$(KBUILD_TARGET).cpp
+SUPR3HardenedStatic_SOURCES.win = \
+	win/SUPR3HardenedMain-win.cpp \
+	win/SUPR3HardenedMainA-win.asm \
+	win/SUPR3HardenedMainImports-win.cpp \
+       win/SUPHardenedVerifyProcess-win.cpp \
+       win/SUPHardenedVerifyImage-win.cpp \
+	$(NEMU_SUP_WIN_CERTS_FILE)
+
+if "$(KBUILD_TARGET)" == "win" && defined(NEMU_WITH_HARDENING) ## @todo some of this move up.
+ SUPR3HardenedStatic_DEFS += \
+  	IN_RT \
+ 	IN_RT_R3 \
+ 	IN_RT_STATIC \
+ 	IN_DIS \
+ 	DIS_CORE_ONLY \
+  	IPRT_NO_CRT \
+ 	RT_WITH_NOCRT_ALIASES \
+ 	LOG_DISABLED \
+ 	IPRT_NO_ERROR_DATA
+ SUPR3HardenedStatic_DEFS.win += LDR_ONLY_PE __STRALIGN_H_
+
+ SUPR3HardenedStatic_INCS += $(PATH_ROOT)/include/iprt/nocrt  $(NEMU_PATH_RUNTIME_SRC)/include
+
+ SUPR3HardenedStatic_SOURCES += \
+	$(NEMU_PATH_RUNTIME_SRC)/common/ldr/ldr.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/ldr/ldrEx.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/ldr/ldrPE.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/alloc/heapsimple.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-basics.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-cursor.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-default-allocator.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-dump.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-encode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-bitstring.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-bitstring-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-boolean.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-boolean-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-core-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-dyntype.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-dyntype-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-integer.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-integer-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-null.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-null-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-objid.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-objid-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-octetstring.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-octetstring-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-string.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-string-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-time.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/asn1/asn1-ut-time-decode.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/digest-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/digest-builtin.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkcs7-asn1-decoder.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkcs7-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkcs7-init.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkcs7-sanity.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkcs7-verify.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkix-signature-builtin.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkix-signature-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkix-signature-rsa.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkix-verify.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/pkix-util.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/rsa-asn1-decoder.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/rsa-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/rsa-init.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/rsa-sanity.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/spc-asn1-decoder.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/spc-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/spc-init.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/spc-sanity.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/x509-asn1-decoder.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/x509-certpaths.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/x509-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/x509-init.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/x509-sanity.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/x509-verify.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/store.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/store-inmem.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/taf-asn1-decoder.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/taf-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/taf-init.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/taf-sanity.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/tsp-asn1-decoder.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/tsp-core.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/tsp-init.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/crypto/tsp-sanity.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/alt-md2.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/alt-md5.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/alt-sha1.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/alt-sha256.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/alt-sha512.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/md2str.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/md5str.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/sha1str.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/sha256str.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/checksum/sha512str.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/err/errinfo.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/path/RTPathChangeToUnixSlashes.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/path/RTPathExt.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTStrPrintHexBytes.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTUtf16PrintHexBytes.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTUtf16ICmpAscii.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTUtf16CatAscii.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTUtf16CopyAscii.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTUtf16End.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strstrip.cpp \
+       \
+	$(NEMU_PATH_RUNTIME_SRC)/common/err/errmsg.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/math/bignum.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/math/bignum-amd64-x86.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/misc/RTAssertMsg1Weak.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/misc/RTAssertMsg2.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/misc/RTAssertMsg2Weak.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/misc/RTAssertMsg2WeakV.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/misc/zero.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/path/RTPathFilename.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/memchr.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/memcmp.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/memcpy.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/memmove.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/mempcpy.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/memset.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTStrCat.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTStrCmp.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTStrCopy.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTStrNCmp.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTStrNLen.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/RTUtf16NLenEx.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strchr.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strcmp.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strcpy.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strformat.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strformatrt.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strformattype.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/stringalloc.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strlen.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strncmp.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strncpy.asm \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strprintf.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/strtonum.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/utf-16.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/utf-8.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/utf-8-case.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/unidata-upper.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/string/unidata-lower.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/common/time/time.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/generic/RTAssertShouldPanic-generic.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/generic/RTPathAbs-generic.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/generic/RTPathGetCurrentDrive-generic.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/generic/RTPathGetCurrentOnDrive-generic.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/generic/memsafer-generic.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/generic/uuid-generic.cpp \
+       \
+	../../Disassembler/DisasmCore.cpp \
+	../../Disassembler/DisasmTables.cpp \
+	../../Disassembler/DisasmTablesX64.cpp \
+	../../Disassembler/DisasmReg.cpp
+
+ SUPR3HardenedStatic_SOURCES.amd64 += \
+ 	$(NEMU_PATH_RUNTIME_SRC)/common/math/RTUInt128MulByU64.asm
+
+ SUPR3HardenedStatic_SOURCES.win += \
+ 	win/SUPR3HardenedNoCrt-win.cpp \
+ 	$(NEMU_PATH_RUNTIME_SRC)/nt/RTErrConvertFromNtStatus.cpp \
+ 	$(NEMU_PATH_RUNTIME_SRC)/r3/nt/pathint-nt.cpp \
+ 	$(NEMU_PATH_RUNTIME_SRC)/win/RTErrConvertFromWin32.cpp \
+	$(NEMU_PATH_RUNTIME_SRC)/win/errmsgwin.cpp
+
+ # Add necessary compiler specific files from libcmt.lib and the lib dir.
+ ifeq ($(KBUILD_TARGET),win)
+   SUPR3HardenedStatic_NEMU_LIBC_OBJS = chkstk.obj
+   ifeq ($(KBUILD_TARGET_ARCH),x86)
+    SUPR3HardenedStatic_NEMU_LIBC_OBJS += \
+    	alloca16.obj \
+    	ulldiv.obj \
+    	ulldvrm.obj \
+    	ullrem.obj \
+    	ullshr.obj \
+    	lldiv.obj \
+    	lldvrm.obj \
+    	llmul.obj \
+    	llrem.obj \
+    	llshl.obj \
+    	llshr.obj \
+    	rotl.obj \
+    	rotr.obj
+   endif
+  SUPR3HardenedStatic_SOURCES.win += $(addprefix $(SUPR3HardenedStatic_0_OUTDIR)/,$(SUPR3HardenedStatic_NEMU_LIBC_OBJS))
+
+  $(addprefix $$(SUPR3HardenedStatic_0_OUTDIR)/,$(SUPR3HardenedStatic_NEMU_LIBC_OBJS)): \
+		$$(PATH_TOOL_$(TEMPLATE_NEMUR3EXE_TOOL.win.$(KBUILD_TARGET_ARCH))_LIB)/libcmt.lib | $$(dir $$@)
+	$(TOOL_$(TEMPLATE_NEMUR3HARDENEDEXE_TOOL.win.$(KBUILD_TARGET_ARCH))_AR) "$<" \
+		/EXTRACT:`$(TOOL_$(TEMPLATE_NEMUR3HARDENEDEXE_TOOL.win.$(KBUILD_TARGET_ARCH))_AR) "$<" /LIST \
+		          | $(SED_EXT) -n -e '/[\\/:]$(notdir $@)/p'` \
+		"/OUT:$@"
+ endif
+endif
+
+SUPR3HardenedMain.cpp_DEFS = NEMU_SVN_REV=$(NEMU_SVN_REV)
+
+
+#
+# NemuSupLib - Windows DLL for catching thread creation and termination.
+#
+NemuSupLib_TEMPLATE = $(if-expr "$(KBUILD_TARGET)" == "win" && defined(NEMU_WITH_HARDENING),NEMUR3HARDENEDLIB,NEMUR3)
+NemuSupLib_SDKS.win = NEMU_NTDLL
+NemuSupLib_LDFLAGS.win.amd64 = -Entry:DllMainEntrypoint
+NemuSupLib_LDFLAGS.win.x86   = -Entry:DllMainEntrypoint
+NemuSupLib_DEFS = \
+	$(if $(NEMU_WITHOUT_DEBUGGER_CHECKS),NEMU_WITHOUT_DEBUGGER_CHECKS,)
+NemuSupLib_SOURCES = \
+	$(KBUILD_TARGET)/NemuSupLib-$(KBUILD_TARGET).cpp
+NemuSupLib_SOURCES.win = \
+	win/NemuSupLib.rc
+NemuSupLib_LIBS.win.x86 = \
+ 	$(PATH_TOOL_$(TEMPLATE_NEMUR3STATIC_TOOL.win.x86)_LIB)/libcmt$(NEMU_VCC_CRT_TYPE).lib   # for __chkstk
+NemuSupLib_LIBS.win.amd64 = \
+ 	$(PATH_TOOL_$(TEMPLATE_NEMUR3STATIC_TOOL.win.amd64)_LIB)/libcmt$(NEMU_VCC_CRT_TYPE).lib # for __chkstk
+
+
+#
+# NemuSupSvc - The system wide service/daemon.
+#
+NemuSupSvc_TEMPLATE = NEMUR3EXE
+NemuSupSvc_SOURCES = \
+	SUPSvc.cpp \
+	SUPSvcGlobal.cpp \
+	$(KBUILD_TARGET)/SUPSvc-$(KBUILD_TARGET).cpp
+if1of ($(KBUILD_TARGET), win)
+ NemuSupSvc_SOURCES += \
+	SUPSvcGrant.cpp
+endif
+ifn1of ($(KBUILD_TARGET), win)
+ NemuSupSvc_SOURCES += \
+ 	SUPSvcMain-posix.cpp
+endif
+NemuSupSvc_LIBS = \
+	$(LIB_RUNTIME)
+
+
+#
+# SUPR0 - The Ring-0 Import library.
+#
+SUPR0_TEMPLATE      = NemuR0
+if1of ($(NEMU_LDR_FMT), pe lx)
+ SUPR0_SOURCES       = $(SUPR0_0_OUTDIR)/SUPR0.def
+ SUPR0_CLEAN         = $(SUPR0_0_OUTDIR)/SUPR0.def
+$$(SUPR0_0_OUTDIR)/SUPR0.def: \
+		$(PATH_SUB_CURRENT)/SUPDrv.cpp \
+		$(PATH_SUB_CURRENT)/SUPR0-def-$(NEMU_LDR_FMT).sed \
+		| $$(dir $$@)
+	$(SED) \
+		-f $(dir $<)/SUPR0-def-$(NEMU_LDR_FMT).sed \
+		--output $@ \
+		$<
+ # Experiment: Let's see how blunt the ones messing our NULL_THUNK_DATA entries on W10 are.
+ ifeq ($(KBUILD_TARGET),win)
+  ifdef KLIBTWEAKER_EXT
+   SUPR0_POST_CMDS = $(KLIBTWEAKER_EXT) --clear-timestamps --fill-null_thunk_data $(out)
+  endif
+ endif
+endif
+
+
+#
+# SUPRC - The raw-mode context library.
+#
+SUPRC_TEMPLATE := NemuRc
+SUPRC_DEFS     := IN_SUP_RC IN_RT_RC IN_VMM_RC
+SUPRC_SOURCES  := SUPLibAll.cpp
+
+
+#
+# SUPR0IdcClient - The Ring-0 IDC client driver library.
+#
+SUPR0IdcClient_TEMPLATE = NemuR0DrvLib
+SUPR0IdcClient_DEFS = IN_RT_R0 IN_SUP_R0 IN_SUP_STATIC
+SUPR0IdcClient_SDKS.win = ReorderCompilerIncs $(NEMU_WINDDK) $(NEMU_WINPSDK)INCS
+SUPR0IdcClient_SOURCES.$(KBUILD_TARGET) = \
+	$(KBUILD_TARGET)/SUPR0IdcClient-$(KBUILD_TARGET).c
+SUPR0IdcClient_SOURCES = \
+	SUPR0IdcClient.c \
+	SUPR0IdcClientComponent.c \
+	SUPR0IdcClientStubs.c
+
+
+
+if  !defined(NEMU_ONLY_DOCS) \
+ && !defined(NEMU_ONLY_EXTPACKS) \
+ && !defined(NEMU_ONLY_VALIDATIONKIT)
+
+ifeq ($(KBUILD_TARGET),os2)
+
+#
+# NemuDrv.sys - The OS/2 driver.
+#
+NemuDrv_TEMPLATE      = NEMUR0DRV
+NemuDrv_DEFS          = IN_RT_R0 IN_SUP_R0
+NemuDrv_INCS         := $(PATH_SUB_CURRENT)
+#NemuDrv_LDFLAGS       = -s -t -v
+NemuDrv_SOURCES       = \
+	os2/SUPDrvA-os2.asm \
+	os2/SUPDrv-os2.def
+NemuDrv_LIBS          = \
+	$(NemuDrvLib_1_TARGET) \
+	$(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB) \
+	$(NEMU_GCC_LIBGCC) \
+	end
+
+# temp hack to ensure that SUPDrvA-os2.asm is first in the link.
+LIBRARIES += NemuDrvLib
+NemuDrvLib_TEMPLATE   = NEMUR0DRV
+NemuDrvLib_INSTTYPE   = none
+NemuDrvLib_DEFS       = IN_RT_R0 IN_SUP_R0
+NemuDrvLib_INCS      := \
+	. \
+	$(PATH_ROOT)/src/Nemu/Runtime/include
+NemuDrvLib_SOURCES    = \
+	os2/SUPDrv-os2.cpp \
+	SUPDrv.cpp \
+	SUPDrvGip.cpp \
+	SUPDrvSem.cpp \
+	SUPLibAll.cpp
+
+endif # os2
+
+
+#
+# New NemuDrv target. TODO: Convert all the above to use this!
+#
+if1of ($(KBUILD_TARGET), darwin freebsd linux solaris win)
+ ifdef NEMU_WITH_NEMUDRV
+  SYSMODS += NemuDrv
+ endif
+ NemuDrv_TEMPLATE         = NEMUR0DRV
+ NemuDrv_NAME.freebsd     = nemudrv
+ NemuDrv_NAME.linux       = nemudrv
+ NemuDrv_NAME.solaris     = nemudrv
+ ifdef NEMU_SIGNING_MODE
+  NemuDrv_INSTTYPE.win    = none
+  NemuDrv_DEBUG_INSTTYPE.win = both
+ endif
+ NemuDrv_INST.darwin      = $(INST_NEMUDRV)Contents/MacOS/
+ NemuDrv_DEBUG_INST.darwin= $(patsubst %/,%,$(INST_NEMUDRV))
+ NemuDrv_SDKS.win         = ReorderCompilerIncs $(NEMU_WINDDK) $(NEMU_WINPSDK)INCS
+
+ NemuDrv_DEFS            := IN_RT_R0 IN_SUP_R0 SUPDRV_WITH_RELEASE_LOGGER NEMU_SVN_REV=$(NEMU_SVN_REV)
+ ifdef NEMU_WITH_DTRACE_R0DRV
+  NemuDrv_DEFS           += NEMU_WITH_DTRACE NEMU_WITH_DTRACE_R0DRV
+ endif
+ ifdef NEMU_WITHOUT_DEBUGGER_CHECKS
+  NemuDrv_DEFS           += NEMU_WITHOUT_DEBUGGER_CHECKS
+ endif
+ ifdef NEMU_PERMIT_VISUAL_STUDIO_PROFILING
+  NemuDrv_DEFS           += NEMU_PERMIT_VISUAL_STUDIO_PROFILING
+ endif
+ NemuDrv_DEFS            += NEMU_PERMIT_MORE NEMU_PERMIT_EVEN_MORE
+ #NemuDrv_DEFS.debug      += DEBUG_DARWIN_GIP
+ NemuDrv_DEFS.darwin     := NEMU_WITH_HOST_VMX
+ ifdef NEMU_WITH_RAW_MODE
+  NemuDrv_DEFS.darwin    += NEMU_WITH_RAW_MODE
+ endif
+ NemuDrv_DEFS.linux      := \
+	KBUILD_MODNAME=KBUILD_STR\(nemudrv\) KBUILD_BASENAME=KBUILD_STR\(nemudrv\) MODULE CONFIG_NEMUDRV_AS_MISC
+ ifdef NEMU_LINUX_VERSION_2_4
+  NemuDrv_DEFS.linux     += EXPORT_SYMTAB
+ endif
+ ifdef NEMU_WITH_NETFLT
+  NemuDrv_DEFS.solaris   += NEMU_WITH_NETFLT
+ endif
+ ifdef NEMU_WITH_NATIVE_SOLARIS_LOADING
+  NemuDrv_DEFS.solaris   += NEMU_WITH_NATIVE_SOLARIS_LOADING
+ endif
+ ifdef NEMU_WITHOUT_NATIVE_R0_LOADER
+  NemuDrv_DEFS.win       += NEMU_WITHOUT_NATIVE_R0_LOADER
+ endif
+ ifdef NEMU_WITH_VISTA_NO_SP
+  NemuDrv_DEFS.win       += NEMU_WITH_VISTA_NO_SP
+ endif
+ ifdef NEMU_WITH_HARDENING
+  NemuDrv_ASDEFS         += NEMU_WITH_HARDENING
+ endif
+ if ($(NEMU_VERSION_BUILD) % 2) == 1
+  NemuDrv_DEFS           += NEMU_WITH_EFLAGS_AC_SET_IN_NEMUDRV IPRT_WITH_EFLAGS_AC_PRESERVING
+ endif
+
+ NemuDrv_INCS             = . $(NemuDrv_0_OUTDIR)
+ NemuDrv_INCS.darwin      = ./darwin
+ NemuDrv_INCS.linux       = $(PATH_ROOT)/src/Nemu/Runtime/r0drv/linux
+
+ NemuDrv_LIBS             = $(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB)
+ NemuDrv_LIBS.linux.debug = $(NemuDrv_LIBS) $(NEMU_GCC_LIBGCC)
+ NemuDrv_LIBS.win         = \
+ 	$(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/ntoskrnl.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/hal.lib
+
+ #NemuDrv_LDFLAGS.darwin   = -Wl,-sectcreate,__TEXT,__info_plist,$(NemuDrv.kext_0_OUTDIR)/Info.plist
+ #NemuDrv_LDFLAGS.darwin   = -v -Wl,-whyload -Wl,-v -Wl,-whatsloaded
+ NemuDrv_LDFLAGS.solaris += -N misc/ctf
+ ifdef NEMU_WITH_NATIVE_DTRACE
+  NemuDrv_LDFLAGS.solaris += -N drv/dtrace
+ endif
+ NemuDrv_LDFLAGS.win.x86  = -Entry:DriverEntry@8
+ NemuDrv_LDFLAGS.win.amd64= -Entry:DriverEntry
+
+ NemuDrv_SOURCES.darwin   = \
+	darwin/SUPDrv-darwin.cpp
+ NemuDrv_SOURCES.linux    = \
+	linux/SUPDrv-linux.c
+ NemuDrv_SOURCES.solaris  = \
+	solaris/SUPDrv-solaris.c
+ NemuDrv_SOURCES.win      = \
+	win/SUPDrv-win.cpp \
+	win/SUPDrvA-win.asm \
+	win/NemuDrv.rc
+ ifdef NEMU_WITH_HARDENING
+  NemuDrv_SOURCES.win    += \
+ 	win/SUPHardenedVerifyImage-win.cpp \
+ 	win/SUPHardenedVerifyProcess-win.cpp \
+ 	$(NEMU_SUP_WIN_CERTS_FILE)
+ endif
+ NemuDrv_SOURCES          = \
+ 	SUPDrv.d \
+ 	SUPDrv.cpp \
+ 	SUPDrvGip.cpp \
+ 	SUPDrvSem.cpp \
+  	SUPDrvTracer.cpp \
+	SUPLibAll.cpp
+ ifdef NEMU_WITH_NATIVE_DTRACE
+  NemuDrv_SOURCES        += \
+  	SUPDrv-dtrace.cpp
+  SUPDrv-dtrace.cpp_DEFS.darwin += NEMU_PATH_MACOSX_DTRACE_H=\"$(NEMU_PATH_MACOSX_SDK)/usr/include/sys/dtrace.h\"
+ endif
+ ifn1of ($(KBUILD_TARGET), linux freebsd)
+  NemuDrv_SOURCES        += \
+ 	SUPDrvTracerA.asm
+ endif
+ ifndef NEMU_LINUX_VERSION_2_4
+  NemuDrv_SOURCES.linux  += \
+ 	linux/SUPDrv-linux.mod.c
+ endif
+
+endif
+
+
+
+if1of ($(KBUILD_TARGET), darwin)
+ # Files necessary to make a darwin kernel extension bundle.
+ INSTALLS.darwin += NemuDrv.kext
+ NemuDrv.kext_INST     = $(INST_NEMUDRV)Contents/
+ NemuDrv.kext_SOURCES  = $(NemuDrv.kext_0_OUTDIR)/Contents/Info.plist
+ NemuDrv.kext_CLEAN    = $(NemuDrv.kext_0_OUTDIR)/Contents/Info.plist
+ NemuDrv.kext_BLDDIRS  = $(NemuDrv.kext_0_OUTDIR)/Contents/
+
+ $$(NemuDrv.kext_0_OUTDIR)/Contents/Info.plist: \
+		$(PATH_SUB_CURRENT)/darwin/Info.plist \
+		$(NEMU_VERSION_MK) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuDrv,$@,$<)
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(SED) \
+		-e 's/@NEMU_VERSION_STRING@/$(if !defined(NEMU_MAVERICS_CODE_SIGNING_HACK),$(NEMU_VERSION_STRING),4.2.51)/g' \
+		-e 's/@NEMU_VERSION_MAJOR@/$(if  !defined(NEMU_MAVERICS_CODE_SIGNING_HACK),$(NEMU_VERSION_MAJOR),4)/g' \
+		-e 's/@NEMU_VERSION_MINOR@/$(if  !defined(NEMU_MAVERICS_CODE_SIGNING_HACK),$(NEMU_VERSION_MINOR),2)/g' \
+		-e 's/@NEMU_VERSION_BUILD@/$(if  !defined(NEMU_MAVERICS_CODE_SIGNING_HACK),$(NEMU_VERSION_BUILD),51)/g' \
+		-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+		-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+		-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+		--output $@ \
+		$<
+
+ $(evalcall2 NEMU_TEST_SIGN_KEXT,NemuDrv)
+endif
+
+
+if1of ($(KBUILD_TARGET), darwin solaris)
+ # Common manual loader script.
+ INSTALLS += SUPDrvScripts
+ SUPDrvScripts_INST = $(INST_DIST)
+ SUPDrvScripts_EXEC_SOURCES  = \
+	$(KBUILD_TARGET)/load.sh
+endif
+
+
+if1of ($(KBUILD_TARGET), linux freebsd)
+ #
+ # Targets for installing the linux sources.
+ #
+ nemudrv-mod_INST    = bin/src/nemudrv/
+ nemudrv-mod_SOURCES = \
+ 	$(subst $(DQUOTE),,$(FILES_NEMUDRV_NOBIN)) \
+ 	$(nemudrv-mod_0_OUTDIR)/Makefile
+ nemudrv-mod_EXEC_SOURCES  = \
+ 	$(subst $(DQUOTE),,$(FILES_NEMUDRV_BIN))
+ nemudrv-mod_EXEC_SOURCES.linux = \
+ 	$(PATH_ROOT)/src/Nemu/HostDrivers/$(KBUILD_TARGET)/do_Module.symvers
+ nemudrv-mod_CLEAN   = \
+ 	$(nemudrv-mod_0_OUTDIR)/Makefile \
+ 	$(PATH_TARGET)/nemudrv-mod-1.dep \
+
+ # Scripts needed for building the kernel modules
+ includedep $(PATH_TARGET)/nemudrv-mod-1.dep
+ $$(nemudrv-mod_0_OUTDIR)/Makefile: \
+		$(PATH_SUB_CURRENT)/$(KBUILD_TARGET)/Makefile \
+		$$(if $$(eq $$(Support/$(KBUILD_TARGET)/Makefile_NEMU_HARDENED),$$(NEMU_WITH_HARDENING)),,FORCE) \
+		| $$(dir $$@)
+	$(call MSG_TOOL,Creating,,$@)
+	$(QUIET)$(SED) -e "" \
+		$(if-expr !defined(NEMU_WITH_HARDENING)   ,-e "s;-DNEMU_WITH_HARDENING;;g",) \
+		$(if-expr ($(NEMU_VERSION_BUILD) % 2) == 0 \
+		 , -e "s;-DNEMU_WITH_EFLAGS_AC_SET_IN_NEMUDRV;;g" -e "s;-DIPRT_WITH_EFLAGS_AC_PRESERVING;;g",) \
+		--output $@ $<
+	%$(QUIET2)$(APPEND) -t '$(PATH_TARGET)/nemudrv-mod-1.dep' \
+		'Support/$(KBUILD_TARGET)/Makefile_NEMU_HARDENED=$(NEMU_WITH_HARDENING)'
+endif # linux freebsd
+
+
+ifeq ($(KBUILD_TARGET), win)
+ INSTALLS.win += NemuDrv-inf
+ NemuDrv-inf_INST = $(INST_BIN)
+ NemuDrv-inf_MODE = a+r,u+w
+ NemuDrv-inf_SOURCES = \
+ 	$(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.inf
+ NemuDrv-inf_CLEAN = $(NemuDrv-inf_SOURCES)
+ NemuDrv-inf_BLDDIRS = $(PATH_TARGET)/NemuDrvCat.dir
+
+ $(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.inf: $(PATH_SUB_CURRENT)/win/NemuDrv.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuDrv-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+ ifdef NEMU_SIGNING_MODE
+  NemuDrv-inf_SOURCES += \
+  	$(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.sys \
+  	$(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.cat
+
+  $(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.sys: $$(NemuDrv_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.cat: \
+		$(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.inf \
+		$(PATH_TARGET)/NemuDrvCat.dir/NemuDrv.sys
+	$(call MSG_TOOL,Inf2Cat,NemuDrv-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+ endif # signing
+endif # win
+
+
+endif # !NEMU_ONLY_DOCS && !NEMU_ONLY_EXTPACKS && !NEMU_ONLY_VALIDATIONKIT
+include $(FILE_KBUILD_SUB_FOOTER)
+

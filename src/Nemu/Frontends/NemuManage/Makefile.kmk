@@ -1,0 +1,111 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for NemuManage (the cli frontend).
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+NEMU_COMMON_NEMUMANAGE_DEFS = \
+ 	$(if $(NEMU_WITH_AHCI), NEMU_WITH_AHCI) \
+ 	$(if $(NEMU_WITH_ALSA), NEMU_WITH_ALSA) \
+ 	$(if $(NEMU_WITH_COPYTOGUEST),NEMU_WITH_COPYTOGUEST) \
+ 	$(if $(NEMU_WITH_E1000),NEMU_WITH_E1000) \
+ 	$(if $(NEMU_WITH_GUEST_CONTROL),NEMU_WITH_GUEST_CONTROL) \
+ 	$(if $(NEMU_WITH_GUEST_PROPS),NEMU_WITH_GUEST_PROPS) \
+ 	$(if $(NEMU_WITH_HEADLESS), NEMU_WITH_HEADLESS) \
+ 	$(if $(NEMU_WITH_HGCM), NEMU_WITH_HGCM) \
+ 	$(if $(NEMU_WITH_HOSTNETIF_API), NEMU_WITH_HOSTNETIF_API) \
+ 	$(if $(NEMU_WITH_NETFLT), NEMU_WITH_NETFLT) \
+ 	$(if $(NEMU_WITH_PULSE),NEMU_WITH_PULSE) \
+ 	$(if $(NEMU_WITH_SCSI), NEMU_WITH_SCSI) \
+ 	$(if $(NEMU_WITH_SOLARIS_OSS), NEMU_WITH_SOLARIS_OSS) \
+ 	$(if $(NEMU_WITH_NEMUSDL), NEMU_WITH_NEMUSDL) \
+ 	$(if $(NEMU_WITH_VIDEOHWACCEL), NEMU_WITH_VIDEOHWACCEL) \
+ 	$(if $(NEMU_WITH_VIRTIO),NEMU_WITH_VIRTIO) \
+ 	$(if $(NEMU_WITH_USB_CARDREADER),NEMU_WITH_USB_CARDREADER) \
+ 	$(if $(NEMU_WITH_PCI_PASSTHROUGH),NEMU_WITH_PCI_PASSTHROUGH) \
+ 	$(if $(NEMU_WITH_VPX),NEMU_WITH_VPX) \
+ 	$(if $(NEMU_WITH_NAT_SERVICE),NEMU_WITH_NAT_SERVICE) \
+ 	$(if $(NEMU_WITH_VMSVGA),NEMU_WITH_VMSVGA)
+
+
+ifdef NEMU_WITH_DOCS
+ PROGRAMS += NemuManageHelp
+endif
+NemuManageHelp_TEMPLATE   = NemuAdvBldProg
+NemuManageHelp_DEFS      += \
+	NEMU_ONLY_DOCS \
+       $(NEMU_COMMON_NEMUMANAGE_DEFS)
+NemuManageHelp_SOURCES    = \
+	NemuManage.cpp \
+	NemuManageHelp.cpp \
+	$(if $(NEMU_WITH_GUEST_PROPS),NemuManageGuestProp.cpp) \
+	$(if $(NEMU_WITH_GUEST_CONTROL),NemuManageGuestCtrl.cpp)
+
+ifndef NEMU_ONLY_DOCS
+ PROGRAMS += NemuManage
+ NemuManage_TEMPLATE   = NEMUMAINCLIENTEXE
+ NemuManage_DEFS      += $(NEMU_COMMON_NEMUMANAGE_DEFS)
+ NemuManage_DEFS.win   = _WIN32_WINNT=0x0500
+ NemuManage_INCS       = $(PATH_TARGET)/manual
+ NemuManage_INTERMEDIATES = $(PATH_TARGET)/manual/NemuManageBuiltInHelp.h
+ NemuManage_SOURCES    = \
+ 	NemuManage.cpp \
+ 	NemuInternalManage.cpp \
+ 	NemuManageAppliance.cpp \
+ 	NemuManageBandwidthControl.cpp \
+ 	NemuManageControlVM.cpp \
+ 	NemuManageDebugVM.cpp \
+ 	NemuManageDHCPServer.cpp \
+ 	NemuManageDisk.cpp \
+ 	$(if $(NEMU_WITH_GUEST_CONTROL),NemuManageGuestCtrl.cpp) \
+ 	$(if $(NEMU_WITH_GUEST_CONTROL),NemuManageGuestCtrlListener.cpp) \
+ 	$(if $(NEMU_WITH_GUEST_PROPS),NemuManageGuestProp.cpp) \
+ 	NemuManageHelp.cpp \
+	$(PATH_TARGET)/manual/NemuManageBuiltInHelp.cpp \
+ 	NemuManageHostonly.cpp \
+ 	NemuManageInfo.cpp \
+ 	NemuManageList.cpp \
+ 	NemuManageMetrics.cpp \
+ 	NemuManageMisc.cpp \
+ 	NemuManageModifyVM.cpp \
+ 	NemuManageSnapshot.cpp \
+ 	NemuManageStorageController.cpp \
+ 	NemuManageUSB.cpp \
+ 	$(if $(NEMU_WITH_NAT_SERVICE),NemuManageNATNetwork.cpp,) \
+ 	$(if $(NEMU_WITH_NAT_SERVICE),../../NetworkServices/NetLib/NemuNetPortForwardString.cpp,)
+ NemuManage_SOURCES.win = \
+ 	NemuManage.rc
+ NemuManage_LIBS      += $(LIB_DDU)
+
+ # NemuNetPortForwardString.h
+ NemuManageNATNetwork.cpp_INCS += ../../NetworkServices/NetLib/
+
+endif # NEMU_ONLY_DOCS
+
+ifneq ($(KBUILD_TARGET),win)
+ # Workaround for buggy gcc-4.3 compilers, see
+ #
+ #   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=36474
+ #
+ # Some later revisions of version 4.3.1 are known to work so we assume
+ # that version 4.3.2 or later has this bug definitely fixed.
+ NemuManage_CXXFLAGS.release += \
+	$(if $(NEMU_GCC_VERSION_CXX),$(if-expr $(NEMU_GCC_VERSION_CXX) < 40300 || $(NEMU_GCC_VERSION_CXX) > 40301,,--param max-fields-for-field-sensitive=0),)
+ NemuManageHelp_CXXFLAGS.release = $(NemuManage_CXXFLAGS.release)
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)

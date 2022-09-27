@@ -1,0 +1,64 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the FreeBSD Shared folder kernel module.
+#
+
+#
+# Copyright (C) 2007-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+ifneq ($(KBUILD_HOST),freebsd)
+$(error "The FreeBSD guest additions can only be built on FreeBSD!")
+endif
+
+#
+# nemuvfs - The Shared Folder Driver
+#
+SYSMODS.freebsd      += nemuvfs
+nemuvfs_TEMPLATE      = NEMUGUESTR0
+nemuvfs_DEFS          = NEMU_WITH_HGCM
+nemuvfs_INCS          = \
+        . \
+       $(nemuvfs_0_OUTDIR)
+nemuvfs_SOURCES       = \
+	nemuvfs_vfsops.c \
+	nemuvfs_vnops.c
+nemuvfs_LIBS          = \
+	$(NEMU_LIB_VBGL_R0) \
+	$(NEMU_LIB_IPRT_GUEST_R0)
+nemuvfs_DEPS          = \
+       $$(nemuvfs_0_OUTDIR)/vnode_if.h \
+       $$(nemuvfs_0_OUTDIR)/vnode_if_newproto.h \
+       $$(nemuvfs_0_OUTDIR)/vnode_if_typedef.h
+nemuvfs_CLEAN        += $(nemuvfs_DEPS)
+
+NEMU_AWK := /usr/bin/awk
+
+$$(nemuvfs_0_OUTDIR)/vnode_if.h: $(NEMU_FREEBSD_SRC)/kern/vnode_if.src
+	$(call MSG_TOOL,awk,NemuGuest,$<,$@)
+	$(QUIET)$(NEMU_AWK) -f $(NEMU_FREEBSD_SRC)/tools/vnode_if.awk $(NEMU_FREEBSD_SRC)/kern/vnode_if.src -h
+	$(QUIET)$(MV) $(nemuvfs_0_OUTDIR)/vnode_if.h $(nemuvfs_0_OUTDIR)/vnode_if.h
+
+$$(nemuvfs_0_OUTDIR)/vnode_if_newproto.h: $(NEMU_FREEBSD_SRC)/kern/vnode_if.src
+	$(call MSG_TOOL,awk,NemuGuest,$<,$@)
+	$(QUIET)$(NEMU_AWK) -f $(NEMU_FREEBSD_SRC)/tools/vnode_if.awk $(NEMU_FREEBSD_SRC)/kern/vnode_if.src -p
+	$(QUIET)$(MV) $(nemuvfs_0_OUTDIR)/vnode_if_newproto.h $(nemuvfs_0_OUTDIR)/vnode_if_newproto.h
+
+$$(nemuvfs_0_OUTDIR)/vnode_if_typedef.h: $(NEMU_FREEBSD_SRC)/kern/vnode_if.src
+	$(call MSG_TOOL,awk,NemuGuest,$<,$@)
+	$(QUIET)$(NEMU_AWK) -f $(NEMU_FREEBSD_SRC)/tools/vnode_if.awk $(NEMU_FREEBSD_SRC)/kern/vnode_if.src -q
+	$(QUIET)$(MV) $(nemuvfs_0_OUTDIR)/vnode_if_typedef.h $(nemuvfs_0_OUTDIR)/vnode_if_typedef.h
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

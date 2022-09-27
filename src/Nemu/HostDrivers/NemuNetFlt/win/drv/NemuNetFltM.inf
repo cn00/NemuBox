@@ -1,0 +1,71 @@
+; $Id: NemuNetFltM.inf $
+; @file
+; NemuNetFltM.inf - VirtualBox Bridged Networking Driver inf file
+; Miniport edge
+;
+;
+; Copyright (C) 2011-2015 Oracle Corporation
+;
+; This file is part of VirtualBox Open Source Edition (OSE), as
+; available from http://www.virtualbox.org. This file is free software;
+; you can redistribute it and/or modify it under the terms of the GNU
+; General Public License (GPL) as published by the Free Software
+; Foundation, in version 2 as it comes in the "COPYING" file of the
+; VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+; hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+;
+
+[Version]
+signature  = "$Windows NT$"
+;cat   CatalogFile = NemuNetFlt.cat
+Class      = Net
+ClassGUID  = {4d36e972-e325-11ce-bfc1-08002be10318}
+Provider   = %Provider%
+;DriverPackageType=NdisImMiniport
+;DriverPackageDisplayName=%NemuNetFltMP_Desc%
+;edit-DriverVer=08/13/2008,1.1.0.1
+
+[ControlFlags]
+ExcludeFromSelect = sun_NemuNetFltmp
+
+[DestinationDirs]
+DefaultDestDir=12
+; No files to copy
+
+[Manufacturer]
+%Provider% = Nemu,NTx86,NTamd64
+
+[Nemu]
+%NemuNetFltMP_Desc% = NemuNetFltMP.ndi, sun_NemuNetFltmp
+
+[Nemu.NTx86]
+%NemuNetFltMP_Desc% = NemuNetFltMP.ndi, sun_NemuNetFltmp
+
+[Nemu.NTamd64]
+%NemuNetFltMP_Desc% = NemuNetFltMP.ndi, sun_NemuNetFltmp
+
+[NemuNetFltMP.ndi]
+Characteristics = 0x29 ;NCF_NOT_USER_REMOVABLE | NCF_VIRTUAL | NCF_HIDDEN
+CopyFiles =
+
+[NemuNetFltMP.ndi.Services]
+AddService = NemuNetFlt,0x2, NemuNetFltMP.AddService
+
+[NemuNetFltMP.AddService]
+ServiceType    = 1 ;SERVICE_KERNEL_DRIVER
+StartType      = 3 ;SERVICE_DEMAND_START
+ErrorControl   = 1 ;SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\NemuNetFlt.sys
+
+[NemuNetFltMP.AddService.AddReg]
+
+[Strings]
+Provider = "Oracle Corporation"
+NemuNetFltMP_Desc = "VirtualBox Bridged Networking Driver Miniport"
+
+[SourceDisksNames]
+
+[SourceDisksFiles]
+
+
+

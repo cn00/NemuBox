@@ -1,0 +1,78 @@
+#!/bin/sh
+# $Id: files_nemuvideo_drv $
+## @file
+# Shared file between Makefile.kmk and export_modules
+#
+
+#
+# Copyright (C) 2011 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+FILES_NEMUVIDEO_DRM_NOBIN=" \
+    ${PATH_OUT}/version-generated.h=>version-generated.h \
+    ${PATH_OUT}/product-generated.h=>product-generated.h \
+    ${PATH_ROOT}/include/iprt/asm.h=>include/iprt/asm.h \
+    ${PATH_ROOT}/include/iprt/asm-amd64-x86.h=>include/iprt/asm-amd64-x86.h \
+    ${PATH_ROOT}/include/iprt/assert.h=>include/iprt/assert.h \
+    ${PATH_ROOT}/include/iprt/cdefs.h=>include/iprt/cdefs.h \
+    ${PATH_ROOT}/include/iprt/err.h=>include/iprt/err.h \
+    ${PATH_ROOT}/include/iprt/heap.h=>include/iprt/heap.h \
+    ${PATH_ROOT}/include/iprt/latin1.h=>include/iprt/latin1.h \
+    ${PATH_ROOT}/include/iprt/list.h=>include/iprt/list.h \
+    ${PATH_ROOT}/include/iprt/log.h=>include/iprt/log.h \
+    ${PATH_ROOT}/include/iprt/param.h=>include/iprt/param.h \
+    ${PATH_ROOT}/include/iprt/stdarg.h=>include/iprt/stdarg.h \
+    ${PATH_ROOT}/include/iprt/stdint.h=>include/iprt/stdint.h \
+    ${PATH_ROOT}/include/iprt/string.h=>include/iprt/string.h \
+    ${PATH_ROOT}/include/iprt/types.h=>include/iprt/types.h \
+    ${PATH_ROOT}/include/iprt/utf16.h=>include/iprt/utf16.h \
+    ${PATH_ROOT}/include/iprt/mangling.h=>include/iprt/mangling.h \
+    ${PATH_ROOT}/include/Nemu/cdefs.h=>include/Nemu/cdefs.h \
+    ${PATH_ROOT}/include/Nemu/err.h=>include/Nemu/err.h \
+    ${PATH_ROOT}/include/Nemu/log.h=>include/Nemu/log.h \
+    ${PATH_ROOT}/include/Nemu/ostypes.h=>include/Nemu/ostypes.h \
+    ${PATH_ROOT}/include/Nemu/param.h=>include/Nemu/param.h \
+    ${PATH_ROOT}/include/Nemu/types.h=>include/Nemu/types.h \
+    ${PATH_ROOT}/include/Nemu/NemuGuestMangling.h=>include/Nemu/NemuGuestMangling.h \
+    ${PATH_ROOT}/include/Nemu/NemuGuest.h=>include/Nemu/NemuGuest.h \
+    ${PATH_ROOT}/include/Nemu/NemuGuest2.h=>include/Nemu/NemuGuest2.h \
+    ${PATH_ROOT}/include/Nemu/NemuVideo.h=>include/Nemu/NemuVideo.h \
+    ${PATH_ROOT}/include/Nemu/NemuVideoGuest.h=>include/Nemu/NemuVideoGuest.h \
+    ${PATH_ROOT}/include/Nemu/VMMDev.h=>include/Nemu/VMMDev.h \
+    ${PATH_ROOT}/include/Nemu/VMMDev2.h=>include/Nemu/VMMDev2.h \
+    ${PATH_ROOT}/include/Nemu/HGSMI/HGSMI.h=>include/Nemu/HGSMI/HGSMI.h \
+    ${PATH_ROOT}/include/Nemu/HGSMI/HGSMIChannels.h=>include/Nemu/HGSMI/HGSMIChannels.h \
+    ${PATH_ROOT}/include/Nemu/HGSMI/HGSMIChSetup.h=>include/Nemu/HGSMI/HGSMIChSetup.h \
+    ${PATH_ROOT}/include/Nemu/HGSMI/HGSMIDefs.h=>include/Nemu/HGSMI/HGSMIDefs.h \
+    ${PATH_ROOT}/include/Nemu/HGSMI/HGSMIMemAlloc.h=>include/Nemu/HGSMI/HGSMIMemAlloc.h \
+    ${PATH_ROOT}/include/Nemu/Hardware/NemuVideoVBE.h=>include/Nemu/Hardware/NemuVideoVBE.h \
+    ${PATH_ROOT}/src/Nemu/Additions/common/NemuVideo/HGSMIBase.cpp=>HGSMIBase.c \
+    ${PATH_ROOT}/src/Nemu/Additions/common/NemuVideo/Modesetting.cpp=>Modesetting.c \
+    ${PATH_ROOT}/src/Nemu/Additions/common/NemuVideo/VBVABase.cpp=>VBVABase.c \
+    ${PATH_ROOT}/src/Nemu/Additions/linux/drm/nemu_drv.c=>nemu_drv.c \
+    ${PATH_ROOT}/src/Nemu/Additions/linux/drm/nemu_drv.h=>nemu_drv.h \
+    ${PATH_ROOT}/src/Nemu/Additions/linux/drm/nemu_fb.c=>nemu_fb.c \
+    ${PATH_ROOT}/src/Nemu/Additions/linux/drm/nemu_main.c=>nemu_main.c \
+    ${PATH_ROOT}/src/Nemu/Additions/linux/drm/nemu_mode.c=>nemu_mode.c \
+    ${PATH_ROOT}/src/Nemu/Additions/linux/drm/nemu_ttm.c=>nemu_ttm.c \
+    ${PATH_ROOT}/src/Nemu/GuestHost/HGSMI/HGSMICommon.cpp=>HGSMICommon.c \
+    ${PATH_ROOT}/src/Nemu/GuestHost/HGSMI/HGSMIMemAlloc.cpp=>HGSMIMemAlloc.c \
+    ${PATH_ROOT}/src/Nemu/Runtime/common/alloc/heapoffset.cpp=>heapoffset.c \
+    ${PATH_ROOT}/src/Nemu/Runtime/include/internal/iprt.h=>include/internal/iprt.h \
+    ${PATH_ROOT}/src/Nemu/Runtime/include/internal/magics.h=>include/internal/magics.h \
+    ${PATH_ROOT}/src/Nemu/Runtime/r0drv/linux/the-linux-kernel.h=>include/the-linux-kernel.h \
+    ${PATH_ROOT}/src/Nemu/Installer/linux/Makefile.include.header=>Makefile.include.header \
+    ${PATH_ROOT}/src/Nemu/Installer/linux/Makefile.include.footer=>Makefile.include.footer \
+    ${PATH_ROOT}/src/Nemu/Additions/linux/drm/Makefile.module.kms=>Makefile \
+"
+
+FILES_NEMUVIDEO_DRM_BIN=" \
+"

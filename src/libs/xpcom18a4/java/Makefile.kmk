@@ -1,0 +1,223 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for Java bindings
+#
+
+#
+# Copyright (C) 2010-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Globals
+#
+NEMU_JXPCOM_SRC := $(PATH_SUB_CURRENT)
+
+NEMU_JXPCOM_TARGET := $(PATH_TARGET)/nemujxpcom-gen
+NEMU_JXPCOM_JDEST  := $(NEMU_JXPCOM_TARGET)/jdest
+
+NEMU_GLUE_XSLT_DIR := $(PATH_ROOT)/src/Nemu/Main/glue
+
+ifndef NEMU_ONLY_SDK
+#
+# NemuJXpcom - Java<->XPCOM native library
+#
+DLLS += NemuJXpcom
+
+NemuJXpcom_TEMPLATE = XPCOM
+NemuJXpcom_CXXFLAGS = -Wno-write-strings
+NemuJXpcom_DEFS     =    \
+	EXPORT_XPTI_API  \
+        EXPORT_XPT_API   \
+	NEMU_WITH_XPCOM
+NemuJXpcom_NAME     = libnemujxpcom
+NemuJXpcom_DLLSUFF.darwin = .jnilib
+NemuJXpcom_INCS     = \
+	src \
+        $(NEMU_JAVA_INC) \
+        $(NEMU_PATH_XPCOM_SRC)/xpcom/glue \
+	$(NEMU_PATH_XPCOM_SRC)/xpcom/build \
+	$(NEMU_JXPCOM_JDEST)
+NemuJXpcom_SOURCES  = \
+	src/nsAppFileLocProviderProxy.cpp \
+	src/nsJavaWrapper.cpp \
+	src/nsJavaXPCOMBindingUtils.cpp \
+	src/nsJavaXPTCStub.cpp \
+	src/nsJavaXPTCStubWeakRef.cpp \
+        src/nsJavaXPCOMGlue.cpp \
+        src/nsJavaInterfaces.cpp
+NemuJXpcom_LIBS     = \
+	$(PATH_STAGE_LIB)/NemuCOM$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_BIN)/NemuXPCOM$(NEMU_SUFF_DLL)
+
+#NemuJXpcom_ORDERDEPS = $(NEMU_JXPCOM_GENH)
+#NemuJXpcom_CLEAN     = $(NEMU_JXPCOM_GENH)
+NEMU_JXPCOM_GENH = \
+	$(NEMU_JXPCOM_JDEST)/org_mozilla_xpcom_internal_XPCOMImpl.h \
+	$(NEMU_JXPCOM_JDEST)/org_mozilla_xpcom_internal_GREImpl.h \
+	$(NEMU_JXPCOM_JDEST)/org_mozilla_xpcom_internal_MozillaImpl.h \
+	$(NEMU_JXPCOM_JDEST)/org_mozilla_xpcom_internal_XPCOMJavaProxy.h \
+	$(NEMU_JXPCOM_JDEST)/org_mozilla_xpcom_internal_JavaXPCOMMethods.h \
+	$(NEMU_JXPCOM_JDEST)/org_mozilla_xpcom_ProfileLock.h
+
+
+else # NEMU_ONLY_SDK
+# Nothing yet
+endif # NEMU_ONLY_SDK
+
+#
+# Install JAR files
+#
+INSTALLS += NemuJXpcom-inst-jar
+
+NEMU_JXPCOM_JAR     = $(NemuJXpcom-inst-jar_0_OUTDIR)/nemujxpcom.jar
+NEMU_JXPCOM_NSERROR = $(NEMU_JXPCOM_GEN)/java/XPCOMError.java
+ifndef NEMU_WITH_JAVA_SUPPORT_IN_XPIDL
+NEMU_JXPCOM_GEN     = $(NEMU_JXPCOM_TARGET)/jxpcomgen
+else
+NEMU_JXPCOM_GEN     = $(NEMU_JXPCOM_TARGET)/jxpcomgen-idl
+endif
+
+NemuJXpcom-inst-jar_INST = $(INST_SDK)bindings/xpcom/java/
+NemuJXpcom-inst-jar_MODE = a+r,u+w
+NemuJXpcom-inst-jar_SOURCES = \
+	$(NEMU_JXPCOM_JAR)
+NemuJXpcom-inst-jar_CLEAN = \
+	$(NEMU_JXPCOM_JAR) \
+	$(NEMU_JXPCOM_NSERROR) \
+	$(NEMU_JXPCOM_GEN)/jxpcomgen.list  \
+        $(NEMU_JXPCOM_GEN)/jxpcomglue.list \
+	$(wildcard \
+		$(NEMU_JXPCOM_GEN)/java/*.java \
+                $(NEMU_JXPCOM_GEN)/java/glue/*.java \
+		$(NEMU_JXPCOM_JDEST)/*.class \
+		$(NEMU_JXPCOM_JDEST)/*/*.class \
+		$(NEMU_JXPCOM_JDEST)/*/*/*.class \
+		$(NEMU_JXPCOM_JDEST)/*/*/*/*.class \
+		$(NEMU_JXPCOM_JDEST)/*/*/*/*/*.class \
+		$(NEMU_JXPCOM_JDEST)/*/*/*/*/*/*.class \
+	)
+NemuJXpcom-inst-jar_BLDDIRS += $(NEMU_JXPCOM_GEN)/java $(NEMU_JXPCOM_GEN)/java/glue $(NEMU_JXPCOM_GEN)/java/interfaces
+
+#
+# For NemuJXpcom, not currently used.
+#
+$(NEMU_JXPCOM_GENH): $$(NEMU_JXPCOM_JAR)
+	$(call MSG_L1,Generating $@ from $<)
+	$(QUIET)$(NEMU_JAVAH) -classpath $(NEMU_JXPCOM_JDEST) -d $(NEMU_JXPCOM_JDEST) \
+		org.mozilla.xpcom.internal.XPCOMImpl \
+		org.mozilla.xpcom.internal.GREImpl \
+		org.mozilla.xpcom.internal.MozillaImpl \
+		org.mozilla.xpcom.internal.XPCOMJavaProxy \
+		org.mozilla.xpcom.ProfileLock \
+		org.mozilla.xpcom.internal.JavaXPCOMMethods
+
+#
+# Generate error constants.
+#
+$(NEMU_JXPCOM_NSERROR): $(NEMU_PATH_XPCOM_SRC)/xpcom/base/nsError.h $(NEMU_JXPCOM_SRC)/tools/gen-nsError.pl | $(NEMU_JXPCOM_GEN)/java/
+	$(call MSG_L1,Generating $@)
+	$(QUIET)perl $(NEMU_JXPCOM_SRC)/tools/gen-nsError.pl < $< > $@
+
+ifndef NEMU_WITH_JAVA_SUPPORT_IN_XPIDL
+#
+# Generate .java interface files from .xidl
+#
+
+$(NEMU_JXPCOM_GEN)/jxpcomgen.list: \
+               $(NEMU_XIDL_FILE)   \
+               $(NEMU_FILESPLIT)   \
+               $(NEMU_JXPCOM_SRC)/tools/genjifaces.xsl \
+               | $(NEMU_JXPCOM_GEN)/java/interfaces/
+	$(call MSG_L1,Generating Java interface files)
+	$(QUIET)$(RM) -f $(wildcard $(NEMU_JXPCOM_GEN)/java/interfaces/*.java)
+	$(QUIET)$(NEMU_XSLTPROC)   \
+              -o $(NEMU_JXPCOM_GEN)/java/interfaces/merged.file $(NEMU_JXPCOM_SRC)/tools/genjifaces.xsl $<
+	$(QUIET)$(NEMU_FILESPLIT) $(NEMU_JXPCOM_GEN)/java/interfaces/merged.file $(NEMU_JXPCOM_GEN)/java/interfaces
+	$(QUIET)echo $(NEMU_JXPCOM_GEN)/java/interfaces/*.java > $@
+
+else  # NEMU_WITH_JAVA_SUPPORT_IN_XPIDL
+#
+# Generate .java interface files from the XPCOM and VirtualBox IDL files.
+#
+# Note! There is not a 1:1 relationship between input and output files here, unfortunately.
+# Note! NEMU_JXPCOM_NSERROR shares the output directory with us.
+#
+$(NEMU_JXPCOM_GEN)/jxpcomgen.list: \
+		$(NEMU_PATH_SDK)/bindings/xpcom/idl/VirtualBox_XPCOM.idl \
+		$$(addprefix $(NEMU_PATH_XPCOM_SRC)/,$$(XPCOM_IDLFILES)) \
+		$(NEMU_XPIDL) \
+		| $(NEMU_JXPCOM_GEN)/java/
+	$(call MSG_L1,Generating XPCOM Java interface files from IDL)
+	$(QUIET)$(RM) -f $(filter-out %/XPCOMError.java, $(wildcard $(NEMU_JXPCOM_GEN)/java/*.java))
+	$(foreach idl, $(NEMU_PATH_SDK)/bindings/xpcom/idl/VirtualBox_XPCOM.idl $(addprefix $(NEMU_PATH_XPCOM_SRC)/,$(XPCOM_IDLFILES))\
+		, $(NLTAB)$(QUIET)$(NEMU_XPIDL) -m java $(XPIDL_INCS) -e $(NEMU_JXPCOM_GEN)/java/$(basename $(notdir $(idl))).java $(idl) )
+	$(QUIET)echo $(NEMU_JXPCOM_GEN)/java/*.java > $@
+endif # NEMU_WITH_JAVA_SUPPORT_IN_XPIDL
+
+$(NEMU_JXPCOM_GEN)/jxpcomglue.list:  \
+		$(NEMU_XIDL_FILE)    \
+                $(NEMU_GLUE_XSLT_DIR)/glue-java.xsl \
+                $(NEMU_FILESPLIT)    \
+		| $(NEMU_JXPCOM_GEN)/java/glue/
+	$(call MSG_L1,Generating Java glue files from XIDL)
+	$(QUIET)$(RM) -f $(wildcard $(NEMU_JXPCOM_GEN)/java/glue/*.java)
+	$(QUIET)$(NEMU_XSLTPROC)   \
+              --stringparam filelistonly ""                    \
+              --stringparam G_nemuApiSuffix $(NEMU_API_SUFFIX) \
+              --stringparam G_nemuGlueStyle xpcom              \
+              --stringparam G_nemuDirPrefix ""                 \
+              -o $(NEMU_JXPCOM_GEN)/java/glue/merged.file $(NEMU_GLUE_XSLT_DIR)/glue-java.xsl $<
+	$(QUIET)$(NEMU_FILESPLIT) $(NEMU_JXPCOM_GEN)/java/glue/merged.file $(NEMU_JXPCOM_GEN)/java/glue/
+	$(QUIET)echo $(NEMU_JXPCOM_GEN)/java/glue/*.java > $@
+
+#
+# Compile the all java code into a JAR file.
+#
+NEMU_JXPCOM_JSRC = $(NEMU_JXPCOM_SRC)/src/org/mozilla/xpcom
+NEMU_JXPCOM_JAR_SRC = \
+	$(NEMU_JXPCOM_JSRC)/IXPCOM.java \
+	$(NEMU_JXPCOM_JSRC)/Mozilla.java \
+	$(NEMU_JXPCOM_JSRC)/VersionComparator.java \
+	$(NEMU_JXPCOM_JSRC)/GREVersionRange.java \
+	$(NEMU_JXPCOM_JSRC)/IAppFileLocProvider.java \
+	$(NEMU_JXPCOM_JSRC)/ProfileLock.java \
+	$(NEMU_JXPCOM_JSRC)/IGRE.java \
+	$(NEMU_JXPCOM_JSRC)/IJavaXPCOMUtils.java \
+	$(NEMU_JXPCOM_JSRC)/XPCOMException.java \
+	$(NEMU_JXPCOM_JSRC)/IMozilla.java \
+	$(NEMU_JXPCOM_JSRC)/XPCOMInitializationException.java \
+	$(NEMU_JXPCOM_JSRC)/INIParser.java \
+	$(NEMU_JXPCOM_JSRC)/internal/GREImpl.java \
+	$(NEMU_JXPCOM_JSRC)/internal/JavaXPCOMMethods.java \
+	$(NEMU_JXPCOM_JSRC)/internal/MozillaImpl.java \
+	$(NEMU_JXPCOM_JSRC)/internal/XPCOMImpl.java \
+	$(NEMU_JXPCOM_JSRC)/internal/XPCOMJavaProxyBase.java \
+	$(NEMU_JXPCOM_JSRC)/internal/XPCOMJavaProxy.java
+
+$$(NEMU_JXPCOM_JAR): $(NEMU_JXPCOM_JAR_SRC) $(NEMU_JXPCOM_GEN)/jxpcomgen.list $(NEMU_JXPCOM_GEN)/jxpcomglue.list $(NEMU_JXPCOM_NSERROR) $(NEMU_JXPCOM_MGR) | $$(dir $$@)
+	$(call MSG_TOOL,javac,$(notdir $@),jxpcomgen.list,)
+	$(QUIET)$(RM) -Rf $(NEMU_JXPCOM_JDEST)
+	$(QUIET)$(MKDIR) -p $(NEMU_JXPCOM_JDEST)
+	$(QUIET)$(NEMU_JAVAC) $(NEMU_JAVAC_OPTS) @$(NEMU_JXPCOM_GEN)/jxpcomgen.list \
+		-d $(NEMU_JXPCOM_JDEST) -classpath $(NEMU_JXPCOM_JDEST)
+	$(call MSG_TOOL,javac,$(notdir $@),...,)
+	$(QUIET)$(NEMU_JAVAC) $(NEMU_JAVAC_OPTS) \
+		$(NEMU_JXPCOM_JAR_SRC) \
+		$(NEMU_JXPCOM_NSERROR) \
+                @$(NEMU_JXPCOM_GEN)/jxpcomglue.list \
+		-d $(NEMU_JXPCOM_JDEST) -classpath $(NEMU_JXPCOM_JDEST)
+	$(call MSG_LINK,$(notdir $@),$@)
+	$(QUIET)$(NEMU_JAR) cf $@ -C $(NEMU_JXPCOM_JDEST) .
+
+include $(FILE_KBUILD_SUB_FOOTER)

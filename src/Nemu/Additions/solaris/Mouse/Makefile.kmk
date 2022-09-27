@@ -1,0 +1,71 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Solaris Mouse Integration kernel module.
+#
+
+#
+# Copyright (C) 2012-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+SUB_DEPTH = ../../../../..
+include	$(KBUILD_PATH)/subheader.kmk
+
+#ifneq ($(KBUILD_HOST),solaris)
+#$(error "The Solaris guest additions can only be built on Solaris!")
+#endif
+
+#
+# nemums - The Mouse Integration Driver
+#
+SYSMODS.solaris     += nemums
+nemums_TEMPLATE   = NEMUGUESTR0
+nemums_DEFS       = NEMU_WITH_HGCM NEMU_SVN_REV=$(NEMU_SVN_REV)
+nemums_DEPS      += $(NEMU_SVN_REV_KMK)
+nemums_SOURCES    = \
+	nemums.c
+nemums_LIBS       = \
+	$(NEMU_LIB_VBGL_R0)
+ifeq ($(KBUILD_HOST),solaris)
+ nemums_LDFLAGS         += -N drv/nemuguest -N misc/ctf
+else
+ nemums_SOURCES         += deps.asm
+ nemums_deps.asm_ASFLAGS = -f bin -g null
+endif
+
+
+PROGRAMS += nemumslnk
+nemumslnk_TEMPLATE    = NewNemuGuestR3Exe
+nemumslnk_SOURCES     = nemumslnk.c
+
+
+if 0 # Broken - unresolved externals: vbglDriver*, RTR0AssertPanicSystem.
+if defined(NEMU_WITH_TESTCASES) && !defined(NEMU_ONLY_ADDITIONS) && !defined(NEMU_ONLY_SDK)
+ PROGRAMS += tstNemuMouse-solaris
+ tstNemuMouse-solaris_TEMPLATE = NEMUR3TSTEXE
+ tstNemuMouse-solaris_SOURCES  = \
+ 	nemums.c \
+ 	testcase/tstNemuMouse-solaris.c
+ tstNemuMouse-solaris_DEFS     = TESTCASE
+ tstNemuMouse-solaris_LIBS     = $(LIB_RUNTIME)
+endif
+endif
+
+include	$(KBUILD_PATH)/subfooter.kmk
+

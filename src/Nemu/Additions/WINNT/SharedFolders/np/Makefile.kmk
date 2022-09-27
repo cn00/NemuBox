@@ -1,0 +1,48 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the VirtualBox Windows Guest Shared Folders Network Provider.
+#
+
+#
+# Copyright (C) 2012-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+DLLS += NemuMRXNP
+NemuMRXNP_TEMPLATE    = NEMUGUESTR3DLL
+NemuMRXNP_DEFS        = LOG_TO_BACKDOOR UNICODE WIN32_LEAN_AND_MEAN=1
+#NemuMRXNP_DEFS       += LOG_ENABLED
+NemuMRXNP_SDKS        = ReorderCompilerIncs $(NEMU_WINDDK_GST_W2K)
+
+NemuMRXNP_SOURCES     = \
+	nemumrxnp.cpp \
+	nemumrxnp.rc \
+	nemumrxnp.def
+
+NemuMRXNP_LIBS     = \
+	$(NEMU_LIB_IPRT_GUEST_R3) \
+	$(NEMU_LIB_VBGL_R3) \
+	$(NEMU_LIB_IPRT_GUEST_R3)
+
+#
+# NemuMRXNP-x86 - x86 version of NemuMRXNP built for amd64 build
+#
+DLLS.win.amd64 += NemuMRXNP-x86
+NemuMRXNP-x86_EXTENDS = NemuMRXNP
+NemuMRXNP-x86_BLD_TRG_ARCH = x86
+NemuMRXNP-x86_LIBS = \
+	$(NEMU_LIB_IPRT_GUEST_R3_X86) \
+	$(NEMU_LIB_VBGL_R3_X86)
+NemuMRXNP-x86_DEFS = $(NemuMRXNP_DEFS) NEMU_WOW64
+
+include $(FILE_KBUILD_SUB_FOOTER)

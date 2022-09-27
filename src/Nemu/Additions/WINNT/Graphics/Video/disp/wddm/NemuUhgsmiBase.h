@@ -1,0 +1,224 @@
+/* $Id: NemuUhgsmiBase.h $ */
+
+/** @file
+ * NemuVideo Display D3D User mode dll
+ */
+
+/*
+ * Copyright (C) 2011-2012 Oracle Corporation
+ *
+ * This file is part of VirtualBox Open Source Edition (OSE), as
+ * available from http://www.virtualbox.org. This file is free software;
+ * you can redistribute it and/or modify it under the terms of the GNU
+ * General Public License (GPL) as published by the Free Software
+ * Foundation, in version 2 as it comes in the "COPYING" file of the
+ * VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+ * hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+ */
+
+#ifndef ___NemuUhgsmiBase_h__
+#define ___NemuUhgsmiBase_h__
+
+#include <Nemu/NemuUhgsmi.h>
+#include <Nemu/NemuCrHgsmi.h>
+
+#include <windows.h>
+#include <D3dkmthk.h>
+//#include <D3dumddi.h>
+#include "common/wddm/NemuMPIf.h"
+
+
+#ifndef NEMU_WITH_CRHGSMI
+#error "NEMU_WITH_CRHGSMI not defined!"
+#endif
+
+#if 0
+typedef DECLCALLBACK(int) FNNEMUCRHGSMI_CTLCON_CALL(struct NEMUUHGSMI_PRIVATE_BASE *pHgsmi, struct NemuGuestHGCMCallInfo *pCallInfo, int cbCallInfo);
+typedef FNNEMUCRHGSMI_CTLCON_CALL *PFNNEMUCRHGSMI_CTLCON_CALL;
+
+#define nemuCrHgsmiPrivateCtlConCall(_pHgsmi, _pCallInfo, _cbCallInfo) (_pHgsmi->pfnCtlConCall((_pHgsmi), (_pCallInfo), (_cbCallInfo)))
+
+
+typedef DECLCALLBACK(int) FNNEMUCRHGSMI_CTLCON_GETCLIENTID(struct NEMUUHGSMI_PRIVATE_BASE *pHgsmi, uint32_t *pu32ClientID);
+typedef FNNEMUCRHGSMI_CTLCON_GETCLIENTID *PFNNEMUCRHGSMI_CTLCON_GETCLIENTID;
+
+#define nemuCrHgsmiPrivateCtlConGetClientID(_pHgsmi, _pu32ClientID) (_pHgsmi->pfnCtlConGetClientID((_pHgsmi), (_pu32ClientID)))
+#else
+int nemuCrHgsmiPrivateCtlConCall(struct NEMUUHGSMI_PRIVATE_BASE *pHgsmi, struct NemuGuestHGCMCallInfo *pCallInfo, int cbCallInfo);
+int nemuCrHgsmiPrivateCtlConGetClientID(struct NEMUUHGSMI_PRIVATE_BASE *pHgsmi, uint32_t *pu32ClientID);
+int nemuCrHgsmiPrivateCtlConGetHostCaps(struct NEMUUHGSMI_PRIVATE_BASE *pHgsmi, uint32_t *pu32HostCaps);
+#endif
+
+typedef DECLCALLBACK(int) FNNEMUCRHGSMI_ESCAPE(struct NEMUUHGSMI_PRIVATE_BASE *pHgsmi, void *pvData, uint32_t cbData, BOOL fHwAccess);
+typedef FNNEMUCRHGSMI_ESCAPE *PFNNEMUCRHGSMI_ESCAPE;
+
+#define nemuCrHgsmiPrivateEscape(_pHgsmi, _pvData, _cbData, _fHwAccess) (_pHgsmi->pfnEscape((_pHgsmi), (_pvData), (_cbData), (_fHwAccess)))
+
+typedef struct NEMUUHGSMI_PRIVATE_BASE
+{
+    NEMUUHGSMI Base;
+    PFNNEMUCRHGSMI_ESCAPE pfnEscape;
+} NEMUUHGSMI_PRIVATE_BASE, *PNEMUUHGSMI_PRIVATE_BASE;
+
+typedef struct NEMUUHGSMI_BUFFER_PRIVATE_BASE
+{
+    NEMUUHGSMI_BUFFER Base;
+    PNEMUUHGSMI_PRIVATE_BASE pHgsmi;
+} NEMUUHGSMI_BUFFER_PRIVATE_BASE, *PNEMUUHGSMI_BUFFER_PRIVATE_BASE;
+
+typedef struct NEMUUHGSMI_BUFFER_PRIVATE_ESC_BASE
+{
+    NEMUUHGSMI_BUFFER_PRIVATE_BASE BasePrivate;
+    NEMUVIDEOCM_UM_ALLOC Alloc;
+    HANDLE hSynch;
+} NEMUUHGSMI_BUFFER_PRIVATE_ESC_BASE, *PNEMUUHGSMI_BUFFER_PRIVATE_ESC_BASE;
+
+typedef struct NEMUUHGSMI_BUFFER_PRIVATE_DX_ALLOC_BASE
+{
+    NEMUUHGSMI_BUFFER_PRIVATE_BASE BasePrivate;
+    D3DKMT_HANDLE hAllocation;
+    UINT aLockPageIndices[1];
+} NEMUUHGSMI_BUFFER_PRIVATE_DX_ALLOC_BASE, *PNEMUUHGSMI_BUFFER_PRIVATE_DX_ALLOC_BASE;
+
+#define NEMUUHGSMIBASE_GET_PRIVATE(_p, _t) ((_t*)(((uint8_t*)_p) - RT_OFFSETOF(_t, Base)))
+#define NEMUUHGSMIBASE_GET(_p) NEMUUHGSMIBASE_GET_PRIVATE(_p, NEMUUHGSMI_PRIVATE_BASE)
+#define NEMUUHGSMIBASE_GET_BUFFER(_p) NEMUUHGSMIBASE_GET_PRIVATE(_p, NEMUUHGSMI_BUFFER_PRIVATE_BASE)
+
+#define NEMUUHGSMIPRIVATEBASE_GET_PRIVATE(_p, _t) ((_t*)(((uint8_t*)_p) - RT_OFFSETOF(_t, BasePrivate.Base)))
+#define NEMUUHGSMIESCBASE_GET_BUFFER(_p) NEMUUHGSMIPRIVATEBASE_GET_PRIVATE(_p, NEMUUHGSMI_BUFFER_PRIVATE_ESC_BASE)
+#define NEMUUHGSMDXALLOCBASE_GET_BUFFER(_p) NEMUUHGSMIPRIVATEBASE_GET_PRIVATE(_p, NEMUUHGSMI_BUFFER_PRIVATE_DX_ALLOC_BASE)
+
+DECLINLINE(int) nemuUhgsmiBaseDxLockData(PNEMUUHGSMI_BUFFER_PRIVATE_DX_ALLOC_BASE pPrivate, uint32_t offLock, uint32_t cbLock, NEMUUHGSMI_BUFFER_LOCK_FLAGS fFlags,
+                                    D3DDDICB_LOCKFLAGS *pfFlags, UINT *pNumPages)
+{
+    PNEMUUHGSMI_BUFFER pBuf = &pPrivate->BasePrivate.Base;
+    D3DDDICB_LOCKFLAGS fLockFlags;
+    fLockFlags.Value = 0;
+    if (fFlags.bLockEntire)
+    {
+        Assert(!offLock);
+        fLockFlags.LockEntire = 1;
+    }
+    else
+    {
+        if (!cbLock)
+        {
+            Assert(0);
+            return VERR_INVALID_PARAMETER;
+        }
+        if (offLock + cbLock > pBuf->cbBuffer)
+        {
+            Assert(0);
+            return VERR_INVALID_PARAMETER;
+        }
+
+        uint32_t iFirstPage = offLock >> 12;
+        uint32_t iAfterLastPage = (cbLock + 0xfff) >> 12;
+        uint32_t cPages = iAfterLastPage - iFirstPage;
+        uint32_t cBufPages = pBuf->cbBuffer >> 12;
+        Assert(cPages <= (cBufPages));
+
+        if (cPages == cBufPages)
+        {
+            *pNumPages = 0;
+            fLockFlags.LockEntire = 1;
+        }
+        else
+        {
+            *pNumPages = cPages;
+            for (UINT i = 0, j = iFirstPage; i < cPages; ++i, ++j)
+            {
+                pPrivate->aLockPageIndices[i] = j;
+            }
+        }
+
+    }
+
+    fLockFlags.ReadOnly = fFlags.bReadOnly;
+    fLockFlags.WriteOnly = fFlags.bWriteOnly;
+    fLockFlags.DonotWait = fFlags.bDonotWait;
+//    fLockFlags.Discard = fFlags.bDiscard;
+    *pfFlags = fLockFlags;
+    return VINF_SUCCESS;
+}
+
+DECLINLINE(void) nemuUhgsmiBaseDxAllocInfoFill(D3DDDI_ALLOCATIONINFO *pDdiAllocInfo, NEMUWDDM_ALLOCINFO *pAllocInfo, uint32_t cbBuffer, NEMUUHGSMI_BUFFER_TYPE_FLAGS fUhgsmiType)
+{
+    memset(pDdiAllocInfo, 0, sizeof (*pDdiAllocInfo));
+    pDdiAllocInfo->pPrivateDriverData = pAllocInfo;
+    pDdiAllocInfo->PrivateDriverDataSize = sizeof (*pAllocInfo);
+    memset(pAllocInfo, 0, sizeof (*pAllocInfo));
+    pAllocInfo->enmType = NEMUWDDM_ALLOC_TYPE_UMD_HGSMI_BUFFER;
+    pAllocInfo->cbBuffer = cbBuffer;
+    pAllocInfo->fUhgsmiType = fUhgsmiType;
+}
+
+DECLINLINE(int) nemuUhgsmiBaseDxDmaFill(PNEMUUHGSMI_BUFFER_SUBMIT aBuffers, uint32_t cBuffers,
+        VOID* pCommandBuffer, UINT *pCommandBufferSize,
+        D3DDDI_ALLOCATIONLIST *pAllocationList, UINT AllocationListSize,
+        D3DDDI_PATCHLOCATIONLIST *pPatchLocationList, UINT PatchLocationListSize)
+{
+    const uint32_t cbDmaCmd = RT_OFFSETOF(NEMUWDDM_DMA_PRIVATEDATA_UM_CHROMIUM_CMD, aBufInfos[cBuffers]);
+    if (*pCommandBufferSize < cbDmaCmd)
+    {
+        Assert(0);
+        return VERR_GENERAL_FAILURE;
+    }
+    if (AllocationListSize < cBuffers)
+    {
+        Assert(0);
+        return VERR_GENERAL_FAILURE;
+    }
+
+    *pCommandBufferSize = cbDmaCmd;
+
+    PNEMUWDDM_DMA_PRIVATEDATA_UM_CHROMIUM_CMD pHdr = (PNEMUWDDM_DMA_PRIVATEDATA_UM_CHROMIUM_CMD)pCommandBuffer;
+    pHdr->Base.enmCmd = NEMUVDMACMD_TYPE_CHROMIUM_CMD;
+    pHdr->Base.u32CmdReserved = 0;
+
+    PNEMUWDDM_UHGSMI_BUFFER_UI_SUBMIT_INFO pBufSubmInfo = pHdr->aBufInfos;
+
+    for (uint32_t i = 0; i < cBuffers; ++i)
+    {
+        PNEMUUHGSMI_BUFFER_SUBMIT pBufInfo = &aBuffers[i];
+        PNEMUUHGSMI_BUFFER_PRIVATE_DX_ALLOC_BASE pBuffer = NEMUUHGSMDXALLOCBASE_GET_BUFFER(pBufInfo->pBuf);
+
+        memset(pAllocationList, 0, sizeof (D3DDDI_ALLOCATIONLIST));
+        pAllocationList->hAllocation = pBuffer->hAllocation;
+        pAllocationList->Value = 0;
+        pAllocationList->WriteOperation = !pBufInfo->fFlags.bHostReadOnly;
+        pAllocationList->DoNotRetireInstance = pBufInfo->fFlags.bDoNotRetire;
+        if (pBufInfo->fFlags.bEntireBuffer)
+        {
+            pBufSubmInfo->offData = 0;
+            pBufSubmInfo->cbData = pBuffer->BasePrivate.Base.cbBuffer;
+        }
+        else
+        {
+            pBufSubmInfo->offData = pBufInfo->offData;
+            pBufSubmInfo->cbData = pBufInfo->cbData;
+        }
+
+        ++pAllocationList;
+        ++pBufSubmInfo;
+    }
+
+    return VINF_SUCCESS;
+}
+
+DECLCALLBACK(int) nemuUhgsmiBaseEscBufferLock(PNEMUUHGSMI_BUFFER pBuf, uint32_t offLock, uint32_t cbLock, NEMUUHGSMI_BUFFER_LOCK_FLAGS fFlags, void**pvLock);
+DECLCALLBACK(int) nemuUhgsmiBaseEscBufferUnlock(PNEMUUHGSMI_BUFFER pBuf);
+int nemuUhgsmiBaseBufferTerm(PNEMUUHGSMI_BUFFER_PRIVATE_ESC_BASE pBuffer);
+static int nemuUhgsmiBaseEventChkCreate(NEMUUHGSMI_BUFFER_TYPE_FLAGS fUhgsmiType, HANDLE *phSynch);
+int nemuUhgsmiKmtEscBufferInit(PNEMUUHGSMI_PRIVATE_BASE pPrivate, PNEMUUHGSMI_BUFFER_PRIVATE_ESC_BASE pBuffer, uint32_t cbBuf, NEMUUHGSMI_BUFFER_TYPE_FLAGS fUhgsmiType, PFNNEMUUHGSMI_BUFFER_DESTROY pfnDestroy);
+DECLCALLBACK(int) nemuUhgsmiBaseEscBufferSubmit(PNEMUUHGSMI pHgsmi, PNEMUUHGSMI_BUFFER_SUBMIT aBuffers, uint32_t cBuffers);
+DECLCALLBACK(int) nemuUhgsmiBaseEscBufferDestroy(PNEMUUHGSMI_BUFFER pBuf);
+DECLCALLBACK(int) nemuUhgsmiBaseEscBufferCreate(PNEMUUHGSMI pHgsmi, uint32_t cbBuf, NEMUUHGSMI_BUFFER_TYPE_FLAGS fUhgsmiType, PNEMUUHGSMI_BUFFER* ppBuf);
+DECLINLINE(void) nemuUhgsmiBaseInit(PNEMUUHGSMI_PRIVATE_BASE pHgsmi, PFNNEMUCRHGSMI_ESCAPE pfnEscape)
+{
+    pHgsmi->Base.pfnBufferCreate = nemuUhgsmiBaseEscBufferCreate;
+    pHgsmi->Base.pfnBufferSubmit = nemuUhgsmiBaseEscBufferSubmit;
+    pHgsmi->pfnEscape = pfnEscape;
+}
+
+#endif /* #ifndef ___NemuUhgsmiBase_h__ */

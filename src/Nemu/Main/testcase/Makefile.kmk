@@ -1,0 +1,247 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Nemu API testcases.
+#
+
+#
+# Copyright (C) 2004-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+#
+# Target and globals (small mess)
+#
+ifndef NEMU_ONLY_SDK
+ if defined(NEMU_WITH_TESTCASES)
+  PROGRAMS       += \
+  	tstAPI \
+  	tstNemuAPI \
+  	tstNemuAPIPerf \
+  	$(if $(NEMU_OSE),,tstOVF) \
+  	$(if $(NEMU_WITH_XPCOM),tstNemuAPIXPCOM,tstNemuAPIWin) \
+  	$(if $(NEMU_WITH_RESOURCE_USAGE_API),tstCollector,) \
+  	$(if $(NEMU_WITH_GUEST_CONTROL),tstGuestCtrlParseBuffer,) \
+  	$(if $(NEMU_WITH_GUEST_CONTROL),tstGuestCtrlContextID,) \
+  	tstMediumLock \
+  	tstGuid
+  PROGRAMS.linux += \
+  	$(if $(NEMU_WITH_USB),tstUSBProxyLinux,)
+ endif # !NEMU_WITH_TESTCASES
+endif # !NEMU_ONLY_SDK
+if defined(NEMU_ONLY_SDK) || !defined(NEMU_WITH_XPCOM)
+ INSTALLS += samplesMSCOM
+endif
+if defined(NEMU_ONLY_SDK) || defined(NEMU_WITH_XPCOM)
+ INSTALLS += samplesXPCOM
+endif
+
+
+#
+# The samples
+#
+samplesMSCOM_MODE = a+r,u+w
+samplesMSCOM_INST = $(INST_SDK)bindings/mscom/samples/
+samplesMSCOM_SOURCES = tstNemuAPIWin.cpp makefile.tstNemuAPIWin=>Makefile
+
+samplesXPCOM_MODE = a+r,u+w
+samplesXPCOM_INST = $(INST_SDK)bindings/xpcom/samples/
+samplesXPCOM_SOURCES = tstNemuAPIXPCOM.cpp makefile.tstNemuAPIXPCOM=>Makefile
+
+
+#
+# tstAPI
+#
+tstAPI_TEMPLATE = NEMUMAINCLIENTTSTEXE
+#tstAPI_INST = $(INST_SDK)bindings/gluecom/samples/
+tstAPI_SOURCES  = tstAPI.cpp
+
+#
+# tstNemuAPI
+#
+tstNemuAPI_TEMPLATE = NEMUMAINCLIENTTSTEXE
+tstNemuAPI_SOURCES  = \
+	tstNemuAPI.cpp
+
+#
+# tstNemuAPIPerf
+#
+tstNemuAPIPerf_TEMPLATE = NEMUMAINCLIENTTSTEXE
+tstNemuAPIPerf_SOURCES  = \
+	tstNemuAPIPerf.cpp
+
+#
+# tstOVF
+#
+tstOVF_TEMPLATE = NEMUMAINCLIENTTSTEXE
+#tstOVF_INST = $(INST_SDK)bindings/gluecom/samples/
+tstOVF_SOURCES  = tstOVF.cpp
+
+ifndef NEMU_OSE
+#
+# OVF test data.
+#
+INSTALLS += ovf-testcases
+ovf-testcases_MODE = a+r,u+w
+ovf-testcases_INST = $(INST_TESTCASE)ovf-testcases/
+ovf-testcases_SOURCES = \
+	ovf-dummy.vmdk \
+	ovf-joomla-0.9/joomla-1.1.4-ovf.ovf=>ovf-joomla-0.9/joomla-1.1.4-ovf.ovf \
+	ovf-winhost-audio-nodisks/WinXP.ovf=>ovf-winhost-audio-nodisks/WinXP.ovf \
+	ovf-winxp-nemu-sharedfolders/winxp.ovf=>ovf-winxp-nemu-sharedfolders/winxp.ovf
+endif
+
+
+#
+# tstNemuAPIXPCOM
+#
+# We only build the testcase here to make sure it builds.
+# It comes with a custom makefile which should be tested as well!
+#
+# Use very generic template to make the build environment similar
+# to the standalone case, to detect if IPRT or glue use sneaks in.
+#
+tstNemuAPIXPCOM_TEMPLATE = NEMUR3EXE
+tstNemuAPIXPCOM_INST = $(INST_TESTCASE)
+tstNemuAPIXPCOM_SOURCES  = tstNemuAPIXPCOM.cpp
+tstNemuAPIXPCOM_INCS = \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/nsprpub \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/string \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/xpcom \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/ipcd
+tstNemuAPIXPCOM_LIBS = \
+	$(LIB_XPCOM) \
+	$(LIB_RUNTIME)
+tstNemuAPIXPCOM_CXXFLAGS = -fshort-wchar
+ifdef NEMU_WITH_RUNPATH
+ tstNemuAPIXPCOM_LDFLAGS = '$(NEMU_GCC_RPATH_OPT)$(NEMU_WITH_RUNPATH)' $(TEMPLATE_NemuBldProg_LDFLAGS)
+else ifdef NEMU_WITH_RELATIVE_RUNPATH
+ tstNemuAPIXPCOM_LDFLAGS = '$(NEMU_GCC_RPATH_OPT)$(NEMU_WITH_RELATIVE_RUNPATH)/..' $(TEMPLATE_NemuBldProg_LDFLAGS)
+endif
+tstNemuAPIXPCOM_INTERMEDIATES = \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/VirtualBox_XPCOM.h
+ifdef NEMU_WITH_XPCOM_NAMESPACE_CLEANUP
+ tstNemuAPIXPCOM_DEFS += NEMU_WITH_XPCOM_NAMESPACE_CLEANUP
+endif
+
+
+#
+# tstNemuAPIWin
+#
+# Use very generic template to make the build environment similar
+# to the standalone case, to detect if IPRT or glue use sneaks in.
+#
+tstNemuAPIWin_TEMPLATE = NemuBldProg
+tstNemuAPIWin_INST = $(INST_TESTCASE)
+tstNemuAPIWin_SOURCES  = \
+	tstNemuAPIWin.cpp \
+	$(NEMU_PATH_SDK)/bindings/mscom/lib/VirtualBox_i.c
+tstNemuAPIWin_INCS = \
+	$(NEMU_PATH_SDK)/bindings/mscom/include
+tstNemuAPIWin_INTERMEDIATES = \
+	$(NEMU_PATH_SDK)/bindings/mscom/include/VirtualBox.h
+
+
+#
+# tstCollector
+#
+# Note! NEMU_MAIN_APIWRAPPER_GEN_HDRS is only defined if kmk is executed a
+#       parent directory.  Since the rules for generating the files listed by
+#       the variable lives in the parent makefile, this is not a problem.
+#
+tstCollector_TEMPLATE = NEMUMAINCLIENTTSTEXE
+tstCollector_SOURCES  = \
+	tstCollector.cpp \
+	../src-server/Performance.cpp
+tstCollector_INCS            = \
+	../include \
+	$(NEMU_MAIN_APIWRAPPER_INCS)
+tstCollector_INTERMEDIATES   = $(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+tstCollector_DEFS            = NEMU_COLLECTOR_TEST_CASE
+tstCollector_LDFLAGS.darwin  = -lproc
+tstCollector_LDFLAGS.solaris = -lkstat -lnvpair
+tstCollector_LDFLAGS.win     = psapi.lib powrprof.lib
+
+
+#
+# tstGuestCtrlParseBuffer
+#
+tstGuestCtrlParseBuffer_TEMPLATE = NEMUMAINCLIENTTSTEXE
+tstGuestCtrlParseBuffer_INTERMEDIATES   = $(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+tstGuestCtrlParseBuffer_DEFS    += NEMU_WITH_HGCM NEMU_WITH_GUEST_CONTROL NEMU_GUESTCTRL_TEST_CASE
+tstGuestCtrlParseBuffer_SOURCES  = \
+	tstGuestCtrlParseBuffer.cpp \
+	../src-client/GuestCtrlPrivate.cpp
+tstGuestCtrlParseBuffer_INCS     = ../include \
+    $(NEMU_MAIN_APIWRAPPER_INCS)
+
+
+#
+# tstGuestCtrlContextID
+#
+tstGuestCtrlContextID_TEMPLATE = NEMUMAINCLIENTTSTEXE
+tstGuestCtrlContextID_INTERMEDIATES   = $(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+tstGuestCtrlContextID_DEFS    += NEMU_WITH_HGCM NEMU_WITH_GUEST_CONTROL NEMU_GUESTCTRL_TEST_CASE
+tstGuestCtrlContextID_SOURCES  = \
+	tstGuestCtrlContextID.cpp \
+	../src-client/GuestCtrlPrivate.cpp
+tstGuestCtrlContextID_INCS     = ../include \
+     $(NEMU_MAIN_APIWRAPPER_INCS)
+
+
+#
+# tstUSBProxyLinux
+#
+tstUSBProxyLinux_TEMPLATE  = NEMUMAINCLIENTTSTEXE
+tstUSBProxyLinux_INTERMEDIATES = $(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+tstUSBProxyLinux_SOURCES   = \
+	tstUSBProxyLinux.cpp \
+	../src-server/linux/USBProxyServiceLinux.cpp \
+	../src-server/linux/USBGetDevices.cpp
+tstUSBProxyLinux_INCS      = \
+	. \
+	../include \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/nsprpub \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/xpcom \
+	$(NEMU_MAIN_APIWRAPPER_INCS)
+tstUSBProxyLinux_DEFS      = \
+	UNIT_TEST \
+	NEMU_WITH_USB \
+	NEMU_USB_WITH_SYSFS \
+	NEMU_WITH_XPCOM
+tstUSBProxyLinux_DEPS     = \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include/VirtualBox_XPCOM.h
+tstUSBProxyLinux_LIBS     += \
+	$(PATH_OUT)/lib/USBLib.a \
+	$(PATH_OUT)/lib/NemuCOM.a
+
+
+#
+# tstMediumLock
+#
+tstMediumLock_TEMPLATE = NEMUMAINCLIENTTSTEXE
+tstMediumLock_SOURCES  = tstMediumLock.cpp
+
+
+#
+# tstGuid
+#
+tstGuid_TEMPLATE = NEMUMAINCLIENTTSTEXE
+tstGuid_SOURCES  = tstGuid.cpp
+
+
+# generate rules.
+include $(FILE_KBUILD_SUB_FOOTER)
+

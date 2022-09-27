@@ -1,0 +1,15 @@
+PKG="SUNWnemuguest"
+NAME="@NEMU_PRODUCT@ Guest Additions"
+SUNW_PRODNAME="@NEMU_PRODUCT@ Guest Additions"
+ARCH="@UNAME_P@"
+VERSION="@NEMU_VERSION_STRING@,REV=r@NEMU_SVN_REV@.@NEMU_VERSION_REVSTAMP@"
+SUNW_PRODVERS="@NEMU_VERSION_STRING@"
+SUNW_PKGVERS=1.0
+CATEGORY="application"
+VENDOR="@NEMU_VENDOR@"
+EMAIL="info@virtualbox.org"
+HOTLINE="Please contact your local service provider"
+BASEDIR="/"
+CLASSES=none manifest
+DESC="@NEMU_PRODUCT@ Guest Additions for Solaris guests"
+

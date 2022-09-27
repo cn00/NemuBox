@@ -1,0 +1,73 @@
+
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for VMM tools.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+#
+# Targets.
+#
+ifdef NEMU_WITH_HARDENING
+ PROGRAMS += NemuVMMPreloadHardened
+ DLLS     += NemuVMMPreload
+else
+ PROGRAMS += NemuVMMPreload
+endif
+
+
+#
+# Hardened stub.
+#
+NemuVMMPreloadHardened_TEMPLATE = NEMUR3HARDENEDEXE
+NemuVMMPreloadHardened_SOURCES  = NemuVMMPreloadHardened.cpp
+NemuVMMPreloadHardened_NAME     = NemuVMMPreload
+
+
+#
+# The real thing
+#
+NemuVMMPreload_TEMPLATE  := $(if $(NEMU_WITH_HARDENING),NemuR3Dll,NEMUR3EXE)
+NemuVMMPreload_SOURCES    = NemuVMMPreload.cpp
+NemuVMMPreload_LIBS = $(LIB_RUNTIME)
+ifdef NEMU_WITH_HARDENING
+ NemuVMMPreload_LDFLAGS.darwin += -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuVMMPreload.dylib
+endif
+
+
+#
+# CPU report program (CPUM DB).
+#
+PROGRAMS += NemuCpuReport
+NemuCpuReport_TEMPLATE := NemuR3Static
+NemuCpuReport_DEFS      = IN_VMM_R3 IN_NEMU_CPU_REPORT
+NemuCpuReport_INCS      = ../include
+NemuCpuReport_SOURCES   = \
+	NemuCpuReport.cpp \
+       ../VMMR3/CPUMR3CpuId.cpp
+NemuCpuReport_LIBS      = \
+	$(PATH_STAGE_LIB)/SUPR3Static$(NEMU_SUFF_LIB) \
+       $(NEMU_LIB_RUNTIME_STATIC)
+NemuCpuReport_LIBS.solaris = kstat contract
+
+NemuCpuReport_LDFLAGS.darwin = \
+	-framework IOKit -framework CoreFoundation -framework CoreServices
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

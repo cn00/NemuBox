@@ -1,0 +1,38 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the NemuControl testcases.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+if defined(NEMU_WITH_TESTCASES) && !defined(NEMU_ONLY_ADDITIONS)
+
+#
+# Dummy CLI testcase.
+#
+PROGRAMS += tstNemuControl
+tstNemuControl_TEMPLATE = NEMUR3TSTEXE
+tstNemuControl_DEFS     = NEMU_CONTROL_TEST
+tstNemuControl_SOURCES  = tstNemuControl.cpp ../NemuControl.cpp
+tstNemuControl_LIBS     = $(LIB_RUNTIME)
+tstNemuControl_DEFS    += \
+	$(if $(NEMU_WITH_GUEST_PROPS),NEMU_WITH_GUEST_PROPS NEMU_WITH_HGCM,)
+
+endif # NEMU_WITH_TESTCASES
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

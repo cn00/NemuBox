@@ -1,0 +1,574 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Network Filter Driver (NemuNetFlt).
+#
+
+#
+# Copyright (C) 2008-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+if1of ($(KBUILD_TARGET), darwin win) # this ifeq must go, see @todo around elif
+ #
+ # NemuNetFlt.sys - The mixed case driver.
+ #
+ SYSMODS += NemuNetFlt
+ NemuNetFlt_TEMPLATE = NEMUR0DRV
+ NemuNetFlt_INST = $(INST_NEMUNETFLT)$(if $(eq $(KBUILD_TARGET),darwin),Contents/MacOS/)
+ NemuNetFlt_DEBUG_INST.darwin = $(patsubst %/,%,$(INST_NEMUNETFLT))
+ if defined(NEMU_SIGNING_MODE) && "$(KBUILD_TARGET)" == "win"
+  NemuNetFlt_INSTTYPE = none
+  NemuNetFlt_DEBUG_INSTTYPE = both
+ endif
+ NemuNetFlt_DEFS = IN_RT_R0 IN_SUP_STATIC
+ NemuNetFlt_INCS = .
+ NemuNetFlt_SOURCES.darwin = \
+ 	darwin/NemuNetFlt-darwin.cpp
+ NemuNetFlt_SDKS.win = ReorderCompilerIncs $(NEMU_WINDDK_WLH) $(NEMU_WINPSDK)INCS
+ NemuNetFlt_SOURCES.win = \
+ 	win/drv/NemuNetFltP-win.cpp \
+ 	win/drv/NemuNetFltM-win.cpp \
+ 	win/drv/NemuNetFltRt-win.cpp \
+ 	win/drv/NemuNetFlt-win.rc
+ # with WINDDKWLH the WIN9X_COMPAT_SPINLOCK is needed to avoid inline declaration of KeInitializeSpinLock
+ # otherwise the linker would complain about dumplicate _KeInitializeSpinLock@4 definition
+ # in ntoskrnl.lib and our object files
+ NemuNetFlt_DEFS.win += WIN9X_COMPAT_SPINLOCK=1
+ NemuNetFlt_DEFS.win += NEMUNETFLT_STATIC_CONFIG
+ NemuNetFlt_DEFS.win += NEMUNETFLT_NO_PACKET_QUEUE
+ NemuNetFlt_DEFS.win += NDIS_MINIPORT_DRIVER NDIS_WDM=1 BINARY_COMPATIBLE=0
+ NemuNetFlt_DEFS.win += NDIS50_MINIPORT=1 NDIS50=1
+ ifdef NEMU_LOOPBACK_USEFLAGS
+  NemuNetFlt_DEFS.win += NEMU_LOOPBACK_USEFLAGS
+ endif
+ NemuNetFlt_SOURCES = NemuNetFlt.c
+ #NemuNetFlt_LDFLAGS.darwin = -v -Wl,-whyload -Wl,-v -Wl,-whatsloaded
+ NemuNetFlt_LDFLAGS.win.x86 = -Entry:DriverEntry@8
+ NemuNetFlt_LDFLAGS.win.amd64 = -Entry:DriverEntry
+ NemuNetFlt_LIBS.win = \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/ntoskrnl.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/hal.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/ndis.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/tdi.lib \
+ 	$(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB)
+ NemuNetFlt_LIBS = \
+ 	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+
+ darwin/NemuNetFlt-darwin.cpp_DEFS = NEMU_SVN_REV=$(NEMU_SVN_REV)
+
+
+# Darwin extras.
+ifeq ($(KBUILD_TARGET),darwin)
+ INSTALLS += NemuNetFlt.kext
+ NemuNetFlt.kext_INST     = $(INST_NEMUNETFLT)Contents/
+ NemuNetFlt.kext_SOURCES  = $(NemuNetFlt.kext_0_OUTDIR)/Contents/Info.plist
+ NemuNetFlt.kext_CLEAN    = $(NemuNetFlt.kext_0_OUTDIR)/Contents/Info.plist
+ NemuNetFlt.kext_BLDDIRS  = $(NemuNetFlt.kext_0_OUTDIR)/Contents/
+
+$$(NemuNetFlt.kext_0_OUTDIR)/Contents/Info.plist: $(PATH_SUB_CURRENT)/darwin/Info.plist $(NEMU_VERSION_MK) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuNetFlt,$@,$<)
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(SED) \
+		-e 's/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g' \
+		-e 's/@NEMU_VERSION_MAJOR@/$(NEMU_VERSION_MAJOR)/g' \
+		-e 's/@NEMU_VERSION_MINOR@/$(NEMU_VERSION_MINOR)/g' \
+		-e 's/@NEMU_VERSION_BUILD@/$(NEMU_VERSION_BUILD)/g' \
+		-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+		-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+		-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+		--output $@ \
+		$<
+
+ $(evalcall2 NEMU_TEST_SIGN_KEXT,NemuNetFlt)
+
+ INSTALLS.darwin += Scripts-darwin
+ Scripts-darwin_INST = $(INST_DIST)
+ Scripts-darwin_EXEC_SOURCES = \
+ 	darwin/loadnetflt.sh
+endif # darwin
+
+
+ifeq ($(KBUILD_TARGET),win)
+ #
+ # Windows extras.
+ #
+ INSTALLS.win += NemuNetFlt-inf
+ NemuNetFlt-inf_INST = $(INST_BIN)
+ NemuNetFlt-inf_SOURCES = \
+ 	$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.inf \
+ 	$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFltM.inf
+ NemuNetFlt-inf_CLEAN = $(NemuNetFlt-inf_SOURCES)
+ NemuNetFlt-inf_BLDDIRS = $(PATH_TARGET)/NemuNetFltCat.dir
+
+$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.inf: $(PATH_SUB_CURRENT)/win/drv/NemuNetFlt.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuNetFlt-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFltM.inf: $(PATH_SUB_CURRENT)/win/drv/NemuNetFltM.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuNetFlt-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+ ifdef NEMU_SIGNING_MODE
+NemuNetFlt-inf_SOURCES += \
+	$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.sys \
+	$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFltNobj.dll \
+	$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.cat
+
+$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.sys: $$(NemuNetFlt_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFltNobj.dll: $$(NemuNetFltNobj_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.cat: \
+		$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.sys \
+		$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFltNobj.dll \
+		$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFlt.inf \
+		$(PATH_TARGET)/NemuNetFltCat.dir/NemuNetFltM.inf
+	$(call MSG_TOOL,Inf2Cat,NemuNetFlt-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+
+ endif # signing
+
+
+ #
+ # NemuNetLwf.sys - The light-weight filter driver for NDIS6.
+ #
+ SYSMODS += NemuNetLwf
+ NemuNetLwf_TEMPLATE = NEMUR0DRV
+ NemuNetLwf_INST = $(INST_NEMUNETFLT)
+ if defined(NEMU_SIGNING_MODE)
+  NemuNetLwf_INSTTYPE = none
+  NemuNetLwf_DEBUG_INSTTYPE = both
+ endif
+ NemuNetLwf_DEFS = IN_RT_R0 IN_SUP_STATIC
+ NemuNetLwf_INCS = .
+ NemuNetLwf_SOURCES = NemuNetFlt.c NemuNetFlt.rc
+ NemuNetLwf_SDKS.win = ReorderCompilerIncs $(NEMU_WINDDK_WLH) $(NEMU_WINPSDK)INCS
+ NemuNetLwf_SOURCES.win = \
+ 	win/drv/NemuNetLwf-win.cpp
+ # with WINDDKWLH the WIN9X_COMPAT_SPINLOCK is needed to avoid inline declaration of KeInitializeSpinLock
+ # otherwise the linker would complain about dumplicate _KeInitializeSpinLock@4 definition
+ # in ntoskrnl.lib and our object files
+ NemuNetLwf_DEFS.win += WIN9X_COMPAT_SPINLOCK=1 NDISLWF=1 DBG=1
+# NemuNetLwf_DEFS.win += NEMUNETFLT_STATIC_CONFIG
+# NemuNetLwf_DEFS.win += NEMUNETFLT_NO_PACKET_QUEUE
+# NemuNetLwf_DEFS.win += NDIS_MINIPORT_DRIVER NDIS_WDM=1 BINARY_COMPATIBLE=0
+ NemuNetLwf_DEFS.win += NDIS60=1
+# ifdef NEMU_LOOPBACK_USEFLAGS
+#  NemuNetLwf_DEFS.win += NEMU_LOOPBACK_USEFLAGS
+# endif
+# NemuNetLwf_SOURCES = NemuNetLwf.c
+ NemuNetLwf_LDFLAGS.win.x86 = -Entry:DriverEntry@8
+ NemuNetLwf_LDFLAGS.win.amd64 = -Entry:DriverEntry
+ NemuNetLwf_LIBS.win = \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/ntoskrnl.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/hal.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/ndis.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK_WLH)_LIB)/netio.lib \
+ 	$(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB)
+ NemuNetLwf_LIBS = \
+ 	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+ #
+ # NemuNetLwf installation.
+ #
+ INSTALLS.win += NemuNetLwf-inf
+ NemuNetLwf-inf_INST = $(INST_BIN)
+ NemuNetLwf-inf_SOURCES = \
+ 	$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.inf
+ NemuNetLwf-inf_CLEAN = $(NemuNetLwf-inf_SOURCES)
+ NemuNetLwf-inf_BLDDIRS = $(PATH_TARGET)/NemuNetLwfCat.dir
+
+$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.inf: $(PATH_SUB_CURRENT)/win/drv/NemuNetLwf.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuNetLwf-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+ ifdef NEMU_SIGNING_MODE
+NemuNetLwf-inf_SOURCES += \
+	$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.sys \
+	$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.cat
+
+#	$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwfNobj.dll \
+
+$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.sys: $$(NemuNetLwf_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+#$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwfNobj.dll: $$(NemuNetLwfNobj_1_TARGET) | $$(dir $$@)
+#	$(INSTALL) -m 644 $< $(@D)
+
+$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.cat: \
+		$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.sys \
+		$(PATH_TARGET)/NemuNetLwfCat.dir/NemuNetLwf.inf
+	$(call MSG_TOOL,Inf2Cat,NemuNetLwf-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+
+ endif # signing
+
+
+
+ #
+ # WinNetConfig - static library with host network interface config API
+ #
+ LIBRARIES.win += WinNetConfig
+ WinNetConfig_TEMPLATE = NEMUR3STATIC
+ WinNetConfig_DEFS     = _WIN32_WINNT=0x0501 _UNICODE UNICODE
+ WinNetConfig_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK)
+ WinNetConfig_SOURCES  = \
+ 	win/cfg/NemuNetCfg.cpp
+ WinNetConfig_INCS.win += $(PATH_TOOL_$(NEMU_VCC_TOOL)_INC)
+
+ #
+ # NetFltInstall
+ #
+ PROGRAMS.win  += NetFltInstall
+ NetFltInstall_TEMPLATE = NEMUR3STATIC
+ NetFltInstall_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetFltInstall_SOURCES  = win/tools/NemuNetFltInstall.cpp
+ NetFltInstall_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+
+ #
+ # NetFltUninstall
+ #
+ PROGRAMS.win  += NetFltUninstall
+ NetFltUninstall_TEMPLATE = NEMUR3STATIC
+ NetFltUninstall_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetFltUninstall_SOURCES  = win/tools/NemuNetFltUninstall.cpp
+ NetFltUninstall_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+ #
+ # NetAdpInstall
+ #
+ PROGRAMS.win  += NetAdpInstall
+ NetAdpInstall_TEMPLATE = NEMUR3STATIC
+ NetAdpInstall_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetAdpInstall_SOURCES  = win/tools/NemuNetAdpInstall.cpp
+ NetAdpInstall_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+
+ #
+ # NetAdpUninstall
+ #
+ PROGRAMS.win  += NetAdpUninstall
+ NetAdpUninstall_TEMPLATE = NEMUR3STATIC
+ NetAdpUninstall_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetAdpUninstall_SOURCES  = win/tools/NemuNetAdpUninstall.cpp
+ NetAdpUninstall_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+ #
+ # NetAdp6Install
+ #
+ PROGRAMS.win  += NetAdp6Install
+ NetAdp6Install_TEMPLATE = NEMUR3STATIC
+ NetAdp6Install_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetAdp6Install_SOURCES  = win/tools/NemuNetAdpInstall.cpp
+ NetAdp6Install_DEFS    += NDIS60=1
+ NetAdp6Install_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+
+ #
+ # NetAdp6Uninstall
+ #
+ PROGRAMS.win  += NetAdp6Uninstall
+ NetAdp6Uninstall_TEMPLATE = NEMUR3STATIC
+ NetAdp6Uninstall_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetAdp6Uninstall_SOURCES  = win/tools/NemuNetAdpUninstall.cpp
+ NetAdp6Uninstall_DEFS    += NDIS60=1
+ NetAdp6Uninstall_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+ #
+ # NetLwfInstall
+ #
+ PROGRAMS.win  += NetLwfInstall
+ NetLwfInstall_TEMPLATE = NEMUR3STATIC
+ NetLwfInstall_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetLwfInstall_SOURCES  = win/tools/NemuNetLwfInstall.cpp
+ NetLwfInstall_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+
+ #
+ # NetLwfUninstall
+ #
+ PROGRAMS.win  += NetLwfUninstall
+ NetLwfUninstall_TEMPLATE = NEMUR3STATIC
+ NetLwfUninstall_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NetLwfUninstall_SOURCES  = win/tools/NemuNetLwfUninstall.cpp
+ NetLwfUninstall_LIBS     = \
+ 	$(WinNetConfig_1_TARGET) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+  	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+
+ #
+ # NemuNetFltNobj
+ #
+ DLLS.win += NemuNetFltNobj
+ NemuNetFltNobj_TEMPLATE   = NEMUR3STATIC
+ if defined(NEMU_SIGNING_MODE)
+  NemuNetFltNobj_INSTTYPE  = none
+  NemuNetFltNobj_DEBUG_INSTTYPE = both
+ endif
+ NemuNetFltNobj_SDKS       = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ NemuNetFltNobj_DEFS       = _WIN32_WINNT=0x0500 WIN32 _ATL_STATIC_REGISTRY
+ NemuNetFltNobj_INCS       = \
+ 	$(NemuNetFltNobj_0_OUTDIR)
+ NemuNetFltNobj_SOURCES    = \
+ 	win/nobj/NemuNetFltNobj.cpp \
+ 	win/nobj/NemuNetFltNobj.def \
+ 	win/nobj/NemuNetFltNobj.rc
+ NemuNetFltNobj_LIBS       = \
+ 	$(PATH_TOOL_$(NEMU_VCC_TOOL)_ATLMFC_LIB)/atls$(NEMU_VCC_CRT_TYPE).lib
+ #NemuNetFltNobj_INTERMEDIATES =
+ NemuNetFltNobj_DEPS       = \
+ 	$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT_i.c \
+ 	$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT_p.c \
+ 	$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT.h \
+ 	$(NemuNetFltNobj_0_OUTDIR)/dlldata.c \
+ 	$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT.tlb
+ NemuNetFltNobj_CLEAN      = $(NemuNetFltNobj_DEPS)
+
+$$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT_i.c \
++ $$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT_p.c \
++ $$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT.h \
++ $$(NemuNetFltNobj_0_OUTDIR)/dlldata.c \
++ $$(NemuNetFltNobj_0_OUTDIR)/NemuNetFltNobjT.tlb: \
+		$(PATH_SUB_CURRENT)/win/nobj/NemuNetFltNobjT.idl \
+		| $$(dir $$@)
+	$(NEMU_WIN_MIDL) /nologo \
+		/out $(call NEMU_FN_MAKE_WIN_PATH,$(NemuNetFltNobj_0_OUTDIR)) \
+		/cpp_cmd $(subst $(EXEC_X86_WIN32),,$(call NEMU_FN_MAKE_WIN_PATH,$(TOOL_$(NEMU_VCC_TOOL)_CC))) \
+		$(addprefix /I , $(call NEMU_FN_MAKE_WIN_PATH,$(SDK_$(NEMU_WINDDK)_INCS))) \
+		$(call NEMU_FN_MAKE_WIN_PATH,$<)
+
+ #
+ # NemuNetAdp.sys - The VirtualBox Adapter miniport driver.
+ #
+ SYSMODS.win += NemuNetAdp
+ NemuNetAdp_TEMPLATE = NEMUR0DRV
+ #NemuNetAdp_INST = $(INST_NEMUNETADP)
+ if defined(NEMU_SIGNING_MODE)
+  NemuNetAdp_INSTTYPE.win = none
+  NemuNetAdp_DEBUG_INSTTYPE.win = both
+ endif
+ NemuNetAdp_DEFS = IN_RT_R0 IN_SUP_STATIC
+ NemuNetAdp_INCS := $(PATH_SUB_CURRENT)
+ NemuNetAdp_SDKS = ReorderCompilerIncs $(NEMU_WINDDK_WLH) $(NEMU_WINPSDK)INCS
+ NemuNetAdp_SOURCES = \
+ 	NemuNetFlt.c \
+ 	win/drv/NemuNetFltM-win.cpp \
+ 	win/drv/NemuNetFltRt-win.cpp \
+ 	win/drv/NemuNetFlt-win.rc
+ NemuNetAdp_DEFS += NEMUNETFLT_STATIC_CONFIG NEMUNETADP
+ NemuNetAdp_DEFS.win += NEMUNETFLT_NO_PACKET_QUEUE
+ NemuNetAdp_DEFS += NDIS_MINIPORT_DRIVER NDIS_WDM=1 BINARY_COMPATIBLE=0
+ NemuNetAdp_DEFS += NDIS50_MINIPORT=1 NDIS50=1
+ NemuNetAdp_LDFLAGS.win.x86 = -Entry:DriverEntry@8
+ NemuNetAdp_LDFLAGS.win.amd64 = -Entry:DriverEntry
+ NemuNetAdp_LIBS.win = \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/ntoskrnl.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/hal.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/ndis.lib \
+ 	$(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB)
+ NemuNetAdp_LIBS = \
+ 	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+
+
+ INSTALLS.win += NemuNetAdp-inf
+ NemuNetAdp-inf_INST = $(INST_BIN)
+ NemuNetAdp-inf_MODE = a+r,u+w
+ NemuNetAdp-inf_SOURCES = \
+ 	$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.inf
+ NemuNetAdp-inf_CLEAN = $(NemuNetAdp-inf_SOURCES)
+ NemuNetAdp-inf_BLDDIRS = $(PATH_TARGET)/NemuNetAdpCat.dir
+
+$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.inf: $(PATH_SUB_CURRENT)/win/drv/NemuNetAdp.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuNetAdp-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+ ifdef NEMU_SIGNING_MODE
+NemuNetAdp-inf_SOURCES += \
+	$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.sys \
+	$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.cat
+
+$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.sys: $$(NemuNetAdp_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.cat: \
+		$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.sys \
+		$(PATH_TARGET)/NemuNetAdpCat.dir/NemuNetAdp.inf
+	$(call MSG_TOOL,Inf2Cat,NemuNetFlt-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+
+ endif #  ifdef NEMU_SIGNING_MODE
+
+endif #ifeq ($(KBUILD_TARGET), win)
+
+else if1of ($(KBUILD_TARGET), linux solaris freebsd) ## @todo merge this with the mixed case stuff.
+#
+# nemunetflt(.ko/.o/) - The lower case driver.
+# Note! On Solaris the name has to be <= 8 chars long.
+# The DEBUG_HASH* stuff is for CONFIG_DYNAMIC_DEBUG-enabled kernels
+#
+ ifdef NEMU_WITH_NEMUDRV
+  SYSMODS += nemunetflt
+  nemunetflt_TEMPLATE      = NEMUR0DRV
+  nemunetflt_NAME.solaris  = nemuflt
+  nemunetflt_DEFS.linux    = \
+	KBUILD_MODNAME=KBUILD_STR\(nemunetflt\) \
+	KBUILD_BASENAME=KBUILD_STR\(nemunetflt\) \
+	MODULE DEBUG_HASH=2 DEBUG_HASH2=3
+  nemunetflt_DEFS          = IN_RT_R0
+  nemunetflt_DEPS.solaris += $(NEMU_SVN_REV_KMK)
+  nemunetflt_INCS.linux   := \
+  	$(PATH_ROOT)/src/Nemu/Runtime/r0drv/linux
+  nemunetflt_INCS         := \
+  	$(PATH_SUB_CURRENT)
+  nemunetflt_LDFLAGS.solaris += -N drv/nemudrv -N misc/ctf
+  nemunetflt_LIBS = \
+  	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+  ## @todo nemuflt should resolves all the IPRT bits from nemudrv.
+  #nemunetflt_LIBS += \
+  #	$(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB)
+  nemunetflt_SOURCES.linux = linux/NemuNetFlt-linux.c
+  nemunetflt_SOURCES.solaris = solaris/NemuNetFlt-solaris.c
+  nemunetflt_SOURCES.freebsd = freebsd/NemuNetFlt-freebsd.c
+  nemunetflt_SOURCES = NemuNetFlt.c
+  solaris/NemuNetFlt-solaris.c_DEFS = NEMU_SVN_REV=$(NEMU_SVN_REV)
+
+  ifdef NEMU_WITH_NETFLT_CROSSBOW
+   SYSMODS += nemunetbow
+   nemunetbow_TEMPLATE      = NEMUR0DRV
+   nemunetbow_NAME          = nemubow
+   nemunetbow_DEFS          = nemunetflt_DEFS NEMU_WITH_NETFLT_CROSSBOW
+   nemunetbow_INCS         := $(PATH_SUB_CURRENT)
+   nemunetbow_LDFLAGS      += -N drv/nemudrv -N drv/vnic -N misc/mac -N misc/dls
+   nemunetbow_LIBS = \
+   	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+   nemunetbow_SOURCES.solaris = solaris/NemuNetFltBow-solaris.c
+   nemunetbow_SOURCES         = NemuNetFlt.c
+   solaris/NemuNetFltBow-solaris.c_DEFS = NEMU_SVN_REV=$(NEMU_SVN_REV)
+  endif  # NEMU_WITH_NETFLT_CROSSBOW
+ endif # NEMU_WITH_NEMUDRV
+endif # to be removed.
+
+
+ifeq ($(KBUILD_TARGET),linux)
+ #
+ # Install source files for compilation on Linux.
+ # files_nemunetflt defines NEMU_NEMUNETFLT_SOURCES.
+ #
+ include $(PATH_SUB_CURRENT)/linux/files_nemunetflt
+ INSTALLS += NemuNetFlt-src NemuNetFlt-sh
+ NemuNetFlt-src_INST    = bin/src/nemunetflt/
+ NemuNetFlt-src_SOURCES = \
+	$(subst $(DQUOTE),,$(NEMU_NEMUNETFLT_SOURCES)) \
+	$(NemuNetFlt-src_0_OUTDIR)/Makefile
+ NemuNetFlt-src_EXEC_SOURCES = \
+	$(PATH_ROOT)/src/Nemu/HostDrivers/linux/do_Module.symvers
+ NemuNetFlt-src_CLEAN   = \
+	$(NemuNetFlt-src_0_OUTDIR)/Makefile \
+	$(PATH_TARGET)/NemuNetFlt-src-1.dep \
+
+ # Scripts needed for building the kernel module.
+
+ includedep $(PATH_TARGET)/NemuNetFlt-src-1.dep
+ $$(NemuNetFlt-src_0_OUTDIR)/Makefile: \
+		$(PATH_SUB_CURRENT)/linux/Makefile \
+		$$(if $$(eq $$(NemuNetFlt/linux/Makefile_NEMU_HARDENED),$$(NEMU_WITH_HARDENING)),,FORCE) \
+		| $$(dir $$@)
+	$(QUIET)$(RM) -f -- $@
+ ifndef NEMU_WITH_HARDENING
+	$(QUIET)$(SED) -e "s;-DNEMU_WITH_HARDENING;;g" --output $@ $<
+ else
+	$(QUIET)$(CP) -f $< $@
+ endif
+	%$(QUIET2)$(RM) -f -- $(PATH_TARGET)/NemuNetFlt-src-1.dep
+	%$(QUIET2)$(APPEND) '$(PATH_TARGET)/NemuNetFlt-src-1.dep' 'NemuNetFlt/linux/Makefile_NEMU_HARDENED=$(NEMU_WITH_HARDENING)'
+
+endif # linux
+
+# Gross hack for FreeBSD 7, should figure this out properly
+## @todo Properly generate opt_netgraph.h
+ifeq ($(KBUILD_TARGET),freebsd)
+ nemunetflt_DEPS.freebsd += $(PATH_OUT)/opt_netgraph.h
+$(PATH_OUT)/opt_netgraph.h:
+	echo > $(PATH_OUT)/opt_netgraph.h
+
+ #
+ # Install source files for compilation on FreeBSD.
+ # files_nemunetflt defines NEMU_NEMUNETFLT_SOURCES.
+ #
+ include $(PATH_SUB_CURRENT)/freebsd/files_nemunetflt
+ INSTALLS += NemuNetFlt-src
+ NemuNetFlt-src_INST    = bin/src/nemunetflt/
+ NemuNetFlt-src_SOURCES = \
+	$(subst $(DQUOTE),,$(NEMU_NEMUNETFLT_SOURCES)) \
+ 	$(NemuNetFlt-src_0_OUTDIR)/Makefile
+ NemuNetFlt-src_CLEAN   = \
+ 	$(NemuNetFlt-src_0_OUTDIR)/Makefile	\
+
+ $$(NemuNetFlt-src_0_OUTDIR)/Makefile: \
+		$(PATH_SUB_CURRENT)/freebsd/Makefile \
+		$$(if $$(eq $$(NemuNetFlt/freebsd/Makefile_NEMU_HARDENED),$$(NEMU_WITH_HARDENING)),,FORCE) \
+		| $$(dir $$@)
+	$(QUIET)$(RM) -f -- $@
+	$(QUIET)$(CP) -f $< $@
+ ifndef NEMU_WITH_HARDENING
+	$(QUIET)$(SED) -e "s;-DNEMU_WITH_HARDENING;;g" --output $@.tmp $@
+	${QUIET}$(MV) -f $@.tmp $@
+ endif
+ ifndef NEMU_WITH_NETFLT_VIMAGE
+	$(QUIET)$(SED) -e "s;-DVIMAGE;;g" --output $@.tmp $@
+	${QUIET}$(MV) -f $@.tmp $@
+ endif
+endif # freebsd
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

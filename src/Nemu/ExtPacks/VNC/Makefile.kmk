@@ -1,0 +1,164 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the VNC Extension Pack.
+#
+
+#
+# Copyright (C) 2010-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Extend the extension pack templates.
+#
+TEMPLATE_NemuR3ExtPackVNC          = For the ring-3 context modules in the VNC extension pack.
+TEMPLATE_NemuR3ExtPackVNC_EXTENDS  = NemuR3ExtPack
+TEMPLATE_NemuR3ExtPackVNC_INST     = $(INST_EXTPACK)VNC/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/
+
+TEMPLATE_NemuR0ExtPackVNC          = For the ring-0 context modules in the VNC extension pack.
+TEMPLATE_NemuR0ExtPackVNC_EXTENDS  = NemuR0ExtPack
+TEMPLATE_NemuR0ExtPackVNC_INST     = $(INST_EXTPACK)VNC/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/
+
+TEMPLATE_NemuRcExtPackVNC          = For the raw-mode context modules in the VNC extension pack.
+TEMPLATE_NemuRcExtPackVNC_EXTENDS  = NemuRcExtPack
+TEMPLATE_NemuRcExtPackVNC_INST     = $(INST_EXTPACK)VNC/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/
+
+TEMPLATE_NemuInsExtPackVNC         = For the install targets of an extension pack.
+TEMPLATE_NemuInsExtPackVNC_EXTENDS = NemuR0ExtPack
+TEMPLATE_NemuInsExtPackVNC_INST    = $(INST_EXTPACK)VNC/
+
+#
+# Globals.
+#
+NEMU_VNC_NAME         = VNC
+NEMU_VNC_MANGLED_NAME = VNC
+NEMU_PATH_EXTPACK_VNC = $(PATH_STAGE)/$(INST_EXTPACK)VNC
+
+#
+# NemuVNCMain - The module which the VirtualBox Main API talks to.
+#
+DLLS += NemuVNCMain
+NemuVNCMain_TEMPLATE = NemuR3ExtPackVNC
+NemuVNCMain_SOURCES = NemuVNCMain.cpp
+NemuVNCMain_DEFS =
+
+#
+# NemuVNC - The VNC VRDE module.
+#
+DLLS += NemuVNC
+NemuVNC_TEMPLATE = NemuR3ExtPackVNC
+NemuVNC_SOURCES = NemuVNC.cpp
+# NOTE: vncserver is covered by GPL, so the extpack must be GPL, too.
+NemuVNC_LIBS = vncserver
+NemuVNC_DEFS =
+
+#
+# Install the description.
+#
+INSTALLS += NemuVNCIns
+NemuVNCIns_TEMPLATE = NemuInsExtPackVNC
+NemuVNCIns_SOURCES = \
+	$(NemuVNCIns_0_OUTDIR)/ExtPack.xml \
+	$(PATH_ROOT)/doc/License-gpl-2.html=>ExtPack-license.html \
+	$(PATH_ROOT)/doc/License-gpl-2.txt=>ExtPack-license.txt \
+	$(PATH_ROOT)/doc/License-gpl-2.rtf=>ExtPack-license.rtf
+$(call NEMU_EDIT_VERSION_RULE_FN,NemuVNCIns,ExtPack.xml)
+
+
+#
+# Packing.
+#
+ifndef NEMU_WITHOUT_EXTPACK_VNC_PACKING
+ PACKING += $(NEMU_PATH_PACKAGES)/$(NEMU_VNC_MANGLED_NAME)-$(NEMU_VERSION_STRING)r$(NEMU_SVN_REV).nemu-extpack
+endif
+
+ifndef NEMU_WITH_EXTPACK_OS_ARCHS
+ NEMU_WITH_EXTPACK_OS_ARCHS = $(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)
+endif
+
+# Build the file list.  The macro takes 1=darwin.x86, 2=dist/VirtualBox.app/Contents/MacOS, 3=dylib
+NEMU_VNC_FILES_MACRO = \
+	$(PATH_OUT_BASE)/$(1)/$(KBUILD_TYPE)/$(2)/ExtensionPacks/$(NEMU_VNC_MANGLED_NAME)/$(1)/NemuVNCMain.$(3)=>$(1)/NemuVNCMain.$(3) \
+	$(PATH_OUT_BASE)/$(1)/$(KBUILD_TYPE)/$(2)/ExtensionPacks/$(NEMU_VNC_MANGLED_NAME)/$(1)/NemuVNC.$(3)=>$(1)/NemuVNC.$(3)
+
+NEMU_VNC_FILES := \
+	$(NEMU_PATH_EXTPACK_VNC)/ExtPack.xml=>ExtPack.xml \
+	$(NEMU_PATH_EXTPACK_VNC)/ExtPack-license.html=>ExtPack-license.html \
+	$(NEMU_PATH_EXTPACK_VNC)/ExtPack-license.rtf=>ExtPack-license.rtf \
+	$(NEMU_PATH_EXTPACK_VNC)/ExtPack-license.txt=>ExtPack-license.txt
+
+
+if1of (darwin.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,darwin.amd64,dist/VirtualBox.app/Contents/MacOS,dylib)
+endif
+if1of (darwin.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,darwin.x86,dist/VirtualBox.app/Contents/MacOS,dylib)
+endif
+if1of (freebsd.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,freebsd.amd64,bin,so)
+endif
+if1of (freebsd.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,freebsd.x86,bin,so)
+endif
+if1of (linux.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,linux.amd64,bin,so)
+endif
+if1of (linux.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,linux.x86,bin,so)
+endif
+if1of (os2.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,os2.x86,bin,so)
+endif
+if1of (solaris.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,solaris.amd64,bin,so)
+endif
+if1of (solaris.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,solaris.x86,bin,so)
+endif
+if1of (win.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,win.amd64,bin,dll)
+endif
+if1of (win.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_VNC_FILES += $(call NEMU_VNC_FILES_MACRO,win.x86,bin,dll)
+endif
+
+# Pack it all up using a temporary staging directory.
+$(NEMU_PATH_PACKAGES)/$(NEMU_VNC_MANGLED_NAME)-$(NEMU_VERSION_STRING)r$(NEMU_SVN_REV).nemu-extpack: \
+		$$(foreach file, $$(NEMU_VNC_FILES), $$(firstword $$(subst =>,$$(SP),$$(file)))) \
+		| $(NEMU_PATH_PACKAGES)/
+	$(RM) -f $(wildcard $(NEMU_PATH_PACKAGES)/$(NEMU_VNC_MANGLED_NAME)-*.nemu-extpack) \
+		$(NemuVNCIns_0_OUTDIR)/ExtPack.manifest \
+		$(NemuVNCIns_0_OUTDIR)/ExtPack.signature
+# Stage all the files
+	$(RM) -Rf $(NemuVNCIns_0_OUTDIR)/Stage/
+	$(foreach file, $(NEMU_VNC_FILES),\
+		$(NLTAB)$(MKDIR) -p $(dir $(lastword $(subst =>,$(SP)$(NemuVNCIns_0_OUTDIR)/Stage/,$(file)))) \
+		$(NLTAB)$(CP) $(subst =>,$(SP)$(NemuVNCIns_0_OUTDIR)/Stage/,$(file)) )
+# Create the manifest
+	$(NEMU_RTMANIFEST) \
+		--manifest $(NemuVNCIns_0_OUTDIR)/Stage/ExtPack.manifest \
+		--chdir $(NemuVNCIns_0_OUTDIR)/Stage/ \
+		$(foreach file, $(NEMU_VNC_FILES), $(lastword $(subst =>,$(SP),$(file))))
+	$(APPEND) $(NemuVNCIns_0_OUTDIR)/Stage/ExtPack.signature "todo"
+	$(CHMOD) a+r \
+		$(NemuVNCIns_0_OUTDIR)/Stage/ExtPack.manifest \
+		$(NemuVNCIns_0_OUTDIR)/Stage/ExtPack.signature
+# Tar it up.
+	tar -cvf - -C $(NemuVNCIns_0_OUTDIR)/Stage/ . | gzip -9c > $@
+# Clean up
+	$(RM) -Rf $(NemuVNCIns_0_OUTDIR)/Stage/
+
+BLDDIRS += $(NEMU_PATH_PACKAGES)/
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

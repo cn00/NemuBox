@@ -1,0 +1,257 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Cross Platform Guest Additions Driver.
+#
+
+#
+# Copyright (C) 2007-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+if1of ($(KBUILD_TARGET), darwin freebsd haiku $(if $(defined NEMU_WITH_ADDITION_DRIVERS),linux,) os2 solaris win)
+ #
+ # NemuGuest - The Guest Additions Driver.
+ #
+ SYSMODS += NemuGuest
+ NemuGuest_TEMPLATE      = NEMUGUESTR0
+ NemuGuest_NAME.freebsd  = nemuguest
+ NemuGuest_NAME.haiku    = nemuguest
+ NemuGuest_NAME.linux    = nemuguest
+ NemuGuest_NAME.solaris  = nemuguest
+ NemuGuest_INST.darwin   = $(INST_ADDITIONS)NemuGuest.kext/Contents/MacOS/
+ ifdef NEMU_SIGN_ADDITIONS # See Additions/WINNT/Makefile.kmk?
+  NemuGuest_INSTTYPE.win = none
+  NemuGuest_DEBUG_INSTTYPE.win = both
+ endif
+ NemuGuest_DEFS.haiku    = NEMU_SVN_REV=$(NEMU_SVN_REV) _KERNEL_MODE=1
+ NemuGuest_DEFS.linux    = KBUILD_MODNAME=KBUILD_STR\(nemuguest\) KBUILD_BASENAME=KBUILD_STR\(nemuguest\) DEBUG_HASH=2 DEBUG_HASH2=3 EXPORT_SYMTAB
+ NemuGuest_DEFS.solaris  = NEMU_SVN_REV=$(NEMU_SVN_REV)
+ NemuGuest_DEFS.win      = NEMU_GUESTDRV_WITH_RELEASE_LOGGER
+ NemuGuest_DEFS.darwin   = NEMU_GUESTDRV_WITH_RELEASE_LOGGER
+ ifeq ($(KBUILD_TYPE),release)
+  # Allow stopping/removing the driver without a reboot
+  # in debug mode; this is very useful for testing the shutdown stuff!
+  NemuGuest_DEFS.win    += NEMU_REBOOT_ON_UNINSTALL
+ endif
+ ifdef NEMU_WITH_GUEST_BUGCHECK_DETECTION
+  NemuGuest_DEFS.win    += NEMU_WITH_GUEST_BUGCHECK_DETECTION
+ endif
+ #NemuGuest_DEFS.win     += LOG_ENABLED LOG_TO_BACKDOOR
+ NemuGuest_DEFS.win += \
+	$(if $(NEMU_WITH_DPC_LATENCY_CHECKER),NEMU_WITH_DPC_LATENCY_CHECKER,)
+ NemuGuest_DEPS.solaris += $(NEMU_SVN_REV_KMK)
+ NemuGuest_DEPS.linux   += $(NEMU_SVN_REV_HEADER)
+ NemuGuest_DEPS.haiku   += $(NEMU_SVN_REV_HEADER)
+ NemuGuest_DEPS.freebsd += $(NEMU_SVN_REV_HEADER)
+ NemuGuest_DEPS.darwin  += $(NEMU_SVN_REV_HEADER)
+ NemuGuest_DEFS          = VBGL_NEMUGUEST NEMU_WITH_HGCM
+ NemuGuest_INCS          = .
+ NemuGuest_INCS.freebsd  = $(NemuGuest_0_OUTDIR) $(PATH_STAGE)/gen-sys-hdrs
+ NemuGuest_INCS.linux    = ../../../Runtime/r0drv/linux
+ ifeq ($(KBUILD_HOST),solaris)
+  NemuGuest_LDFLAGS.solaris         += -N misc/ctf
+ else
+  NemuGuest_SOURCES.solaris          = solaris/deps.asm
+  NemuGuest_solaris/deps.asm_ASFLAGS = -f bin -g null
+ endif
+ ifneq ($(KBUILD_TARGET),os2)
+  ifeq ($(KBUILD_TARGET),win)
+   NemuGuest_LDFLAGS.x86 = -Entry:DriverEntry@8
+   NemuGuest_LDFLAGS.amd64 = -Entry:DriverEntry
+   NemuGuest_LIBS        = \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST)_LIB)/ntoskrnl.lib \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST)_LIB)/hal.lib
+   ifdef NEMU_WITH_GUEST_BUGCHECK_DETECTION
+    NemuGuest_LIBS      += \
+      	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/aux_klib.lib \
+      	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/ksecdd.lib \
+      	$(PATH_SDK_$(NEMU_WINDDK_GST_WLH)_LIB)/BufferOverflowK.lib
+    NemuGuest.cpp_SDKS   = $(NEMU_WINDDK_GST_WLH)
+   endif
+  endif # win
+  ifn1of ($(KBUILD_TARGET), linux freebsd solaris haiku)
+   NemuGuest_SOURCES    = NemuGuest-$(KBUILD_TARGET).cpp
+  else
+   NemuGuest_SOURCES    = NemuGuest-$(KBUILD_TARGET).c
+  endif
+  NemuGuest_SOURCES     += \
+  	NemuGuest.cpp
+  ifeq ($(KBUILD_TARGET), win)
+   NemuGuest_SOURCES += \
+  	NemuGuest-$(KBUILD_TARGET)-pnp.cpp \
+  	win/NemuGuest.rc
+  endif
+  NemuGuest_LIBS        += \
+  	$(NEMU_LIB_VBGL_R0BASE) \
+  	$(NEMU_LIB_IPRT_GUEST_R0)
+  NemuGuest_ORDERDEPS.freebsd = \
+  	$(PATH_STAGE)/gen-sys-hdrs/pci_if.h \
+  	$(PATH_STAGE)/gen-sys-hdrs/bus_if.h \
+  	$(PATH_STAGE)/gen-sys-hdrs/device_if.h
+  ifeq ($(KBUILD_TARGET),haiku)
+   # Haiku drivers cannot export symbols for other drivers, but modules can.
+   # Therefore nemuguest is a module containing the ring-0 guest lib, and nemudev/nemusf
+   # use this module to access the guest lib
+   SYSMODS += NemuDev
+   NemuDev_TEMPLATE      = NEMUGUESTR0
+   NemuDev_NAME          = nemudev
+   NemuDev_DEFS          = NEMU_SVN_REV=$(NEMU_SVN_REV) _KERNEL_MODE=1 VBGL_NEMUGUEST NEMU_WITH_HGCM IN_RING0
+   NemuDev_SOURCES       = NemuDev-haiku.c NemuGuest-haiku-stubs.c
+  endif
+ else # OS/2:
+  # The library order is crucial, so a bit of trickery is necessary.
+  # A library is used to make sure that NemuGuestA-os2.asm is first in the link. (temporary hack?)
+  NemuGuest_SOURCES       = \
+  	NemuGuestA-os2.asm \
+  	NemuGuest-os2.def
+  #NemuGuest_LDFLAGS       = -s -t -v
+  NemuGuest_LIBS          = \
+  	$(TARGET_NemuGuestLibOs2Hack) \
+  	$(NEMU_LIB_VBGL_R0BASE) \
+  	$(NEMU_LIB_IPRT_GUEST_R0) \
+  	$(NEMU_GCC_LIBGCC) \
+  	end
+  ## When debugging init with kDrvTest:
+  #NemuGuest_NAME          = NemuGst
+
+  # see
+  LIBRARIES += NemuGuestLibOs2Hack
+  NemuGuestLibOs2Hack_TEMPLATE = NEMUGUESTR0LIB
+  NemuGuestLibOs2Hack_INSTTYPE = none
+  NemuGuestLibOs2Hack_DEFS = $(NemuGuest_DEFS)
+  NemuGuestLibOs2Hack_INCS = \
+  	. \
+  	$(PATH_ROOT)/src/Nemu/Runtime/include # for the os2ddk
+  NemuGuestLibOs2Hack_SOURCES = \
+  	NemuGuest-os2.cpp \
+  	NemuGuest.cpp
+ endif # OS/2
+
+ NemuGuest.cpp_DEFS     = NEMU_SVN_REV=$(NEMU_SVN_REV)
+
+ ifeq ($(KBUILD_TARGET),win)
+  #
+  # Windows NT4 driver.
+  #
+  SYSMODS.x86 += NemuGuestNT
+  NemuGuestNT_EXTENDS = NemuGuest
+  NemuGuestNT_INSTTYPE.win = both
+  NemuGuestNT_SDKS    = ReorderCompilerIncs $(NEMU_WINDDK_GST_NT4)
+  NemuGuestNT_DEFS    = $(NemuGuest_DEFS) TARGET_NT4
+  NemuGuestNT_SOURCES = \
+  	NemuGuest.cpp \
+  	NemuGuest-$(KBUILD_TARGET).cpp \
+  	NemuGuest-$(KBUILD_TARGET)-legacy.cpp \
+  	win/NemuGuest.rc
+  NemuGuestNT_LIBS    = \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/exsup.lib \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/ntoskrnl.lib \
+  	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/hal.lib \
+  	$(NEMU_LIB_VBGL_R0BASE) \
+  	$(NEMU_LIB_IPRT_GUEST_R0_NT4)
+ endif # win
+endif # enabled
+
+
+ifeq ($(KBUILD_TARGET), darwin)
+ # Files necessary to make a darwin kernel extension bundle.
+ INSTALLS += NemuGuest.kext
+ NemuGuest.kext_INST     = $(INST_ADDITIONS)/NemuGuest.kext/Contents/
+ NemuGuest.kext_SOURCES  = $(NemuGuest.kext_0_OUTDIR)/Info.plist
+ NemuGuest.kext_CLEAN    = $(NemuGuest.kext_0_OUTDIR)/Info.plist
+
+$$(NemuGuest.kext_0_OUTDIR)/Info.plist: \
+		$(PATH_SUB_CURRENT)/darwin/Info.plist \
+		$(NEMU_VERSION_MK) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuGuest,$@,$<)
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(SED) \
+		-e 's/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g' \
+		-e 's/@NEMU_VERSION_MAJOR@/$(NEMU_VERSION_MAJOR)/g' \
+		-e 's/@NEMU_VERSION_MINOR@/$(NEMU_VERSION_MINOR)/g' \
+		-e 's/@NEMU_VERSION_BUILD@/$(NEMU_VERSION_BUILD)/g' \
+		-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+		-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+		-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+		--output $@ \
+		$<
+endif # darwin
+
+
+ifeq ($(KBUILD_TARGET),linux)
+ #
+ # Install the source files and script(s).
+ #
+ include $(PATH_SUB_CURRENT)/linux/files_nemuguest
+ # sources and stuff.
+ INSTALLS += nemuguest-src
+ nemuguest-src_INST     = $(INST_ADDITIONS)src/nemuguest/
+ nemuguest-src_MODE     = a+r,u+w
+ nemuguest-src_SOURCES  = $(subst ",,$(FILES_NEMUGUEST_NOBIN))
+
+ INSTALLS += nemuguest-conf
+ nemuguest-conf_INST    = $(INST_ADDITIONS)src/
+ nemuguest-conf_MODE    = a+r,u+w
+ nemuguest-conf_SOURCES = $(nemuguest-sh_0_OUTDIR)/dkms.conf
+ nemuguest-conf_CLEAN   = $(nemuguest-sh_0_OUTDIR)/dkms.conf
+
+ INSTALLS += nemuguest-scripts
+ nemuguest-scripts_INST    = $(INST_ADDITIONS)src/
+ nemuguest-scripts_MODE    = a+rx,u+w
+ nemuguest-scripts_SOURCES = ../../../HostDrivers/linux/do_dkms \
+                             ../../../HostDrivers/linux/build_in_tmp
+
+ $$(nemuguest-sh_0_OUTDIR)/dkms.conf: \
+ 		$(PATH_SUB_CURRENT)/linux/dkms.conf \
+ 		$(NEMU_VERSION_STAMP) \
+ 		| $$(dir $$@)
+	$(call MSG_TOOL,Creating,,$@)
+	$(QUIET)$(SED) \
+		-e "s;_VERSION_;${NEMU_VERSION_STRING};g" \
+		-e "s;_BUILDTYPE_;$(KBUILD_TYPE);g" \
+		--output $@ $<
+
+ # scripts.
+ INSTALLS += nemuguest-sh
+ nemuguest-sh_INST      = $(INST_ADDITIONS)src/nemuguest/
+ nemuguest-sh_MODE      = a+rx,u+w
+ nemuguest-sh_SOURCES   = $(subst ",,$(FILES_NEMUGUEST_BIN))
+ nemuguest-sh_SOURCES  += $(PATH_ROOT)/src/Nemu/HostDrivers/linux/do_Module.symvers
+
+endif # Linux
+
+ifeq ($(KBUILD_TARGET),freebsd)
+ #
+ # Install the source files and script(s).
+ #
+ include $(PATH_SUB_CURRENT)/freebsd/files_nemuguest
+ # sources and stuff.
+ INSTALLS += nemuguest-src
+ nemuguest-src_INST     = $(INST_ADDITIONS)src/nemuguest/
+ nemuguest-src_MODE     = a+r,u+w
+ nemuguest-src_SOURCES  = $(subst ",,$(FILES_NEMUGUEST_NOBIN))
+
+endif # FreeBSD
+
+ifeq ($(KBUILD_TARGET),win)
+#
+# NemuGuestInst - The installer.
+#
+#PROGRAMS += NemuGuestInst
+NemuGuestInst_TEMPLATE= NewNemuGuestR3Exe
+NemuGuestInst_SOURCES = win/NemuGuestInst.cpp
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

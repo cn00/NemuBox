@@ -1,0 +1,53 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for NemuInstallHelper.dll.
+#
+
+#
+# Copyright (C) 2008-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+DLLS += NemuInstallHelper
+NemuInstallHelper_TEMPLATE = NEMUR3STATIC
+NemuInstallHelper_DEFS     = _WIN32_WINNT=0x0501 _UNICODE UNICODE
+NemuInstallHelper_DEFS    += NEMU_SVN_REV=$(NEMU_SVN_REV)
+NemuInstallHelper_DEPS     = $(NEMU_SVN_REV_KMK)
+ifdef NEMU_WITH_NETFLT
+ NemuInstallHelper_DEFS   += NEMU_WITH_NETFLT=1
+endif
+NemuInstallHelper_SOURCES  = \
+	NemuInstallHelper.cpp \
+	NemuInstallHelper.def \
+	NemuInstallHelper.rc \
+	NemuCommon.cpp
+ifndef NEMU_OSE
+ NemuInstallHelper_SOURCES += internal/NemuSerial.cpp
+endif
+NemuInstallHelper_SDKS     = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK)
+NemuInstallHelper_LIBS     = $(PATH_SDK_$(NEMU_WINPSDK)_LIB)/Msi.lib
+ifdef NEMU_WITH_NETFLT
+ NemuInstallHelper_LIBS   += \
+	$(PATH_STAGE_LIB)/WinNetConfig.lib \
+	$(PATH_STAGE_LIB)/NemuDrvCfg.lib \
+	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib \
+ 	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+ 	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+endif
+
+if "$(KBUILD_TARGET)" == "win" && defined(NEMU_WITH_TESTCASES) && !defined(NEMU_OSE)
+ include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

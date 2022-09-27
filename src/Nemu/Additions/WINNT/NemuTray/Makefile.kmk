@@ -1,0 +1,89 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for NemuTray.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+PROGRAMS += NemuTray
+NemuTray_TEMPLATE = NewNemuGuestR3Exe
+ifdef NEMU_SIGN_ADDITIONS # (See the parent makefile.)
+ NemuTray_INSTTYPE = none
+ NemuTray_DEBUG_INSTTYPE = both
+endif
+NemuTray_SDKS     = ReorderCompilerIncs $(NEMU_WINDDK_GST)
+NemuTray_DEFS     = \
+	NEMU_WITH_HGCM \
+	NEMU_BUILD_TARGET=\"$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)\"
+NemuTray_INCS     = ../include
+NemuTray_SOURCES  = \
+	NemuTray.cpp \
+	NemuDispIf.cpp \
+	NemuSeamless.cpp \
+	NemuClipboard.cpp \
+	NemuDisplay.cpp \
+	NemuVRDP.cpp \
+	NemuIPC.cpp \
+	NemuHelpers.cpp \
+	NemuTray.rc
+ifdef NEMU_WITH_DRAG_AND_DROP
+ NemuTray_DEFS     += \
+	NEMU_WITH_DRAG_AND_DROP \
+	$(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,)
+ NemuTray_SOURCES  += \
+	NemuDnD.cpp \
+	NemuDnDDataObject.cpp \
+	NemuDnDEnumFormat.cpp \
+	NemuDnDDropSource.cpp \
+	NemuDnDDropTarget.cpp
+ NemuTray_LIBS     += \
+	$(PATH_STAGE_LIB)/additions/NemuDnDGuestR3Lib$(NEMU_SUFF_LIB)
+endif
+ifdef NEMU_WITH_GUEST_PROPS
+ NemuTray_DEFS     += _WIN32_IE=0x500 NEMU_WITH_GUEST_PROPS
+ NemuTray_SOURCES  += \
+	NemuHostVersion.cpp \
+	NemuLA.cpp
+endif
+ifdef NEMU_WITH_SHARED_FOLDERS
+ NemuTray_DEFS     += NEMU_WITH_SHARED_FOLDERS
+ NemuTray_SOURCES  += \
+	NemuSharedFolders.cpp
+ NemuTray_LIBS.win += \
+	mpr.lib
+endif
+ifdef NEMU_WITH_WDDM
+ NemuTray_DEFS   += NEMU_WITH_WDDM
+ # NemuTray_DEFS   += LOG_ENABLED
+ NemuTray_SOURCES += ../Graphics/Video/disp/wddm/NemuDispKmt.cpp
+endif
+
+# NemuTray.cpp uses NEMU_SVN_REV.
+NemuTray.cpp_DEFS += NEMU_SVN_REV=$(NEMU_SVN_REV)
+NemuTray.cpp_DEPS = $(NEMU_SVN_REV_KMK)
+
+# The icon location is configurable.
+NemuTray.rc_INCS = $(NemuTray_0_OUTDIR)
+NemuTray.rc_DEPS = $(NemuTray_0_OUTDIR)/NemuTray-icon.rc
+NemuTray.rc_CLEAN = $(NemuTray_0_OUTDIR)/NemuTray-icon.rc
+
+# Icon include file.
+$$(NemuTray_0_OUTDIR)/NemuTray-icon.rc: $(NEMU_WINDOWS_ADDITIONS_ICON_FILE) $$(NemuTray_DEFPATH)/Makefile.kmk | $$(dir $$@)
+	$(RM) -f $@
+	$(APPEND) $@ 'IDI_VIRTUALBOX ICON DISCARDABLE "$(subst /,\\,$(NEMU_WINDOWS_ADDITIONS_ICON_FILE))"'
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

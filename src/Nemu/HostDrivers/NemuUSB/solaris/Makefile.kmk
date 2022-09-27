@@ -1,0 +1,48 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Solaris NemuUSB kernel extension.
+#
+
+#
+# Copyright (C) 2008-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# nemuusbmon - The Solaris USB Monitor Kernel module.
+#
+SYSMODS.solaris         += nemuusbmon
+nemuusbmon_TEMPLATE      = NEMUR0DRV
+nemuusbmon_DEFS          = IN_RT_R0 NEMU_SVN_REV=$(NEMU_SVN_REV)
+nemuusbmon_DEPS         += $(NEMU_SVN_REV_KMK)
+nemuusbmon_INCS         := . .. include
+nemuusbmon_LDFLAGS      += -N drv/nemudrv -N misc/usba
+nemuusbmon_SOURCES       = \
+	NemuUSBMon-solaris.c \
+	../USBFilter.cpp \
+	../NemuUSBFilterMgr.cpp
+
+#
+# nemuusb - The Solaris Generic USB Client Kernel module.
+#
+SYSMODS.solaris         += nemuusb
+nemuusb_TEMPLATE         = NEMUR0DRV
+nemuusb_DEFS             = IN_RT_R0 IN_SUP_R0 NEMU_SVN_REV=$(NEMU_SVN_REV)
+nemuusb_DEPS            += $(NEMU_SVN_REV_KMK)
+nemuusb_INCS            := . include/
+nemuusb_LDFLAGS         += -N drv/nemudrv -N drv/nemuusbmon -N misc/usba
+nemuusb_SOURCES          = \
+	NemuUSB-solaris.c
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

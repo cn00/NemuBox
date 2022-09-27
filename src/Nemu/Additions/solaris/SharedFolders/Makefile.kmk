@@ -1,0 +1,96 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Solaris Shared folder kernel module.
+#
+
+#
+# Copyright (C) 2008-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#ifneq ($(KBUILD_HOST),solaris)
+#$(error "The Solaris guest additions can only be built on Solaris!")
+#endif
+
+#
+# nemufs - The Shared Folder Driver
+#
+SYSMODS.solaris      += nemufs
+nemufs_TEMPLATE      = NEMUGUESTR0
+nemufs_DEFS          = NEMU_WITH_HGCM NEMU_SVN_REV=$(NEMU_SVN_REV)
+nemufs_DEPS         += $(NEMU_SVN_REV_KMK)
+nemufs_INCS         := \
+	.
+nemufs_SOURCES       = \
+	nemufs_vfs.c \
+	nemufs_vnode.c \
+	nemufs_prov.c
+nemufs_LIBS          = \
+	$(NEMU_LIB_VBGL_R0)
+ifeq ($(KBUILD_HOST),solaris)
+ nemufs_LDFLAGS.solaris   += -N drv/nemuguest -N misc/ctf
+else
+ nemufs_SOURCES           += deps.asm
+ nemufs_deps.asm_ASFLAGS   = -f bin -g null
+endif
+if $(NEMU_SOLARIS_11_VERSION) > 175 \
+ || (   $(NEMU_SOLARIS_11_VERSION) == 175 \
+     && (   $(NEMU_SOLARIS_11_UPDATE_VERSION) > 1 \
+         || ($(NEMU_SOLARIS_11_UPDATE_VERSION) == 1 && $(NEMU_SOLARIS_11_BUILD_VERSION) >= 10) ) )
+nemufs_DEFS         += NEMU_VFS_EXTENDED_POLICY
+endif
+
+
+ifndef NEMU_OSE
+#
+# nemufs_s10 - The Shared Folder Driver for Solaris 10
+#
+SYSMODS.solaris      += nemufs_s10
+nemufs_s10_TEMPLATE      = NEMUGUESTR0
+nemufs_s10_DEFS          = NEMU_WITH_HGCM NEMU_VFS_SOLARIS_10U6 NEMU_SVN_REV=$(NEMU_SVN_REV)
+nemufs_s10_DEPS         += $(NEMU_SVN_REV_KMK)
+nemufs_s10_INCS         := solaris10/
+nemufs_s10_SOURCES       = \
+	nemufs_vfs.c \
+	nemufs_vnode.c \
+	nemufs_prov.c
+nemufs_s10_LIBS          = \
+	$(NEMU_LIB_VBGL_R0) \
+	$(NEMU_LIB_IPRT_GUEST_R0)
+ifeq ($(KBUILD_HOST),solaris)
+ nemufs_s10_LDFLAGS         += -N drv/nemuguest -N misc/ctf
+else
+ nemufs_s10_SOURCES         += deps.asm
+ nemufs_s10_deps.asm_ASFLAGS = -f bin -g null
+endif
+endif # NEMU_OSE
+
+
+#
+# mount - Userland mount wrapper for nemufs
+#
+PROGRAMS                += nemufsmount
+nemufsmount_TEMPLATE    = NewNemuGuestR3Exe
+nemufsmount_SOURCES     = nemufs_mount.c
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

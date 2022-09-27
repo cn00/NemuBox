@@ -1,0 +1,162 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Skeleton Extension Pack Sample.
+#
+
+#
+# Copyright (C) 2010-2015 Oracle Corporation
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation
+# files (the "Software"), to deal in the Software without
+# restriction, including without limitation the rights to use,
+# copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following
+# conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Extend the extension pack templates.
+#
+TEMPLATE_NemuR3ExtPackSkeleton          = For the ring-3 context modules in the Skeleton extension pack.
+TEMPLATE_NemuR3ExtPackSkeleton_EXTENDS  = NemuR3ExtPack
+TEMPLATE_NemuR3ExtPackSkeleton_INST     = $(INST_EXTPACK)Skeleton/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/
+
+TEMPLATE_NemuR0ExtPackSkeleton          = For the ring-0 context modules in the Skeleton extension pack.
+TEMPLATE_NemuR0ExtPackSkeleton_EXTENDS  = NemuR0ExtPack
+TEMPLATE_NemuR0ExtPackSkeleton_INST     = $(INST_EXTPACK)Skeleton/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/
+
+TEMPLATE_NemuRcExtPackSkeleton          = For the raw-mode context modules in the Skeleton extension pack.
+TEMPLATE_NemuRcExtPackSkeleton_EXTENDS  = NemuRcExtPack
+TEMPLATE_NemuRcExtPackSkeleton_INST     = $(INST_EXTPACK)Skeleton/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/
+
+TEMPLATE_NemuInsExtPackSkeleton         = For the install targets of an extension pack.
+TEMPLATE_NemuInsExtPackSkeleton_EXTENDS = NemuR0ExtPack
+TEMPLATE_NemuInsExtPackSkeleton_INST    = $(INST_EXTPACK)Skeleton/
+
+#
+# Globals.
+#
+NEMU_SKELETON_NAME         = Skeleton
+NEMU_SKELETON_MANGLED_NAME = Skeleton
+NEMU_PATH_EXTPACK_SKELETON = $(PATH_STAGE)/$(INST_EXTPACK)Skeleton
+
+
+#
+# NemuSkeletonMain - The module which the VirtualBox Main API talks to.
+#
+DLLS += NemuSkeletonMain
+NemuSkeletonMain_TEMPLATE = NemuR3ExtPackSkeleton
+NemuSkeletonMain_SOURCES = NemuSkeletonMain.cpp
+NemuSkeletonMain_DEFS =
+
+#
+# Install the description.
+#
+INSTALLS += NemuSkeletonIns
+NemuSkeletonIns_TEMPLATE = NemuInsExtPackSkeleton
+NemuSkeletonIns_SOURCES = \
+	$(NemuSkeletonIns_0_OUTDIR)/ExtPack.xml
+$(call NEMU_EDIT_VERSION_RULE_FN,NemuSkeletonIns,ExtPack.xml)
+
+
+#
+# Packing.
+#
+ifndef NEMU_WITHOUT_EXTPACK_SKELETON_PACKING
+ PACKING += $(NEMU_PATH_PACKAGES)/$(NEMU_SKELETON_MANGLED_NAME)-$(NEMU_VERSION_STRING)r$(NEMU_SVN_REV).nemu-extpack
+endif
+
+ifndef NEMU_WITH_EXTPACK_OS_ARCHS
+ ifeq ($(USER),bird) # for now
+  NEMU_WITH_EXTPACK_OS_ARCHS = $(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)
+ endif
+endif
+
+# Build the file list.  The macro takes 1=darwin.x86, 2=dist/VirtualBox.app/Contents/MacOS, 3=dylib
+NEMU_SKELETON_FILES_MACRO = \
+	$(PATH_OUT_BASE)/$(1)/$(KBUILD_TYPE)/$(2)/ExtensionPacks/$(NEMU_SKELETON_MANGLED_NAME)/$(1)/NemuSkeletonMain.$(3)=>$(1)/NemuSkeletonMain.$(3)
+
+NEMU_SKELETON_FILES := \
+	$(NEMU_PATH_EXTPACK_SKELETON)/ExtPack.xml=>ExtPack.xml
+
+if1of (darwin.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,darwin.amd64,dist/VirtualBox.app/Contents/MacOS,dylib)
+endif
+if1of (darwin.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,darwin.x86,dist/VirtualBox.app/Contents/MacOS,dylib)
+endif
+if1of (freebsd.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,freebsd.amd64,bin,so)
+endif
+if1of (freebsd.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,freebsd.x86,bin,so)
+endif
+if1of (linux.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,linux.amd64,bin,so)
+endif
+if1of (linux.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,linux.x86,bin,so)
+endif
+if1of (os2.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,os2.x86,bin,so)
+endif
+if1of (solaris.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,solaris.amd64,bin,so)
+endif
+if1of (solaris.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,solaris.x86,bin,so)
+endif
+if1of (win.amd64, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,win.amd64,bin,dll)
+endif
+if1of (win.x86, $(NEMU_WITH_EXTPACK_OS_ARCHS))
+ NEMU_SKELETON_FILES += $(call NEMU_SKELETON_FILES_MACRO,win.x86,bin,dll)
+endif
+
+# Pack it all up using a temporary staging directory.
+$(NEMU_PATH_PACKAGES)/$(NEMU_SKELETON_MANGLED_NAME)-$(NEMU_VERSION_STRING)r$(NEMU_SVN_REV).nemu-extpack: \
+		$$(foreach file, $$(NEMU_SKELETON_FILES), $$(firstword $$(subst =>,$$(SP),$$(file)))) \
+		| $(NEMU_PATH_PACKAGES)/
+	$(RM) -f $(wildcard $(NEMU_PATH_PACKAGES)/$(NEMU_SKELETON_MANGLED_NAME)-*.nemu-extpack) \
+		$(NemuSkeletonIns_0_OUTDIR)/ExtPack.manifest \
+		$(NemuSkeletonIns_0_OUTDIR)/ExtPack.signature
+# Stage all the files
+	$(RM) -Rf $(NemuSkeletonIns_0_OUTDIR)/Stage/
+	$(foreach file, $(NEMU_SKELETON_FILES),\
+		$(NLTAB)$(MKDIR) -p $(dir $(lastword $(subst =>,$(SP)$(NemuSkeletonIns_0_OUTDIR)/Stage/,$(file)))) \
+		$(NLTAB)$(CP) $(subst =>,$(SP)$(NemuSkeletonIns_0_OUTDIR)/Stage/,$(file)) )
+# Create the manifest
+	$(NEMU_RTMANIFEST) \
+		--manifest $(NemuSkeletonIns_0_OUTDIR)/Stage/ExtPack.manifest \
+		--chdir $(NemuSkeletonIns_0_OUTDIR)/Stage/ \
+		$(foreach file, $(NEMU_SKELETON_FILES), $(lastword $(subst =>,$(SP),$(file))))
+	$(APPEND) $(NemuSkeletonIns_0_OUTDIR)/Stage/ExtPack.signature "todo"
+	$(CHMOD) a+r \
+		$(NemuSkeletonIns_0_OUTDIR)/Stage/ExtPack.manifest \
+		$(NemuSkeletonIns_0_OUTDIR)/Stage/ExtPack.signature
+# Tar it up.
+	tar -cvf - -C $(NemuSkeletonIns_0_OUTDIR)/Stage/ . | gzip -9c > $@
+# Clean up
+	$(RM) -Rf $(NemuSkeletonIns_0_OUTDIR)/Stage/
+
+BLDDIRS += $(NEMU_PATH_PACKAGES)/
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

@@ -1,0 +1,418 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Solaris guest additions base directory.
+#
+
+#
+# Copyright (C) 2008-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#ifneq ($(KBUILD_HOST),solaris)
+#$(error "The Solaris guest additions installer can only be built on Solaris!")
+#endif
+
+ifeq ($(KBUILD_TARGET),solaris)
+ include $(PATH_SUB_CURRENT)/SharedFolders/Makefile.kmk
+ include $(PATH_SUB_CURRENT)/Mouse/Makefile.kmk
+ include $(PATH_SUB_CURRENT)/DRM/Makefile.kmk
+endif
+
+ifdef NEMU_WITH_COMBINED_SOLARIS_PACKAGE ## @todo remove this when tinderclient.pl is updated.
+ NEMU_WITH_COMBINED_GUEST_PACKAGE := 1
+endif
+
+PKGFILENAME                             := NemuSolarisAdditions.pkg
+PKGINFO_ARCH                             = $(shell uname -p)
+PKGINFO_REVSTAMP                         = $(date %Y.%m.%d.%H.%M)
+NEMU_PATH_SOLARIS_ADDITION_INSTALLER    := $(PATH_SUB_CURRENT)/Installer
+NEMU_PATH_X11_ADDITION_INSTALLER        := $(PATH_ROOT)/src/Nemu/Additions/x11/Installer
+
+SOLARIS_ADDDIR_NAME_64                  := amd64
+SOLARIS_ADDDIR_NAME_32                  := i386
+
+SOLARIS_ADDINST_OUT_DIR                 := $(PATH_TARGET)/AdditionsInstaller
+SOLARIS_NEMUADDINST_SUBDIR              := /opt/VirtualBoxAdditions
+SOLARIS_NEMUADDINST_DIR                 := $(SOLARIS_ADDINST_OUT_DIR)$(SOLARIS_NEMUADDINST_SUBDIR)
+SOLARIS_NEMUADDINST_DIR_32              := $(SOLARIS_NEMUADDINST_DIR)/$(SOLARIS_ADDDIR_NAME_32)
+SOLARIS_NEMUADDINST_DIR_64              := $(SOLARIS_NEMUADDINST_DIR)/$(SOLARIS_ADDDIR_NAME_64)
+
+SOLARIS_ADD_OUT_BIN_64                  := $(PATH_OUT_BASE)/solaris.amd64/$(KBUILD_TYPE)/bin/additions
+SOLARIS_ADD_OUT_BIN_32                  := $(PATH_OUT_BASE)/solaris.x86/$(KBUILD_TYPE)/bin/additions
+SOLARIS_ADD_OUT_BIN_ISA                 := $(PATH_OUT_BASE)/solaris.$(KBUILD_TARGET_ARCH)/$(KBUILD_TYPE)/bin/additions
+
+SOLARIS_ADD_DRIVERINST_DIR              := $(SOLARIS_ADDINST_OUT_DIR)/usr/kernel/drv
+SOLARIS_ADD_DRIVERINST_DIR_32           := $(SOLARIS_ADD_DRIVERINST_DIR)
+SOLARIS_ADD_DRIVERINST_DIR_64           := $(SOLARIS_ADD_DRIVERINST_DIR)/amd64
+
+SOLARIS_ADD_SYSLIBINST_DIR_32           := $(SOLARIS_ADDINST_OUT_DIR)/usr/lib
+SOLARIS_ADD_SYSLIBINST_DIR_64           := $(SOLARIS_ADDINST_OUT_DIR)/usr/lib/amd64
+
+SOLARIS_ADD_USRBIN_DIR                  := $(SOLARIS_ADDINST_OUT_DIR)/usr/bin
+SOLARIS_ADD_USRSBIN_DIR                 := $(SOLARIS_ADDINST_OUT_DIR)/usr/sbin
+SOLARIS_ADD_ETCFS_DIR                   := $(SOLARIS_ADDINST_OUT_DIR)/etc/fs/nemufs
+SOLARIS_ADD_SERVICESINST_DIR            := $(SOLARIS_ADDINST_OUT_DIR)/var/svc/manifest/application/virtualbox
+
+ifeq ($(KBUILD_TARGET_ARCH),x86)
+ SOLARIS_ADDDIR_NAME_ISA                := $(SOLARIS_ADDDIR_NAME_32)
+ SOLARIS_NEMUADDINST_DIR_ISA            := $(SOLARIS_NEMUADDINST_DIR_32)
+ SOLARIS_ADD_DRIVERINST_DIR_ISA         := $(SOLARIS_ADD_DRIVERINST_DIR_32)
+ SOLARIS_ADD_SYSLIBINST_DIR_ISA         := $(SOLARIS_ADD_SYSLIBINST_DIR_32)
+else
+ SOLARIS_ADDDIR_NAME_ISA                := $(SOLARIS_ADDDIR_NAME_64)
+ SOLARIS_NEMUADDINST_DIR_ISA            := $(SOLARIS_NEMUADDINST_DIR_64)
+ SOLARIS_ADD_DRIVERINST_DIR_ISA         := $(SOLARIS_ADD_DRIVERINST_DIR_64)
+ SOLARIS_ADD_SYSLIBINST_DIR_ISA         := $(SOLARIS_ADD_SYSLIBINST_DIR_64)
+endif
+
+ifeq ($(KBUILD_TYPE),debug)
+ BIN_COPY         := $(CP) -f
+ BIN_COPY_SYMBOLS := $(CP) -f
+else
+ BIN_COPY         := /usr/sfw/bin/gobjcopy -S -R .comment
+ BIN_COPY_SYMBOLS := /usr/sfw/bin/gobjcopy -g -R .comment
+ NEMU_COMPRESS    := compress -f
+endif
+
+INSTALLS          += solaris-addcommon solaris-addcommonbins
+PROGRAMS          += NemuAddISAExec
+PACKING           += $(PATH_STAGE_BIN)/additions/$(PKGFILENAME)
+OTHER_CLEAN       += $(PACKING) $(SOLARIS_ADDINST_OUT_DIR)/$(PKGFILENAME)
+
+#
+# NemuAddISAExec
+#
+NemuAddISAExec_TEMPLATE = NEMUR3EXE
+NemuAddISAExec_NAME     = NemuISAExec
+NemuAddISAExec_INST     = $(INST_ADDITIONS)
+NemuAddISAExec_DEPS     = $(NEMU_SVN_REV_KMK)
+NemuAddISAExec_SOURCES  = $(PATH_ROOT)/src/Nemu/Installer/solaris/NemuISAExec.c
+
+#
+# Install to $(PATH_STAGE_BIN)/additions/ files from various source paths (to pack them using rules)
+#
+solaris-addcommonbins_INST = bin/additions/
+solaris-addcommonbins_MODE = a+rx,u+w
+solaris-addcommonbins_SOURCES = \
+	$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuguest.sh \
+	$(NEMU_PATH_X11_ADDITION_INSTALLER)/x11config.pl \
+	$(NEMU_PATH_X11_ADDITION_INSTALLER)/x11config15sol.pl \
+	$(NEMU_PATH_X11_ADDITION_INSTALLER)/x11restore.pl \
+	$(NEMU_PATH_X11_ADDITION_INSTALLER)/98nemuadd-xclient=>1099.nemuclient \
+	$(NEMU_PATH_X11_ADDITION_INSTALLER)/solaris_xorg.conf \
+	$(NEMU_PATH_X11_ADDITION_INSTALLER)/solaris_xorg_modeless.conf \
+	$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/Nemu.sh
+
+solaris-addcommon_INST = bin/additions/
+solaris-addcommon_MODE = a+r,u+w
+solaris-addcommon_SOURCES = \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuGuest/NemuGuest-solaris.conf=>nemuguest.conf \
+	$(PATH_ROOT)/src/Nemu/Additions/solaris/Mouse/nemums.conf=>nemums.conf \
+	$(NEMU_PATH_X11_ADDITION_INSTALLER)/nemuclient.desktop \
+	$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuservice.xml \
+	$(PATH_ROOT)/src/Nemu/Additions/solaris/Mouse/nemumslnk.xml \
+	$(NEMU_BRAND_LICENSE_TXT)=>LICENSE
+
+#
+# Create full directory tree
+#
+BLDDIRS          += \
+	$(SOLARIS_ADDINST_OUT_DIR) \
+	$(addprefix $(SOLARIS_ADDINST_OUT_DIR)/,\
+	opt \
+	opt/VirtualBoxAdditions \
+	opt/VirtualBoxAdditions/$(SOLARIS_ADDDIR_NAME_32) \
+	opt/VirtualBoxAdditions/$(SOLARIS_ADDDIR_NAME_64) \
+	usr \
+	usr/bin \
+	usr/sbin \
+	usr/lib \
+	usr/lib/amd64 \
+	usr/kernel \
+	usr/kernel/drv \
+	usr/kernel/drv/amd64 \
+	var \
+	var/svc \
+	var/svc/manifest \
+	var/svc/manifest/application \
+	var/svc/manifest/application/virtualbox \
+	)
+
+SOLARIS_ADD_STRIP_BINS = \
+	NemuClient \
+	NemuService \
+	NemuControl \
+	nemufsmount \
+	nemufs \
+	nemumslnk \
+	$(if ($NEMU_WITH_PAM),pam_nemu.so,) \
+	$(if $(NEMU_OSE),,nemufs_s10)
+
+SOLARIS_ADD_SYSLIBS = \
+	NemuOGL.so \
+	NemuOGLcrutil.so \
+	NemuOGLfeedbackspu.so \
+	NemuOGLpassthroughspu.so \
+	NemuOGLarrayspu.so \
+	NemuOGLerrorspu.so \
+	NemuOGLpackspu.so
+
+SOLARIS_ADD_DRIVERS = \
+	nemuguest \
+	nemums
+
+SOLARIS_ADD_DRIVERS_CONF = \
+	nemuguest.conf \
+	nemums.conf
+
+SOLARIS_ADD_XORG_DRIVERS = \
+	nemuvideo_drv_13.so \
+	nemuvideo_drv_14.so \
+	nemuvideo_drv_15.so \
+	nemuvideo_drv_16.so \
+	nemuvideo_drv_17.so \
+	nemuvideo_drv_18.so \
+	nemuvideo_drv_19.so \
+	nemuvideo_drv_110.so \
+	nemuvideo_drv_111.so \
+	nemuvideo_drv_112.so \
+	nemuvideo_drv_113.so \
+	nemuvideo_drv_114.so \
+	nemuvideo_drv_117.so \
+	nemuvideo_drv_70.so \
+	nemuvideo_drv_71.so
+
+SOLARIS_ADD_COMMON_BINS = \
+	nemuguest.sh \
+	x11config15sol.pl \
+	x11restore.pl \
+	Nemu.sh \
+	1099.nemuclient \
+	NemuISAExec
+
+SOLARIS_ADD_USRBIN_LINKS = \
+	NemuService \
+	NemuClient \
+	NemuControl
+
+SOLARIS_ADD_USRSBIN_LINKS = \
+	nemumslnk
+
+SOLARIS_ADD_COMMON = \
+	nemuclient.desktop \
+	solaris_xorg.conf \
+	solaris_xorg_modeless.conf \
+	LICENSE
+
+SOLARIS_ADD_SERVICES = \
+	nemuservice.xml \
+	nemumslnk.xml
+
+ifdef NEMU_COMPRESS
+ SOLARIS_ADD_COMPRESS_FILES = \
+	$(SOLARIS_ADD_XORG_DRIVERS) \
+	NemuService \
+	NemuClient \
+	NemuControl
+endif
+
+ifdef NEMU_WITH_COMBINED_SOLARIS_GUEST_PACKAGE
+  SOLARIS_ARCH_ADD_DEPFILES = \
+   $(addprefix $(SOLARIS_NEMUADDINST_DIR_64)/,$(SOLARIS_ADD_STRIP_BINS)) \
+	$(addprefix $(SOLARIS_ADD_SYSLIBINST_DIR_32)/,$(SOLARIS_ADD_SYSLIBS)) \
+	$(addprefix $(SOLARIS_ADD_SYSLIBINST_DIR_64)/,$(SOLARIS_ADD_SYSLIBS)) \
+	$(addprefix $(SOLARIS_NEMUADDINST_DIR_64)/,$(SOLARIS_ADD_XORG_DRIVERS)) \
+	$(addprefix $(SOLARIS_NEMUADDINST_DIR_32)/,$(SOLARIS_ADD_STRIP_BINS)) \
+	$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR_64)/,$(SOLARIS_ADD_DRIVERS)) \
+	$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR_32)/,$(SOLARIS_ADD_DRIVERS)) \
+	$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR)/,$(SOLARIS_ADD_DRIVERS_CONF)) \
+	$(addprefix $(SOLARIS_NEMUADDINST_DIR_32)/,$(SOLARIS_ADD_XORG_DRIVERS))
+else
+  SOLARIS_ARCH_ADD_DEPFILES = \
+   $(addprefix $(SOLARIS_NEMUADDINST_DIR_ISA)/,$(SOLARIS_ADD_STRIP_BINS)) \
+	$(addprefix $(SOLARIS_ADD_SYSLIBINST_DIR_ISA)/,$(SOLARIS_ADD_SYSLIBS)) \
+	$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR_ISA)/,$(SOLARIS_ADD_DRIVERS)) \
+	$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR)/,$(SOLARIS_ADD_DRIVERS_CONF)) \
+	$(addprefix $(SOLARIS_NEMUADDINST_DIR_ISA)/,$(SOLARIS_ADD_XORG_DRIVERS))
+endif
+
+SOLARIS_ARCH_ADD_DEPFILES += \
+	$(addprefix $(SOLARIS_NEMUADDINST_DIR)/,$(SOLARIS_ADD_COMMON_BINS)) \
+	$(addprefix $(SOLARIS_NEMUADDINST_DIR)/,$(SOLARIS_ADD_COMMON)) \
+	$(addprefix $(SOLARIS_ADD_SERVICESINST_DIR)/,$(SOLARIS_ADD_SERVICES)) \
+	$(addprefix $(SOLARIS_ADD_USRBIN_DIR)/,$(SOLARIS_ADD_USRBIN_LINKS)) \
+	$(addprefix $(SOLARIS_ADD_USRSBIN_DIR)/,$(SOLARIS_ADD_USRSBIN_LINKS))
+
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+
+#
+# -=-=-=-=-=-=-=- Additions package -=-=-=-=-=-=-=-
+#
+
+$(PATH_STAGE_BIN)/additions/$(PKGFILENAME): \
+		$(NEMU_VERSION_STAMP) \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/makepackage.sh \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/postinstall.sh \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/preremove.sh \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuguest.pkginfo \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuguest.depend \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuguest.sh \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuservice.xml \
+		$(PATH_ROOT)/src/Nemu/Additions/solaris/Mouse/nemumslnk.xml \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/Nemu.sh \
+		$(NEMU_PATH_X11_ADDITION_INSTALLER)/98nemuadd-xclient \
+		$(NEMU_PATH_X11_ADDITION_INSTALLER)/x11config15sol.pl \
+		$(NEMU_PATH_X11_ADDITION_INSTALLER)/x11restore.pl \
+		$(NEMU_PATH_X11_ADDITION_INSTALLER)/solaris_xorg.conf \
+		$(NEMU_PATH_X11_ADDITION_INSTALLER)/solaris_xorg_modeless.conf \
+		$(NEMU_BRAND_LICENSE_TXT) \
+		$(PATH_ROOT)/src/Nemu/Additions/common/NemuGuest/NemuGuest-solaris.conf \
+		$(PATH_SUB_CURRENT)/solaris/Makefile.kmk \
+		$(SOLARIS_ARCH_ADD_DEPFILES)
+	$(call MSG_L1,Installing guest additions)
+	$(QUIET)$(SED) \
+		-e "s/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g" \
+		-e "s/@NEMU_VENDOR@/$(NEMU_VENDOR)/g" \
+		-e "s/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g" \
+		-e "s/@NEMU_SVN_REV@/$(NEMU_SVN_REV)/g" \
+		-e "s/@NEMU_VERSION_REVSTAMP@/$(PKGINFO_REVSTAMP)/g" \
+		-e "s/@UNAME_P@/$(PKGINFO_ARCH)/g" \
+		--output $(SOLARIS_ADDINST_OUT_DIR)/nemuguest.pkginfo \
+		$(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuguest.pkginfo
+	$(QUIET)$(INSTALL) -m 0755 $(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/makepackage.sh                     $(SOLARIS_ADDINST_OUT_DIR)/makepackage.sh
+	$(QUIET)$(INSTALL) -m 0755 $(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/postinstall.sh                     $(SOLARIS_ADDINST_OUT_DIR)/postinstall.sh
+	$(QUIET)$(INSTALL) -m 0755 $(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/preremove.sh                       $(SOLARIS_ADDINST_OUT_DIR)/preremove.sh
+	$(QUIET)$(INSTALL) -m 0644 $(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuguest.space                    $(SOLARIS_ADDINST_OUT_DIR)/nemuguest.space
+	$(QUIET)$(INSTALL) -m 0644 $(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuguest.depend                   $(SOLARIS_ADDINST_OUT_DIR)/nemuguest.depend
+	# don't display the license on package install, since 4.0
+	#$(QUIET)$(INSTALL) -m 0644 $(NEMU_BRAND_LICENSE_TXT)                                                  $(SOLARIS_ADDINST_OUT_DIR)/nemuguest.copyright
+	$(call MSG_L1,Creating install package: $@)
+	$(QUIET)$(MKDIR) -p $(SOLARIS_ADD_ETCFS_DIR)
+	$(QUIET)$(MKDIR) -p $(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)
+	$(QUIET)$(LN_SYMLINK) -f ../..$(SOLARIS_NEMUADDINST_SUBDIR)/1099.nemuclient                           $(SOLARIS_ADD_USRBIN_DIR)/NemuClient-all
+ifdef NEMU_WITH_COMBINED_SOLARIS_GUEST_PACKAGE
+ ifdef NEMU_COMPRESS
+	$(QUIET)$(NEMU_COMPRESS) $(addprefix $(SOLARIS_NEMUADDINST_DIR_32)/,$(SOLARIS_ADD_COMPRESS_FILES))
+	$(QUIET)$(NEMU_COMPRESS) $(addprefix $(SOLARIS_NEMUADDINST_DIR_64)/,$(SOLARIS_ADD_COMPRESS_FILES))
+ endif
+	$(QUIET)$(LN_SYMLINK) -f ../../..$(SOLARIS_NEMUADDINST_SUBDIR)/$(SOLARIS_ADDDIR_NAME_32)/nemufsmount  $(SOLARIS_ADD_ETCFS_DIR)/mount
+else # !NEMU_WITH_COMBINED_SOLARIS_GUEST_PACKAGE
+ ifdef NEMU_COMPRESS
+	$(QUIET)$(NEMU_COMPRESS) $(addprefix $(SOLARIS_NEMUADDINST_DIR_ISA)/,$(SOLARIS_ADD_COMPRESS_FILES))
+ endif
+	$(LN_SYMLINK) -f ../../..$(SOLARIS_NEMUADDINST_SUBDIR)/$(SOLARIS_ADDDIR_NAME_ISA)/nemufsmount         $(SOLARIS_ADD_ETCFS_DIR)/mount
+endif
+	$(QUIET)$(INSTALL) -m 0644 $(NEMU_PATH_SOLARIS_ADDITION_INSTALLER)/nemuservice.xml                    $(SOLARIS_ADD_SERVICESINST_DIR)/nemuservice.xml
+	$(QUIET)$(INSTALL) -m 0644 	$(PATH_ROOT)/src/Nemu/Additions/solaris/Mouse/nemumslnk.xml                      $(SOLARIS_ADD_SERVICESINST_DIR)/nemumslnk.xml
+	$(QUIET)$(SOLARIS_ADDINST_OUT_DIR)/makepackage.sh $(SOLARIS_ADDINST_OUT_DIR) $(PKGFILENAME) $(NEMU_SVN_REV) $(NEMU_SOL_PKG_DEV)
+	$(QUIET)$(INSTALL) -m 0644 $(SOLARIS_ADDINST_OUT_DIR)/$(PKGFILENAME) $(PATH_STAGE_BIN)/additions/$(PKGFILENAME)
+	$(QUIET)$(RM) -f $(SOLARIS_ADDINST_OUT_DIR)/$(PKGFILENAME)
+
+
+
+#
+# -=-=-=-=-=-=-=- Package rules -=-=-=-=-=-=-=-
+#
+
+#
+# 32-bit files
+#
+$(addprefix $(SOLARIS_NEMUADDINST_DIR_32)/,$(SOLARIS_ADD_STRIP_BINS)): \
+		$(SOLARIS_NEMUADDINST_DIR_32)/% : $(SOLARIS_ADD_OUT_BIN_32)/% | $$(dir $$@)
+	$(INSTALL) -m 0755 $(if $(NEMU_DO_STRIP),-s,) $< $@
+
+$(addprefix $(SOLARIS_ADD_SYSLIBINST_DIR_32)/,$(SOLARIS_ADD_SYSLIBS)): \
+		$(SOLARIS_ADD_SYSLIBINST_DIR_32)/% : $(SOLARIS_ADD_OUT_BIN_32)/% | $$(dir $$@)
+	$(INSTALL) -m 0644 $(if $(NEMU_DO_STRIP),-s,) $< $@
+
+$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR_32)/,$(SOLARIS_ADD_DRIVERS)): \
+		$(SOLARIS_ADD_DRIVERINST_DIR_32)/% : $(SOLARIS_ADD_OUT_BIN_32)/% | $$(dir $$@)
+	$(INSTALL) -m 0644 $< $@
+
+$(addprefix $(SOLARIS_NEMUADDINST_DIR_32)/,$(SOLARIS_ADD_XORG_DRIVERS)): \
+		$(SOLARIS_NEMUADDINST_DIR_32)/% : $(SOLARIS_ADD_OUT_BIN_32)/% | $$(dir $$@)
+	$(BIN_COPY) $< $@
+
+
+#
+# 64-bit files
+#
+$(addprefix $(SOLARIS_NEMUADDINST_DIR_64)/,$(SOLARIS_ADD_STRIP_BINS)): \
+		$(SOLARIS_NEMUADDINST_DIR_64)/% : $(SOLARIS_ADD_OUT_BIN_64)/% | $$(dir $$@)
+	$(INSTALL) -m 0755 $(if $(NEMU_DO_STRIP),-s,) $< $@
+
+$(addprefix $(SOLARIS_ADD_SYSLIBINST_DIR_64)/,$(SOLARIS_ADD_SYSLIBS)): \
+		$(SOLARIS_ADD_SYSLIBINST_DIR_64)/% : $(SOLARIS_ADD_OUT_BIN_64)/% | $$(dir $$@)
+	$(INSTALL) -m 0644 $(if $(NEMU_DO_STRIP),-s,) $< $@
+
+$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR_64)/,$(SOLARIS_ADD_DRIVERS)): \
+		$(SOLARIS_ADD_DRIVERINST_DIR_64)/% : $(SOLARIS_ADD_OUT_BIN_64)/% | $$(dir $$@)
+	$(INSTALL) -m 0644 $< $@
+
+$(addprefix $(SOLARIS_NEMUADDINST_DIR_64)/,$(SOLARIS_ADD_XORG_DRIVERS)): \
+		$(SOLARIS_NEMUADDINST_DIR_64)/% : $(SOLARIS_ADD_OUT_BIN_64)/% | $$(dir $$@)
+	$(BIN_COPY) $< $@
+
+
+#
+# Common files
+#
+$(addprefix $(SOLARIS_NEMUADDINST_DIR)/,$(SOLARIS_ADD_COMMON)): \
+		$(SOLARIS_NEMUADDINST_DIR)/% : $(SOLARIS_ADD_OUT_BIN_ISA)/% | $$(dir $$@)
+	$(INSTALL) -m 0644 $< $@
+
+#
+# Common binaries/shell scripts
+#
+$(addprefix $(SOLARIS_NEMUADDINST_DIR)/,$(SOLARIS_ADD_COMMON_BINS)): \
+		$(SOLARIS_NEMUADDINST_DIR)/% : $(SOLARIS_ADD_OUT_BIN_ISA)/% | $$(dir $$@)
+	$(INSTALL) -m 0755 $< $@
+
+#
+# Driver .conf files
+#
+$(addprefix $(SOLARIS_ADD_DRIVERINST_DIR)/,$(SOLARIS_ADD_DRIVERS_CONF)): \
+		$(SOLARIS_ADD_DRIVERINST_DIR)/% : $(SOLARIS_ADD_OUT_BIN_ISA)/% | $$(dir $$@)
+	$(INSTALL) -m 0644 $< $@
+
+#
+# SMF Service files
+#
+$(addprefix $(SOLARIS_ADD_SERVICESINST_DIR)/,$(SOLARIS_ADD_SERVICES)): \
+		$(SOLARIS_ADD_SERVICESINST_DIR)/% : $(SOLARIS_ADD_OUT_BIN_ISA)/% | $$(dir $$@)
+	$(INSTALL) -m 0644 $< $@
+
+#
+# Symlinks from /usr/bin/ to /opt/VirtualBoxAdditions
+#
+$(addprefix $(SOLARIS_ADD_USRBIN_DIR)/,$(SOLARIS_ADD_USRBIN_LINKS)): \
+		$(SOLARIS_ADD_USRBIN_DIR)/% : % | $$(dir $$@)
+	$(LN_SYMLINK) -f ../..$(SOLARIS_NEMUADDINST_SUBDIR)/$< $@
+
+#
+# Symlinks from /usr/sbin/ to /opt/VirtualBoxAdditions
+#
+$(addprefix $(SOLARIS_ADD_USRSBIN_DIR)/,$(SOLARIS_ADD_USRSBIN_LINKS)): \
+		$(SOLARIS_ADD_USRSBIN_DIR)/% : % | $$(dir $$@)
+	$(LN_SYMLINK) -f ../..$(SOLARIS_NEMUADDINST_SUBDIR)/$< $@

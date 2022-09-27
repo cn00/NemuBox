@@ -1,0 +1,2 @@
+This folder contains tests for NemuFsDxe module, allowing up 
+and test filesystems without EFI environment and launching whole Nemu. 

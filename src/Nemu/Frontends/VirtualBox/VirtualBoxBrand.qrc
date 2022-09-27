@@ -1,0 +1,15 @@
+<!DOCTYPE RCC><RCC version="1.0">
+ <qresource prefix="/">
+    <file alias="about.png">@NEMU_ABOUT_PNG@</file>
+    <file alias="about_hidpi.png">@NEMU_ABOUT_HIDPI_PNG@</file>
+    <file alias="about_16px.png">@NEMU_ABOUT_16PX_PNG@</file>
+    <file alias="about_16px_hidpi.png">@NEMU_ABOUT_16PX_HIDPI_PNG@</file>
+    <file alias="VirtualBox_16px.png">@NEMU_NEMU_16PX_PNG@</file>
+    <file alias="VirtualBox_20px.png">@NEMU_NEMU_20PX_PNG@</file>
+    <file alias="VirtualBox_32px.png">@NEMU_NEMU_32PX_PNG@</file>
+    <file alias="VirtualBox_40px.png">@NEMU_NEMU_40PX_PNG@</file>
+    <file alias="VirtualBox_48px.png">@NEMU_NEMU_48PX_PNG@</file>
+    <file alias="VirtualBox_64px.png">@NEMU_NEMU_64PX_PNG@</file>
+    <file alias="VirtualBox.svg">@NEMU_CUBE_SVG@</file>
+ </qresource>
+ </RCC>

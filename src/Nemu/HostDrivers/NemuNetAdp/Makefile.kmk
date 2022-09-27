@@ -1,0 +1,215 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Network Adapter Driver (NemuNetAdp).
+#
+
+#
+# Copyright (C) 2009-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+if1of ($(KBUILD_TARGET), solaris darwin linux freebsd)
+ #
+ # NemuNetAdp - Virtual Network Adapter
+ # Note! On Solaris the name has to be <= 8 chars long.
+ #
+ ifdef NEMU_WITH_NEMUDRV
+  SYSMODS += NemuNetAdp
+  NemuNetAdp_TEMPLATE         = NEMUR0DRV
+  NemuNetAdp_INST             = $(INST_NEMUNETADP)$(if $(eq $(KBUILD_TARGET),darwin),Contents/MacOS/)
+  NemuNetAdp_DEBUG_INST.darwin= $(patsubst %/,%,$(INST_NEMUNETADP))
+  NemuNetAdp_NAME.solaris     = nemunet
+  NemuNetAdp_NAME.linux       = nemunetadp
+  NemuNetAdp_NAME.freebsd     = nemunetadp
+  NemuNetAdp_DEPS.solaris    += $(NEMU_SVN_REV_KMK)
+  NemuNetAdp_DEFS             = IN_RT_R0 NEMU_SVN_REV=$(NEMU_SVN_REV) IN_SUP_STATIC
+  NemuNetAdp_DEFS.linux       = KBUILD_MODNAME=KBUILD_STR\(nemunetadp\) KBUILD_BASENAME=KBUILD_STR\(nemunetadp\) MODULE
+  #NemuNetAdp_LDFLAGS.darwin   = -v -Wl,-whyload -Wl,-v -Wl,-whatsloaded
+  NemuNetAdp_LDFLAGS.solaris += -N misc/gld -N drv/nemudrv
+  NemuNetAdp_INCS.linux   := \
+  	$(PATH_ROOT)/src/Nemu/Runtime/r0drv/linux
+  NemuNetAdp_INCS             = \
+  	.
+  NemuNetAdp_SOURCES.darwin   = \
+  	darwin/NemuNetAdp-darwin.cpp \
+  	NemuNetAdp.c
+  NemuNetAdp_SOURCES.solaris  = \
+  	solaris/NemuNetAdp-solaris.c
+  NemuNetAdp_SOURCES.linux   = \
+  	linux/NemuNetAdp-linux.c \
+  	NemuNetAdp.c
+  NemuNetAdp_SOURCES.freebsd   = \
+  	freebsd/NemuNetAdp-freebsd.c \
+  	NemuNetAdp.c
+  NemuNetAdp_SOURCES          =
+  #NemuNetAdp_SOURCES          = \
+  #	NemuNetAdp.c
+  NemuNetAdp_LIBS            += \
+  	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+ endif
+endif
+
+#
+# Darwin extras.
+#
+ifeq ($(KBUILD_TARGET),darwin)
+ INSTALLS += NemuNetAdp.kext
+ NemuNetAdp.kext_INST     = $(INST_NEMUNETADP)Contents/
+ NemuNetAdp.kext_SOURCES  = $(NemuNetAdp.kext_0_OUTDIR)/Contents/Info.plist
+ NemuNetAdp.kext_CLEAN    = $(NemuNetAdp.kext_0_OUTDIR)/Contents/Info.plist
+ NemuNetAdp.kext_BLDDIRS  = $(NemuNetAdp.kext_0_OUTDIR)/Contents/
+
+$$(NemuNetAdp.kext_0_OUTDIR)/Contents/Info.plist: $(PATH_SUB_CURRENT)/darwin/Info.plist $(NEMU_VERSION_MK) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuNetAdp,$@,$<)
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(SED) \
+		-e 's/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g' \
+		-e 's/@NEMU_VERSION_MAJOR@/$(NEMU_VERSION_MAJOR)/g' \
+		-e 's/@NEMU_VERSION_MINOR@/$(NEMU_VERSION_MINOR)/g' \
+		-e 's/@NEMU_VERSION_BUILD@/$(NEMU_VERSION_BUILD)/g' \
+		-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+		-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+		-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+		--output $@ \
+		$<
+
+ $(evalcall2 NEMU_TEST_SIGN_KEXT,NemuNetAdp)
+
+ INSTALLS.darwin += Scripts-darwin-adp
+ Scripts-darwin-adp_INST = $(INST_DIST)
+ Scripts-darwin-adp_EXEC_SOURCES = \
+ 	darwin/loadnetadp.sh
+endif # darwin
+
+ifeq ($(KBUILD_TARGET),win)
+ #
+ # NemuNetAdp6.sys - The VirtualBox Adapter miniport driver.
+ #
+ SYSMODS.win += NemuNetAdp6
+ NemuNetAdp6_TEMPLATE = NEMUR0DRV
+ if defined(NEMU_SIGNING_MODE)
+  NemuNetAdp6_INSTTYPE.win = none
+  NemuNetAdp6_DEBUG_INSTTYPE.win = both
+ endif
+ NemuNetAdp6_DEFS = IN_RT_R0 IN_SUP_STATIC
+ NemuNetAdp6_INCS := $(PATH_SUB_CURRENT)
+ NemuNetAdp6_SDKS = ReorderCompilerIncs $(NEMU_WINDDK_WLH) $(NEMU_WINPSDK)INCS
+ NemuNetAdp6_SOURCES = \
+ 	win/NemuNetAdp-win.cpp \
+ 	win/NemuNetAdp-win.rc
+ NemuNetAdp6_DEFS += NDIS_MINIPORT_DRIVER NDIS_WDM=1 BINARY_COMPATIBLE=0
+ NemuNetAdp6_DEFS += NDIS60_MINIPORT=1 NDIS60=1
+ NemuNetAdp6_LDFLAGS.win.x86 = -Entry:DriverEntry@8
+ NemuNetAdp6_LDFLAGS.win.amd64 = -Entry:DriverEntry
+ NemuNetAdp6_LIBS.win = \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/ntoskrnl.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/hal.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/ndis.lib \
+ 	$(PATH_STAGE_LIB)/RuntimeR0Drv$(NEMU_SUFF_LIB)
+ NemuNetAdp6_LIBS = \
+ 	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+
+
+ INSTALLS.win += NemuNetAdp6-inf
+ NemuNetAdp6-inf_INST = $(INST_BIN)
+ NemuNetAdp6-inf_MODE = a+r,u+w
+ NemuNetAdp6-inf_SOURCES = \
+ 	$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.inf
+ NemuNetAdp6-inf_CLEAN = $(NemuNetAdp6-inf_SOURCES)
+ NemuNetAdp6-inf_BLDDIRS = $(PATH_TARGET)/NemuNetAdp6Cat.dir
+
+$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.inf: $(PATH_SUB_CURRENT)/win/NemuNetAdp6.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuNetAdp6-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+ ifdef NEMU_SIGNING_MODE
+NemuNetAdp6-inf_SOURCES += \
+	$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.sys \
+	$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.cat
+
+$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.sys: $$(NemuNetAdp6_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.cat: \
+		$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.sys \
+		$(PATH_TARGET)/NemuNetAdp6Cat.dir/NemuNetAdp6.inf
+	$(call MSG_TOOL,Inf2Cat,NemuNetFlt-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+
+ endif #  ifdef NEMU_SIGNING_MODE
+
+endif #ifeq ($(KBUILD_TARGET), win)
+
+ifeq ($(KBUILD_TARGET),linux)
+ #
+ # Install source files for compilation on Linux.
+ # files_nemunetadp defines NEMU_NEMUNETADP_SOURCES.
+ #
+ INSTALLS += NemuNetAdp-src
+ include $(PATH_SUB_CURRENT)/linux/files_nemunetadp
+ NemuNetAdp-src_INST    = bin/src/nemunetadp/
+ NemuNetAdp-src_SOURCES = \
+	$(subst $(DQUOTE),,$(NEMU_NEMUNETADP_SOURCES)) \
+	$(NemuNetAdp-src_0_OUTDIR)/Makefile
+ NemuNetAdp-src_EXEC_SOURCES = \
+	$(PATH_ROOT)/src/Nemu/HostDrivers/linux/do_Module.symvers
+ NemuNetAdp-src_CLEAN = \
+	$(NemuNetAdp-src_0_OUTDIR)/Makefile \
+	$(PATH_TARGET)/NemuNetAdp-src-1.dep \
+
+ # Scripts needed for building the kernel modules
+ includedep $(PATH_TARGET)/NemuNetAdp-src-1.dep
+$$(NemuNetAdp-src_0_OUTDIR)/Makefile: \
+		$(PATH_SUB_CURRENT)/linux/Makefile \
+		$$(if $$(eq $$(NemuNetAdp/linux/Makefile_NEMU_HARDENED),$$(NEMU_WITH_HARDENING)),,FORCE) \
+		| $$(dir $$@)
+	$(QUIET)$(RM) -f -- $@
+ ifndef NEMU_WITH_HARDENING
+	$(QUIET)$(SED) -e "s;-DNEMU_WITH_HARDENING;;g" --output $@ $<
+ else
+	$(QUIET)$(CP) -f $< $@
+ endif
+	%$(QUIET2)$(APPEND) -t '$(PATH_TARGET)/NemuNetAdp-src-1.dep' 'NemuNetAdp/linux/Makefile_NEMU_HARDENED=$(NEMU_WITH_HARDENING)'
+
+
+endif # linux
+
+ifeq ($(KBUILD_TARGET),freebsd)
+ #
+ # Install source files for compilation on FreeBSD.
+ # files_nemunetadp defines NEMU_NEMUNETADP_SOURCES.
+ #
+ INSTALLS += NemuNetAdp-src
+ include $(PATH_SUB_CURRENT)/freebsd/files_nemunetadp
+ NemuNetAdp-src_INST = bin/src/nemunetadp/
+ NemuNetAdp-src_SOURCES = \
+	$(subst $(DQUOTE),,$(NEMU_NEMUNETADP_SOURCES)) \
+	$(NemuNetAdp-src_0_OUTDIR)/Makefile
+ NemuNetAdp-src_CLEAN = \
+	$(NemuNetAdp-src_0_OUTDIR)/Makefile	\
+
+$$(NemuNetAdp-src_0_OUTDIR)/Makefile: \
+		$(PATH_SUB_CURRENT)/freebsd/Makefile \
+		$$(if $$(eq $$(NemuNetAdp/freebsd/Makefile_NEMU_HARDENED),$$(NEMU_WITH_HARDENING)),,FORCE) \
+		| $$(dir $$@)
+	$(QUIET)$(RM) -f -- $@
+ ifndef NEMU_WITH_HARDENING
+	$(QUIET)$(SED) -e "s;-DNEMU_WITH_HARDENING;;g" --output $@ $<
+ else
+	$(QUIET)$(CP) -f $< $@
+ endif
+
+endif # freebsd
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

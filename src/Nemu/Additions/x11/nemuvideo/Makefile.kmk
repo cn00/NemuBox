@@ -1,0 +1,462 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Nemu Linux Additions X.org graphics driver.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+nemuvideo_70_DEFS := \
+	IN_MODULE XORG_7X RENDER=1 IN_RT_STATIC X_BYTE_ORDER=X_LITTLE_ENDIAN
+ifeq ($(KBUILD_TARGET),solaris) # don't use .solaris or anything here.
+ nemuvideo_70_DEFS += __EXTENSIONS__  ## @todo Why this?
+endif
+nemuvideo_13_DEFS := $(nemuvideo_70_DEFS) NEMUVIDEO_13
+nemuvideo_15_DEFS := \
+	$(nemuvideo_13_DEFS) NO_ANSIC PCIACCESS XSERVER_LIBPCIACCESS _XORG_SERVER_H_ _DIX_CONFIG_H_
+if1of ($(KBUILD_TARGET), linux solaris)
+ nemuvideo_15_DEFS += \
+ 	NEMU_DRI
+endif
+nemuvideo_xorg_INCS = \
+	$(NEMU_PATH_X11_ROOT)/dri2proto-2.8 \
+	$(NEMU_PATH_X11_ROOT)/fontsproto-2.1.0 \
+	$(NEMU_PATH_X11_ROOT)/glproto-1.4.10 \
+	$(NEMU_PATH_X11_ROOT)/MesaLib-8.0.4-GL \
+	$(NEMU_PATH_X11_ROOT)/inputproto-1.9.99.902 \
+	$(NEMU_PATH_X11_ROOT)/kbproto-1.0.6 \
+	$(NEMU_PATH_X11_ROOT)/libdrm-2.4.13 \
+	$(NEMU_PATH_X11_ROOT)/libpciaccess-0.10.8 \
+	$(NEMU_PATH_X11_ROOT)/libXext-1.3.1 \
+	$(NEMU_PATH_X11_ROOT)/pixman-0.16.0 \
+	$(NEMU_PATH_X11_ROOT)/randrproto-1.3.0 \
+	$(NEMU_PATH_X11_ROOT)/renderproto-0.11 \
+	$(NEMU_PATH_X11_ROOT)/xextproto-7.1.1 \
+	$(NEMU_PATH_X11_ROOT)/xf86driproto-2.1.0 \
+	$(NEMU_PATH_X11_ROOT)/xproto-7.0.18
+
+nemuvideo.c_DEPS = $(NEMU_SVN_REV_HEADER)
+
+#
+# nemuvideo_drv
+#
+if1of ($(KBUILD_TARGET), linux)
+ SYSMODS += nemuvideo_drv
+endif   # target linux
+nemuvideo_drv_TEMPLATE = NEMUGUESTR3XF86MOD
+nemuvideo_drv_CFLAGS += -Wno-shadow # Avoid MBs of warnings in X11 and OpenGL headers (solaris mostly).
+nemuvideo_drv_DEFS.linux = linux
+nemuvideo_drv_DEFS.x86 = __i386__
+# This one has to be defined when building server code on systems where
+# unsigned long is 64bits
+nemuvideo_drv_DEFS.amd64 += _XSERVER64
+nemuvideo_drv_DEFS = \
+	_POSIX_C_SOURCE=199309L _POSIX_SOURCE _XOPEN_SOURCE _DEFAULT_SOURCE \
+	_BSD_SOURCE _SVID_SOURCE _GNU_SOURCE SHAPE XINPUT XKB LBX XAPPGROUP \
+	XCSECURITY TOGCUP XF86BIGFONT DPMSExtension PIXPRIV PANORAMIX RENDER \
+	GCCUSESGAS AVOID_GLYPHBLT PIXPRIV SINGLEDEPTH XFreeXDGA XvExtension \
+	XFree86LOADER XFree86Server XF86VIDMODE XvMCExtension SMART_SCHEDULE \
+	BUILDDEBUG X_BYTE_ORDER=X_LITTLE_ENDIAN DNDEBUG FUNCPROTO=15 NARROWPROTO \
+	IN_MODULE XFree86Module IN_XF86_MODULE IN_RT_STATIC
+nemuvideo_drv_DEFS += memset=xf86memset memcpy=xf86memcpy
+nemuvideo_drv_INCS = \
+	$(NEMU_PATH_X11_XFREE_4_3)/include \
+	$(NEMU_PATH_X11_XFREE_4_3)/include/X11 \
+	$(NEMU_PATH_X11_XFREE_4_3)/include/X11/extensions \
+	$(NEMU_PATH_X11_XFREE_4_3)/include/extensions \
+	$(NEMU_PATH_X11_XFREE_4_3)/include/fonts \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/afb \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/include \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/fb \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86 \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/common \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/ddc \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/int10 \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/i2c \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/os-support \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/vbe \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/os-support/bus \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/rac \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/ramdac \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/shadowfb \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/vgahw \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/xf1bpp \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/xf24_32bpp \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/xf4bpp \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/mfb \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/mi \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/miext/shadow \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/render \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/randr \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/Xext
+nemuvideo_drv_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_SOURCES = \
+	getmode.c \
+	helpers.c \
+	pointer.c \
+	setmode.c \
+	nemuvideo.c \
+	vbva.c \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/HGSMIBase.cpp \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/Modesetting.cpp \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/VBVABase.cpp \
+	$(PATH_ROOT)/src/Nemu/GuestHost/HGSMI/HGSMICommon.cpp \
+	$(PATH_ROOT)/src/Nemu/GuestHost/HGSMI/HGSMIMemAlloc.cpp \
+	$(PATH_ROOT)/src/Nemu/Runtime/common/alloc/heapsimple.cpp \
+	$(PATH_ROOT)/src/Nemu/Runtime/common/alloc/heapoffset.cpp
+ # Any global symbols in the driver object files will be added to XFree86's
+ # symbol table, which can cause problems if we e.g. define a symbol in two
+ # modules.
+ nemuvideo_drv_POST_CMDS = \
+	objcopy --keep-global-symbol nemuvideoModuleData $(out) $(out)-objcopy$$(NLTAB) \
+	$(MV) -f $(out)-objcopy $(out)
+
+#
+# nemuvideo_drv_70
+#
+# Remark: The other X.org drivers below are derived from this one. So, to make
+#         that as simple as possible we do ifeq/if1of test here and extends the
+#         base keywords instead of using .solaris or .linux.
+#         Also it is *important* to use := and not = when deriving a property.
+#
+DLLS += nemuvideo_drv_70
+nemuvideo_drv_70_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_70_DEFS = $(nemuvideo_70_DEFS) XORG_VERSION_CURRENT=70000000
+ifeq ($(KBUILD_TARGET),solaris) # don't use .solaris or anything here.
+ nemuvideo_drv_70_CFLAGS += -D_XPG6 -Wno-shadow # Use XPG6 until we have moved the C++ bits into a library.
+endif
+nemuvideo_drv_70_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.0.1
+nemuvideo_drv_70_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_70_SOURCES  = $(nemuvideo_drv_SOURCES)
+
+
+#
+# nemuvideo_drv_71
+#
+DLLS += nemuvideo_drv_71
+nemuvideo_drv_71_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_71_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_71_DEFS := $(nemuvideo_70_DEFS) XORG_VERSION_CURRENT=70100000
+nemuvideo_drv_71_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.1.0
+nemuvideo_drv_71_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_71_SOURCES  = $(nemuvideo_drv_SOURCES)
+
+
+#
+# nemuvideo_drv_13
+#
+DLLS += nemuvideo_drv_13
+nemuvideo_drv_13_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_13_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_13_DEFS := $(nemuvideo_13_DEFS) XORG_VERSION_CURRENT=10300000
+nemuvideo_drv_13_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.3.0.0
+nemuvideo_drv_13_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_13_SOURCES = $(nemuvideo_drv_SOURCES)
+
+
+#
+# nemuvideo_drv_14
+#
+DLLS += nemuvideo_drv_14
+nemuvideo_drv_14_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_14_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_14_DEFS := $(nemuvideo_13_DEFS) XORG_VERSION_CURRENT=10400000
+nemuvideo_drv_14_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.4.2
+nemuvideo_drv_14_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_14_SOURCES  = $(nemuvideo_drv_13_SOURCES)
+
+
+#
+# nemuvideo_drv_15
+#
+DLLS += nemuvideo_drv_15
+nemuvideo_drv_15_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_15_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_15_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=10503000
+if1of ($(KBUILD_TARGET), linux solaris)
+ nemuvideo_drv_15_DEFS += \
+ 	NEMU_DRI_OLD
+endif
+nemuvideo_drv_15_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.5.3
+nemuvideo_drv_15_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_15_SOURCES  = $(nemuvideo_drv_13_SOURCES)
+if1of ($(KBUILD_TARGET), linux solaris)
+ nemuvideo_drv_15_SOURCES += \
+ 	nemuvideo_dri.c
+endif
+
+
+#
+# nemuvideo_drv_16
+#
+DLLS += nemuvideo_drv_16
+nemuvideo_drv_16_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_16_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_16_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=10600000
+if1of ($(KBUILD_TARGET), linux solaris)
+ nemuvideo_drv_16_DEFS += \
+ 	NEMU_DRI_OLD
+endif
+nemuvideo_drv_16_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.6.5 \
+nemuvideo_drv_16_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_16_SOURCES := $(nemuvideo_drv_15_SOURCES)
+
+
+#
+# nemuvideo_drv_17
+#
+DLLS += nemuvideo_drv_17
+nemuvideo_drv_17_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_17_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_17_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=10699000
+nemuvideo_drv_17_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.7.7
+nemuvideo_drv_17_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_17_SOURCES := $(nemuvideo_drv_13_SOURCES)
+if1of ($(KBUILD_TARGET), linux solaris)
+ nemuvideo_drv_17_SOURCES += \
+ 	nemuvideo_dri2.c
+endif
+
+
+#
+# nemuvideo_drv_18
+#
+DLLS += nemuvideo_drv_18
+nemuvideo_drv_18_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_18_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_18_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=10800000
+nemuvideo_drv_18_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.8.0
+nemuvideo_drv_18_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_18_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_19
+#
+DLLS += nemuvideo_drv_19
+nemuvideo_drv_19_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_19_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_19_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=10900000
+nemuvideo_drv_19_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.9.0
+nemuvideo_drv_19_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_19_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_110
+#
+DLLS += nemuvideo_drv_110
+nemuvideo_drv_110_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_110_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_110_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11000000
+nemuvideo_drv_110_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.10.0
+nemuvideo_drv_110_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_110_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_111
+#
+DLLS += nemuvideo_drv_111
+nemuvideo_drv_111_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_111_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_111_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11100000
+nemuvideo_drv_111_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.11.0
+nemuvideo_drv_111_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_111_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_112
+#
+DLLS += nemuvideo_drv_112
+nemuvideo_drv_112_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_112_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_112_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11200000
+nemuvideo_drv_112_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.12.0
+nemuvideo_drv_112_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_112_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_113
+#
+DLLS += nemuvideo_drv_113
+nemuvideo_drv_113_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_113_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_113_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11300000
+nemuvideo_drv_113_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.13.0
+nemuvideo_drv_113_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_113_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_114
+#
+DLLS += nemuvideo_drv_114
+nemuvideo_drv_114_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_114_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_114_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11400000
+nemuvideo_drv_114_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.14.0
+nemuvideo_drv_114_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_114_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_115
+#
+DLLS += nemuvideo_drv_115
+nemuvideo_drv_115_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_115_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_115_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11500000
+nemuvideo_drv_115_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.15.0
+nemuvideo_drv_115_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_115_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_116
+#
+DLLS += nemuvideo_drv_116
+nemuvideo_drv_116_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_116_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_116_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11600000
+nemuvideo_drv_116_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.16.0
+nemuvideo_drv_116_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_116_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_117
+#
+DLLS += nemuvideo_drv_117
+nemuvideo_drv_117_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_117_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_117_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11700000
+nemuvideo_drv_117_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.17.1
+nemuvideo_drv_117_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_117_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+
+#
+# nemuvideo_drv_118
+#
+DLLS += nemuvideo_drv_118
+nemuvideo_drv_118_TEMPLATE = NEMUGUESTR3XORGMOD
+nemuvideo_drv_118_CFLAGS := $(nemuvideo_drv_70_CFLAGS)
+nemuvideo_drv_118_DEFS := $(nemuvideo_15_DEFS) XORG_VERSION_CURRENT=11800000
+nemuvideo_drv_118_INCS = \
+	$(nemuvideo_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.18.0
+nemuvideo_drv_118_INCS += $(PATH_ROOT)/src/Nemu/Runtime/include
+nemuvideo_drv_118_SOURCES := $(nemuvideo_drv_17_SOURCES)
+
+ifdef NEMU_USE_SYSTEM_XORG_HEADERS
+ # Build using local X.Org headers.  We assume X.Org Server 1.7 or later.
+ DLLS    := $(filter-out nemuvideo_drv_%,$(DLLS)) nemuvideo_drv_system
+ SYSMODS := $(filter-out nemuvideo_drv%,$(SYSMODS))
+ nemuvideo_drv_system_TEMPLATE = NEMUGUESTR3XORGMOD
+ nemuvideo_drv_system_CFLAGS := \
+        $(nemuvideo_drv_70_CFLAGS) -include xorg-server.h
+ nemuvideo_drv_system_DEFS := $(filter-out _XORG_SERVER_H_ _DIX_CONFIG_H_, $(nemuvideo_15_DEFS))
+ nemuvideo_drv_system_INCS += \
+        $(PATH_ROOT)/src/Nemu/Runtime/include \
+        /usr/include/x11 \
+        /usr/include/X11/dri \
+        /usr/include/libdrm \
+        /usr/include/xorg \
+        /usr/include/pixman-1
+ nemuvideo_drv_system_SOURCES := $(nemuvideo_drv_17_SOURCES)
+endif
+
+
+# Check the undefined symbols in the X.Org modules against lists of allowed
+# symbols.  Not very elegant, but it will catch problems early.
+
+ifdef NEMU_WITH_TESTCASES
+# ifndef NEMU_ONLY_ADDITIONS
+ ifndef NEMU_USE_SYSTEM_XORG_HEADERS
+  if1of ($(KBUILD_TARGET),linux solaris)
+   ifeq ($(KBUILD_HOST_ARCH),$(KBUILD_TARGET_ARCH))
+    ifndef NEMU_ONLY_SDK
+     NEMUVIDEO_SRC_PATH := $(PATH_SUB_CURRENT)
+
+     ifeq ($(KBUILD_TARGET),linux)
+      TESTING += $(nemuvideo_drv_0_OUTDIR)/tstnemuvideo68.run
+      OTHERS += $(nemuvideo_drv_0_OUTDIR)/tstnemuvideo68.run
+$$(nemuvideo_drv_0_OUTDIR)/tstnemuvideo68.run: $$(nemuvideo_drv_1_STAGE_TARGET)
+	$(QUIET)$(call MSG_L1,Checking for unresolved symbols in $<)
+	$(QUIET)$(ASH) $(PATH_ROOT)/src/bldprogs/checkUndefined.sh $(KBUILD_HOST)  \
+	    $(nemuvideo_drv_1_STAGE_TARGET) --static $(NEMUVIDEO_SRC_PATH)/../undefined_xfree86 $(NEMUVIDEO_SRC_PATH)/../undefined_xfree86_modules
+	$(QUIET)$(APPEND) -t "$@" "done"
+     endif
+
+##
+# Using the extra expansion to replace $(ver) before eval, thus everything
+# else needs escaped dollars.
+     define def_nemuvideo_test
+      TESTING += $$(nemuvideo_drv$(ver)_0_OUTDIR)/tstnemuvideo$(ver).run
+      OTHERS  += $$(nemuvideo_drv$(ver)_0_OUTDIR)/tstnemuvideo$(ver).run
+      $$$$(nemuvideo_drv$(ver)_0_OUTDIR)/tstnemuvideo$(ver).run: $$$$(nemuvideo_drv$(ver)_1_STAGE_TARGET)
+	$$(QUIET)$$(call MSG_L1,Checking for unresolved symbols in $$<)
+	$$(QUIET)$$(ASH) $$(PATH_ROOT)/src/bldprogs/checkUndefined.sh $$(KBUILD_HOST)  \
+	        $$(nemuvideo_drv$(ver)_1_STAGE_TARGET) $$(NEMUVIDEO_SRC_PATH)/../undefined_xfree86 $(NEMUVIDEO_SRC_PATH)/../undefined_xfree86_modules $$(NEMUVIDEO_SRC_PATH)/../undefined_xorg
+	$$(QUIET)$$(APPEND) -t "$$@" "done"
+    endef
+
+    $(foreach ver, _70 _71 _13 _14 _15 _16 _17 _18 _19 _110 _111 _112 _113 _114 _115 _116 _117 _118, $(eval $(def_nemuvideo_test)))
+
+    endif # ! NEMU_ONLY_SDK
+   endif # eq ($(KBUILD_HOST_ARCH),$(KBUILD_TARGET_ARCH))
+  endif # 1of ($(KBUILD_TARGET),linux solaris)
+ endif # ! NEMU_USE_SYSTEM_XORG_HEADERS
+# endif # ! NEMU_ONLY_ADDITIONS
+endif # NEMU_WITH_TESTCASES
+
+include $(FILE_KBUILD_SUB_FOOTER)

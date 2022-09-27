@@ -1,0 +1,451 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Shared OpenGL Host Service.
+#
+
+#
+# Copyright (C) 2008-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+#
+# Target lists.
+#
+ifdef NEMU_WITH_MAIN
+DLLS      += NemuSharedCrOpenGL	NemuOGLrenderspu
+LIBRARIES += NemuOGLcrserverlib	NemuOGLcrunpacker
+BLDDIRS   += \
+	$(NEMU_PATH_CROGL_GENFILES)/
+endif
+
+ifdef NEMU_WITH_CR_DISPLAY_LISTS
+ LIBRARIES += NemuOGLcrdlm
+ DLLS      += NemuOGLexpandospu
+endif # NEMU_WITH_CR_DISPLAY_LISTS
+
+ifeq ($(KBUILD_TARGET),darwin)
+ #
+ # We have to symlink the system headers of OpenGl cause they have some
+ # different directory hierarchy on Mac OS X (no /GL sub directory).
+ #
+ # See Config.kmk for the global variables.
+ #
+ INSTALLS += DarwinOpenGLHdrs
+ DarwinOpenGLHdrs_INST     = $(NEMU_DARWIN_OPENGL_INST)
+ DarwinOpenGLHdrs_SYMLINKS = \
+ 	$(foreach hdr, $(NEMU_DARWIN_OPENGL_HEADERS),\
+ 		$(hdr)=>$(NEMU_PATH_MACOSX_SDK)/System/Library/Frameworks/OpenGL.framework/Versions/Current/Headers/$(hdr))
+endif # darwin
+
+#
+# NemuSharedCrOpenGL
+#
+NemuSharedCrOpenGL_TEMPLATE = NEMUCROGLR3HOSTDLL
+ifdef NEMU_WITH_XPCOM
+ NemuSharedCrOpenGL_DEFS = NEMU_WITH_XPCOM
+ NemuSharedCrOpenGL_CXXFLAGS = -Wno-non-virtual-dtor -fshort-wchar $(NEMU_GCC_std)
+endif
+NemuSharedCrOpenGL_INTERMEDIATES = \
+	$(TEMPLATE_NEMUMAINEXE_INTERMEDIATES)
+NemuSharedCrOpenGL_INCS.win = \
+	$(PATH_TOOL_$(NEMU_VCC_TOOL)_ATLMFC_INC) \
+	$(NEMU_PATH_SDK)/bindings/mscom/include
+ifdef NEMU_WITH_XPCOM
+NemuSharedCrOpenGL_INCS += \
+ 	$(NEMU_XPCOM_INCS)
+endif
+NemuSharedCrOpenGL_SOURCES = \
+	crserver/crservice.cpp
+NemuSharedCrOpenGL_SOURCES.win = \
+	crserver/NemuSharedCrOpenGL.rc
+NemuSharedCrOpenGL_LDFLAGS.darwin = -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuSharedCrOpenGL.dylib
+NemuSharedCrOpenGL_LIBS = \
+	$(PATH_STAGE_LIB)/NemuOGLcrserverlib$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/NemuOGLhostcrstate$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/NemuOGLcrunpacker$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/NemuOGLhostcrpacker$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/NemuOGLhostspuload$(NEMU_SUFF_LIB) \
+	$(NEMU_LIB_OGL_HOSTCRUTIL) \
+	$(PATH_STAGE_LIB)/NemuCOM$(NEMU_SUFF_LIB) \
+	$(LIB_RUNTIME) \
+	$(LIB_VMM)
+NemuSharedCrOpenGL_LIBS.darwin = \
+	$(LIB_REM)
+ifeq ($(KBUILD_TARGET),win)
+ NemuSharedCrOpenGL_LIBS += \
+	$(PATH_OBJ)/NemuOGLrenderspu/NemuOGLrenderspu$(NEMU_SUFF_LIB) \
+	$(PATH_TOOL_$(NEMU_VCC_TOOL)_ATLMFC_LIB)/atls$(NEMU_SUFF_LIB)
+else
+ NemuSharedCrOpenGL_LIBS += \
+	$(PATH_STAGE_BIN)/NemuOGLrenderspu$(NEMU_SUFF_DLL)
+endif
+ifdef NEMU_WITH_XPCOM
+ NemuSharedCrOpenGL_LIBS += \
+	$(LIB_XPCOM)
+endif
+ifdef NEMU_WITH_CRHGSMI
+NemuSharedCrOpenGL_DEFS += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_CR_DISPLAY_LISTS
+NemuSharedCrOpenGL_LIBS += $(PATH_STAGE_LIB)/NemuOGLcrdlm$(NEMU_SUFF_LIB)
+endif
+
+#
+# NemuOGLcrserverlib
+#
+NemuOGLcrserverlib_TEMPLATE = NEMUCROGLR3HOSTLIB
+NemuOGLcrserverlib_INCS  = \
+	. \
+	crserverlib
+NemuOGLcrserverlib_INTERMEDIATES = \
+	$(NEMU_PATH_CROGL_GENFILES)/spu_dispatch_table.h \
+	$(NEMU_PATH_CROGL_GENFILES)/server_dispatch.h \
+        $(NEMU_PATH_CROGL_GENFILES)/cr_opcodes.h \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_currentpointers.h \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_statefuncs.h
+
+ifdef NEMU_WITH_CR_DISPLAY_LISTS
+NemuOGLcrserverlib_INTERMEDIATES += $(NEMU_PATH_CROGL_GENFILES)/cr_dlm.h
+endif
+
+NemuOGLcrserverlib_SOURCES := \
+	crserverlib/server_main.c \
+	crserverlib/server_boundsinfo.c \
+	crserverlib/server_bufferobject.c \
+	crserverlib/server_clear.c \
+	crserverlib/server_clip.c \
+	crserverlib/server_config.c \
+	crserverlib/server_context.c \
+	crserverlib/server_gentextures.c \
+	crserverlib/server_getmap.c \
+	crserverlib/server_getstring.c \
+	crserverlib/server_getpointer.c \
+	crserverlib/server_getpixelmap.c \
+	crserverlib/server_getteximage.c \
+	crserverlib/server_lists.c \
+	crserverlib/server_misc.c \
+	crserverlib/server_occlude.c \
+	crserverlib/server_papi.c \
+	crserverlib/server_projmatrix.c \
+	crserverlib/server_readpixels.c \
+	crserverlib/server_stream.c \
+	crserverlib/server_viewport.c \
+	crserverlib/server_window.c \
+	crserverlib/server_winpos.c \
+	crserverlib/server_writeback.c \
+	crserverlib/server_getshaders.c \
+	crserverlib/server_framebuffer.c \
+	crserverlib/server_glsl.c \
+	crserverlib/server_muralfbo.cpp \
+	crserverlib/server_texture.c \
+	crserverlib/presenter/server_presenter.cpp \
+	crserverlib/presenter/display_base.cpp \
+	crserverlib/presenter/display_composite.cpp \
+	crserverlib/presenter/window.cpp \
+	crserverlib/presenter/display_window.cpp \
+	crserverlib/presenter/display_window_rootvr.cpp \
+	crserverlib/presenter/display_vrdp.cpp \
+	crserverlib/server_rpw.cpp \
+	$(NEMU_PATH_CROGL_GENFILES)/server_dispatch.c \
+	$(NEMU_PATH_CROGL_GENFILES)/server_retval.c \
+	$(NEMU_PATH_CROGL_GENFILES)/server_get.c \
+	$(NEMU_PATH_CROGL_GENFILES)/server_simpleget.c
+NemuOGLcrserverlib_CLEAN = \
+	$(NEMU_PATH_CROGL_GENFILES)/server_dispatch.c \
+	$(NEMU_PATH_CROGL_GENFILES)/server_retval.c \
+	$(NEMU_PATH_CROGL_GENFILES)/server_get.c \
+	$(NEMU_PATH_CROGL_GENFILES)/server_simpleget.c \
+	$(NEMU_PATH_CROGL_GENFILES)/server_dispatch.h
+ifdef NEMU_WITH_CR_DISPLAY_LISTS
+NemuOGLcrserverlib_DEFS += NEMU_WITH_CR_DISPLAY_LISTS
+endif
+ifdef NEMUCR_LOGFPS
+NemuOGLcrserverlib_DEFS += NEMUCR_LOGFPS
+endif
+ifdef NEMU_WITH_CRHGSMI
+NemuOGLcrserverlib_DEFS += ifdef NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_CRDUMPER
+NemuOGLcrserverlib_DEFS        += NEMU_WITH_CRDUMPER
+endif
+ifdef NEMU_WITH_CRSERVER_DUMPER
+NemuOGLcrserverlib_DEFS        += NEMU_WITH_CRSERVER_DUMPER
+endif
+
+
+#
+# Generate files for NemuOGLcrserverlib
+#
+$(NEMU_PATH_CROGL_GENFILES)/server_dispatch.h: $(addprefix $(PATH_SUB_CURRENT)/crserverlib/, server_dispatch_header.py server_special) $(NEMU_CROGL_API_FILES) $(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/state_tracker/state_special | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/server_dispatch.c: $(addprefix $(PATH_SUB_CURRENT)/crserverlib/, server_dispatch.py server_special) $(NEMU_CROGL_API_FILES) $(PATH_ROOT)/src/Nemu/GuestHost/OpenGL/state_tracker/state_special | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/server_retval.c: $(addprefix $(PATH_SUB_CURRENT)/crserverlib/, server_retval.py server_special) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/server_get.c: $(addprefix $(PATH_SUB_CURRENT)/crserverlib/, server_get.py server_special) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/server_simpleget.c: $(addprefix $(PATH_SUB_CURRENT)/crserverlib/, server_simpleget.py get_sizes.py) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+
+#
+# NemuOGLcrunpacker
+#
+NemuOGLcrunpacker_TEMPLATE       = NEMUCROGLR3HOSTLIB
+NemuOGLcrunpacker_INCS           = \
+	unpacker
+NemuOGLcrunpacker_INTERMEDIATES  = \
+	$(NEMU_PATH_CROGL_GENFILES)/spu_dispatch_table.h \
+	$(NEMU_PATH_CROGL_GENFILES)/cr_opcodes.h \
+	$(NEMU_PATH_CROGL_GENFILES)/unpack_extend.h \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_currentpointers.h \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_statefuncs.h
+NemuOGLcrunpacker_SOURCES  = \
+	unpacker/unpack_arrays.c \
+	unpacker/unpack_bounds.c \
+	unpacker/unpack_bufferobject.c \
+	unpacker/unpack_calllists.c \
+	unpacker/unpack_clipplane.c \
+	unpacker/unpack_context.c \
+	unpacker/unpack_drawpixels.c \
+	unpacker/unpack_fence.c \
+	unpacker/unpack_fog.c \
+	unpacker/unpack_lights.c \
+	unpacker/unpack_map.c \
+	unpacker/unpack_materials.c \
+	unpacker/unpack_matrices.c \
+	unpacker/unpack_misc.c \
+	unpacker/unpack_pixelmap.c \
+	unpacker/unpack_point.c \
+	unpacker/unpack_program.c \
+	unpacker/unpack_readpixels.c \
+	unpacker/unpack_regcombiner.c \
+	unpacker/unpack_stipple.c \
+	unpacker/unpack_texture.c \
+	unpacker/unpack_writeback.c \
+	unpacker/unpack_visibleregion.c \
+	unpacker/unpack_shaders.c \
+	unpacker/unpack_framebuffer.c \
+	$(NEMU_PATH_CROGL_GENFILES)/unpack.c
+NemuOGLcrunpacker_CLEAN = \
+	$(NEMU_PATH_CROGL_GENFILES)/unpack.c \
+	$(NEMU_PATH_CROGL_GENFILES)/unpack_extend.h
+
+#
+# Generate files for NemuOGLcrunpacker.
+#
+$(NEMU_PATH_CROGL_GENFILES)/unpack.c: \
+		$(addprefix $(PATH_SUB_CURRENT)/unpacker/, unpack.py unpacker_special) \
+		$(NEMU_PATH_CROGL_GENFILES)/unpack_extend.h \
+		$(NEMU_CROGL_API_FILES) \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/unpack_extend.h: \
+		$(addprefix $(PATH_SUB_CURRENT)/unpacker/, unpack_extend.py unpacker_special) \
+		$(NEMU_CROGL_API_FILES) \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+
+ifdef NEMU_WITH_CR_DISPLAY_LISTS
+#
+# NemuOGLcrdlm
+#
+
+NemuOGLcrdlm_TEMPLATE       = NEMUCROGLR3HOSTLIB
+NemuOGLcrdlm_INCS           = \
+	dlm
+NemuOGLcrdlm_INTERMEDIATES  = \
+	$(NEMU_PATH_CROGL_GENFILES)/cr_dlm.h \
+	$(NEMU_PATH_CROGL_GENFILES)/dlm_generated.h
+
+NemuOGLcrdlm_SOURCES  = \
+	dlm/dlm.c \
+	dlm/dlm_arrays.c \
+	dlm/dlm_state.c \
+	dlm/dlm_checklist.c \
+	dlm/dlm_error.c \
+	dlm/dlm_lists.c \
+	dlm/dlm_pointers.c \
+	$(NEMU_PATH_CROGL_GENFILES)/dlm_generated.c
+
+NemuOGLcrdlm_CLEAN = \
+	$(NEMU_PATH_CROGL_GENFILES)/dlm_generated.c \
+	$(NEMU_PATH_CROGL_GENFILES)/cr_dlm.h \
+	$(NEMU_PATH_CROGL_GENFILES)/dlm_generated.h
+#
+# Generate files for NemuOGLcrdlm.
+#
+$(NEMU_PATH_CROGL_GENFILES)/cr_dlm.h: \
+		$(addprefix $(PATH_SUB_CURRENT)/dlm/, dlm_header.py) \
+		$(NEMU_CROGL_API_FILES) \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< header $(<D) $(NEMU_PATH_CROGL_GLAPI) > $@
+
+$(NEMU_PATH_CROGL_GENFILES)/dlm_generated.h: \
+		$(addprefix $(PATH_SUB_CURRENT)/dlm/, dlm_generated.py dlm_special) \
+		$(NEMU_PATH_CROGL_GENFILES)/cr_dlm.h \
+		$(NEMU_CROGL_API_FILES) \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< headers $(<D) $(NEMU_PATH_CROGL_GLAPI) > $@
+
+$(NEMU_PATH_CROGL_GENFILES)/dlm_generated.c: \
+		$(addprefix $(PATH_SUB_CURRENT)/dlm/, dlm_generated.py dlm_special) \
+		$(NEMU_PATH_CROGL_GENFILES)/dlm_generated.h \
+		$(NEMU_CROGL_API_FILES) \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< source $(<D) $(NEMU_PATH_CROGL_GLAPI) > $@
+
+
+#
+# NemuOGLexpandospu
+#
+NemuOGLexpandospu_TEMPLATE       = NEMUCROGLR3HOSTDLL
+NemuOGLexpandospu_INCS           = \
+	expando
+NemuOGLexpandospu_SOURCES  = \
+	expando/expandospu.c \
+	expando/expandospu_config.c \
+	expando/expandospu_init.c \
+	$(NEMU_PATH_CROGL_GENFILES)/expando.c
+NemuOGLexpandospu_CLEAN = \
+	$(NEMU_PATH_CROGL_GENFILES)/expando.c
+NemuOGLexpandospu_CLEAN = \
+	$(NEMU_PATH_CROGL_GENFILES)/expando.c
+NemuOGLexpandospu_LDFLAGS.darwin += -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuOGLexpandospu.dylib
+NemuOGLexpandospu_LIBS = \
+	$(PATH_STAGE_LIB)/NemuOGLcrdlm$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/NemuOGLhostcrstate$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/NemuOGLhostspuload$(NEMU_SUFF_LIB) \
+	$(NEMU_LIB_OGL_HOSTCRUTIL) \
+	$(LIB_RUNTIME) \
+	$(LIB_VMM)
+#
+# Generate files for NemuOGLexpandospu.
+#
+$(NEMU_PATH_CROGL_GENFILES)/expando.c: \
+		$(addprefix $(PATH_SUB_CURRENT)/expando/, expando.py expando_special) \
+		$(NEMU_CROGL_API_FILES) \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D) > $@
+endif
+
+
+#
+# NemuOGLrenderspu
+#
+NemuOGLrenderspu_TEMPLATE = NEMUCROGLR3HOSTDLL
+NemuOGLrenderspu_INTERMEDIATES = \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_currentpointers.h \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_statefuncs.h
+NemuOGLrenderspu_SOURCES = \
+	render/renderspu.c \
+	render/renderspu_config.c \
+	render/renderspu_init.c
+NemuOGLrenderspu_SOURCES.win     = \
+	render/renderspu_wgl.c \
+	render/render.def \
+	render/NemuOGLrenderspu.rc
+NemuOGLrenderspu_SOURCES.linux   = render/renderspu_glx.c
+NemuOGLrenderspu_SOURCES.solaris = render/renderspu_glx.c
+NemuOGLrenderspu_SOURCES.freebsd = render/renderspu_glx.c
+NemuOGLrenderspu_OBJCFLAGS.darwin = -Wno-shadow
+NemuOGLrenderspu_SOURCES.darwin  = \
+	OpenGLTest/OpenGLTestDarwin.cpp \
+	render/renderspu_cocoa.c \
+	render/renderspu_cocoa_helper.m
+ifdef NEMU_WITH_CRHGSMI
+NemuOGLrenderspu_DEFS += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_VDMA
+NemuOGLrenderspu_DEFS += NEMU_WITH_VDMA
+endif
+NemuOGLrenderspu_LDFLAGS.darwin += -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuOGLrenderspu.dylib -framework IOKit
+NemuOGLrenderspu_LIBS = \
+	$(PATH_STAGE_LIB)/NemuOGLhostspuload$(NEMU_SUFF_LIB) \
+	$(NEMU_LIB_OGL_HOSTCRUTIL) \
+	$(LIB_RUNTIME)
+if1of ($(KBUILD_TARGET), freebsd linux netbsd openbsd solaris) # the X11 gang
+ NemuOGLrenderspu_LIBS += \
+	Xmu \
+	X11 \
+	Xext
+ NemuOGLrenderspu_LIBPATH = \
+	$(NEMU_LIBPATH_X11)
+endif
+
+LIBRARIES += NemuOGLTest
+NemuOGLTest_TEMPLATE = NEMUR3
+ifneq ($(KBUILD_TARGET),darwin)
+  NemuOGLTest_SOURCES = OpenGLTest/OpenGLTest.cpp
+endif
+NemuOGLTest_SOURCES.darwin = OpenGLTest/OpenGLTestDarwin.cpp
+
+#
+# NemuTestOGL - OpenGL support test app.
+# Note! Doesn't link with NEMU_WITH_DEBUG_VCC_CRT defined because it uses Qt.
+#
+if (   defined(NEMU_WITH_QTGUI) \
+    && (defined(NEMU_WITH_CROGL) || defined(NEMU_WITH_VIDEOHWACCEL)) \
+    && !defined(NEMU_WITH_DEBUG_VCC_CRT))
+ ifneq ($(KBUILD_TARGET),darwin)
+  ifdef NEMU_WITH_VIDEOHWACCEL
+   USES += qt4
+  endif
+  PROGRAMS += NemuTestOGL
+  NemuTestOGL_TEMPLATE = $(if $(NEMU_WITH_VIDEOHWACCEL),$(if $(NEMU_WITH_HARDENING),NEMUQT4GUI,NEMUQT4GUIEXE),NEMUMAINEXE)
+  NemuTestOGL_SOURCES = OpenGLTest/OpenGLTestApp.cpp
+  NemuTestOGL_SOURCES.win = OpenGLTest/NemuTestOGL.rc
+  NemuTestOGL_LIBS = \
+  	$(if $(NEMU_WITH_CROGL), \
+  	    $(PATH_STAGE_LIB)/NemuOGLhostspuload$(NEMU_SUFF_LIB) \
+  	    $(NEMU_LIB_OGL_HOSTCRUTIL),) \
+  	$(if $(NEMU_WITH_VIDEOHWACCEL), $(PATH_STAGE_LIB)/NemuOGL2D$(NEMU_SUFF_LIB),) \
+  	$(LIB_RUNTIME)
+  NemuTestOGL_DEFS += \
+    NEMU_BUILD_TARGET=\"$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)\" \
+    $(if $(NEMU_WITH_CROGL), NEMU_WITH_CROGL,) \
+    $(if $(NEMU_WITH_VIDEOHWACCEL), NEMU_WITH_VIDEOHWACCEL,) \
+    $(if $(NEMU_BLEEDING_EDGE),NEMU_BLEEDING_EDGE=\"$(NEMU_BLEEDING_EDGE)\",)
+  ifdef NEMU_WITH_VIDEOHWACCEL
+   NemuTestOGL_QT_MODULES     += Core Gui OpenGL
+   NemuTestOGL_LDFLAGS.darwin += -framework OpenGL
+   NemuTestOGL_LIBS.win       += $(PATH_SDK_$(NEMU_WINPSDK)_LIB)/Opengl32.lib
+   if1of ($(KBUILD_TARGET), solaris linux freebsd)
+    # must come after NemuOGL2D, therefore don't set the arch-specific LIBS variable here!
+    NemuTestOGL_LIBS += GL
+   endif
+  endif
+  NemuTestOGL_LDFLAGS.win = /SUBSYSTEM:windows
+ endif
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

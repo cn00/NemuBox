@@ -1,0 +1,38 @@
+# $Id: Makefile.kmk $
+## @file
+# Common installer stuff.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include Sub-Makefiles.
+ifndef NEMU_OSE
+ include $(PATH_SUB_CURRENT)/keygen/Makefile.kmk
+endif
+
+# Python glue installer
+ifdef NEMU_WITH_PYTHON
+
+INSTALLS += Nemu-python-glue-installer
+
+Nemu-python-glue-installer_INST = $(INST_SDK)installer/
+Nemu-python-glue-installer_MODE = a+r,u+w
+Nemu-python-glue-installer_SOURCES = nemuapisetup.py
+
+endif # NEMU_WITH_PYTHON
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

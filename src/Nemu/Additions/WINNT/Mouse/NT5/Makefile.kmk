@@ -1,0 +1,75 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Windows NT5+ Guest Additions Mouse Filter Driver
+#
+
+#
+# Copyright (C) 2011-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# NemuMouse - Windows NT5+ Guest Additions Mouse Filter Driver
+#
+SYSMODS                += NemuMouse
+NemuMouse_TEMPLATE      = NEMUGUESTR0
+NemuMouse_DEFS          = LOG_TO_BACKDOOR
+NemuMouse_SDKS.x86      = ReorderCompilerIncs $(NEMU_WINDDK_GST_W2K)
+#NemuMouse_DEFS         += LOG_ENABLED
+NemuMouse_CXXFLAGS      = -Od
+NemuMouse_CFLAGS        = -Od
+NemuMouse_LDFLAGS.x86   = -Entry:DriverEntry@8
+NemuMouse_LDFLAGS.amd64 = -Entry:DriverEntry
+NemuMouse_SOURCES       = \
+	NemuMFDriver.cpp \
+	NemuMFInternal.cpp \
+	NemuMF.rc
+NemuMouse_LIBS.x86      = \
+	$(PATH_SDK_$(NEMU_WINDDK_GST_W2K)_LIB)/ntoskrnl.lib \
+	$(PATH_SDK_$(NEMU_WINDDK_GST_W2K)_LIB)/hal.lib
+NemuMouse_LIBS.amd64    = \
+	$(PATH_SDK_$(NEMU_WINDDK_GST)_LIB)/ntoskrnl.lib \
+	$(PATH_SDK_$(NEMU_WINDDK_GST)_LIB)/hal.lib
+NemuMouse_LIBS          = \
+	$(NEMU_LIB_IPRT_GUEST_R0) \
+	$(NEMU_LIB_VBGL_R0)
+
+#
+# Install the inf & cat.
+#
+INSTALLS += NemuMouse-inf
+NemuMouse-inf_INST = $(INST_ADDITIONS)
+NemuMouse-inf_MODE = a+r,u+w
+ifndef NEMU_SIGNING_MODE
+NemuMouse-inf_SOURCES = NemuMouse.inf
+else
+NemuMouse-inf_SOURCES = \
+	$(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.inf \
+	$(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.cat
+NemuMouse-inf_CLEAN += \
+	$(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.cat \
+	$(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.sys \
+	$(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.inf
+NemuMouse-inf_BLDDIRS = $(PATH_TARGET)/NemuMouseCat.dir
+
+$(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.inf: $(PATH_SUB_CURRENT)/NemuMouse.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuMouse-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+$(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.cat: $(PATH_TARGET)/NemuMouseCat.dir/NemuMouse.inf $$(NemuMouse_1_TARGET)
+	$(call MSG_TOOL,Inf2Cat,NemuMouse-inf,$@,$<)
+	$(INSTALL) -m 644 $(NemuMouse_1_TARGET) $(@D)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+endif # signing
+
+include $(FILE_KBUILD_SUB_FOOTER)

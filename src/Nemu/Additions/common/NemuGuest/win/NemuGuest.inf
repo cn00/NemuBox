@@ -1,0 +1,83 @@
+; $Id: NemuGuest.inf $
+;; @file
+; INF file for installing the VirtualBox Windows guest driver.
+;
+
+;
+; Copyright (C) 2006-2015 Oracle Corporation
+;
+; This file is part of VirtualBox Open Source Edition (OSE), as
+; available from http://www.virtualbox.org. This file is free software;
+; you can redistribute it and/or modify it under the terms of the GNU
+; General Public License (GPL) as published by the Free Software
+; Foundation, in version 2 as it comes in the "COPYING" file of the
+; VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+; hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Provider=%ORACLE%
+ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Class=System
+DriverPackageType=PlugAndPlay
+;edit-DriverVer=08/26/2008,2.00.0000
+;cat CatalogFile=NemuGuest.cat
+
+[SourceDisksNames]
+1 = %NemuGuest.MediaDesc%
+2 = %NemuControl.MediaDesc%
+3 = %NemuTray.MediaDesc%
+
+[SourceDisksFiles]
+NemuGuest.sys = 1
+NemuControl.exe = 2
+NemuTray.exe = 3
+
+[DestinationDirs]
+DefaultDestDir = 12 ; drivers
+NemuTray_CopyFiles = 11 ; system32
+
+[Manufacturer]
+;x86   %ORACLE%=NemuGuest
+;amd64 %ORACLE%=NemuGuest, NTamd64
+
+;x86   [NemuGuest]
+;amd64 [NemuGuest.NTamd64]
+%NemuGuest.DeviceDesc%=NemuGuest_Install,PCI\VEN_80ee&DEV_cafe
+
+[NemuGuest_Install]
+CopyFiles = NemuGuest_CopyFiles, NemuTray_CopyFiles
+AddReg = NemuTray_Add_Reg
+
+[NemuGuest_CopyFiles]
+NemuGuest.sys
+
+[NemuTray_CopyFiles]
+NemuTray.exe
+NemuControl.exe
+
+[NemuGuest_Install.Services]
+AddService = NemuGuest, 0x00000002, NemuGuest_ServiceInstallSection
+DelService = NemuTray, 0x00000004
+
+[NemuGuest_ServiceInstallSection]
+DisplayName    = %NemuGuest_svcdesc%
+ServiceType    = 0x00000001 ; kernel driver
+StartType      = 0x00000000 ; boot start
+ErrorControl   = 0x00000001 ; normal error handling
+LoadOrderGroup = Base
+ServiceBinary  = %12%\NemuGuest.sys
+
+[NemuTray_Add_Reg]
+HKLM, SOFTWARE\Microsoft\Windows\CurrentVersion\Run, NemuTray, 0x00000000, %11%\NemuTray.exe
+
+[ClassInstall32]
+; This should fix the error 0xe0000101 (The required section was not found in the INF).
+
+[Strings]
+ORACLE = "Oracle Corporation"
+NemuGuest.DeviceDesc = "VirtualBox Device"
+NemuGuest_svcdesc = "VirtualBox Guest Driver"
+NemuTray_svcdesc = "VirtualBox Guest Tray"
+

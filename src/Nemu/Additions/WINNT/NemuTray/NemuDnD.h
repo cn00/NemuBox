@@ -1,0 +1,399 @@
+/* $Id: NemuDnD.h $ */
+/** @file
+ * NemuDnD.h - Windows-specific bits of the drag'n drop service.
+ */
+
+/*
+ * Copyright (C) 2013-2015 Oracle Corporation
+ *
+ * This file is part of VirtualBox Open Source Edition (OSE), as
+ * available from http://www.virtualbox.org. This file is free software;
+ * you can redistribute it and/or modify it under the terms of the GNU
+ * General Public License (GPL) as published by the Free Software
+ * Foundation, in version 2 as it comes in the "COPYING" file of the
+ * VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+ * hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+ */
+
+#ifndef __NEMUTRAYDND__H
+#define __NEMUTRAYDND__H
+
+#include <iprt/critsect.h>
+
+#include <iprt/cpp/mtlist.h>
+#include <iprt/cpp/ministring.h>
+
+int                NemuDnDInit    (const NEMUSERVICEENV *pEnv, void **ppInstance, bool *pfStartThread);
+unsigned __stdcall NemuDnDThread  (void *pInstance);
+void               NemuDnDStop    (const NEMUSERVICEENV *pEnv, void *pInstance);
+void               NemuDnDDestroy (const NEMUSERVICEENV *pEnv, void *pInstance);
+
+class NemuDnDWnd;
+
+class NemuDnDDataObject : public IDataObject
+{
+public:
+
+    enum Status
+    {
+        Uninitialized = 0,
+        Initialized,
+        Dropping,
+        Dropped,
+        Aborted
+    };
+
+public:
+
+    NemuDnDDataObject(LPFORMATETC pFormatEtc = NULL, LPSTGMEDIUM pStgMed = NULL, ULONG cFormats = 0);
+    virtual ~NemuDnDDataObject(void);
+
+public: /* IUnknown methods. */
+
+    STDMETHOD(QueryInterface)(REFIID iid, void ** ppvObject);
+    STDMETHOD_(ULONG, AddRef)(void);
+    STDMETHOD_(ULONG, Release)(void);
+
+public: /* IDataObject methods. */
+
+    STDMETHOD(GetData)(LPFORMATETC pFormatEtc, LPSTGMEDIUM pMedium);
+    STDMETHOD(GetDataHere)(LPFORMATETC pFormatEtc, LPSTGMEDIUM pMedium);
+    STDMETHOD(QueryGetData)(LPFORMATETC pFormatEtc);
+    STDMETHOD(GetCanonicalFormatEtc)(LPFORMATETC pFormatEct,  LPFORMATETC pFormatEtcOut);
+    STDMETHOD(SetData)(LPFORMATETC pFormatEtc, LPSTGMEDIUM pMedium, BOOL fRelease);
+    STDMETHOD(EnumFormatEtc)(DWORD dwDirection, IEnumFORMATETC **ppEnumFormatEtc);
+    STDMETHOD(DAdvise)(LPFORMATETC pFormatEtc, DWORD advf, IAdviseSink *pAdvSink, DWORD *pdwConnection);
+    STDMETHOD(DUnadvise)(DWORD dwConnection);
+    STDMETHOD(EnumDAdvise)(IEnumSTATDATA **ppEnumAdvise);
+
+public:
+
+    static const char* ClipboardFormatToString(CLIPFORMAT fmt);
+
+    int Abort(void);
+    void SetStatus(Status status);
+    int Signal(const RTCString &strFormat, const void *pvData, uint32_t cbData);
+
+protected:
+
+    bool LookupFormatEtc(LPFORMATETC pFormatEtc, ULONG *puIndex);
+    static HGLOBAL MemDup(HGLOBAL hMemSource);
+    void RegisterFormat(LPFORMATETC pFormatEtc, CLIPFORMAT clipFormat, TYMED tyMed = TYMED_HGLOBAL,
+                        LONG lindex = -1, DWORD dwAspect = DVASPECT_CONTENT, DVTARGETDEVICE *pTargetDevice = NULL);
+
+    Status      mStatus;
+    LONG        mRefCount;
+    ULONG       mcFormats;
+    LPFORMATETC mpFormatEtc;
+    LPSTGMEDIUM mpStgMedium;
+    RTSEMEVENT  mSemEvent;
+    RTCString   mstrFormat;
+    void       *mpvData;
+    uint32_t    mcbData;
+};
+
+class NemuDnDDropSource : public IDropSource
+{
+public:
+
+    NemuDnDDropSource(NemuDnDWnd *pThis);
+    virtual ~NemuDnDDropSource(void);
+
+public:
+
+    uint32_t GetCurrentAction(void) { return muCurAction; }
+
+public: /* IUnknown methods. */
+
+    STDMETHOD(QueryInterface)(REFIID iid, void ** ppvObject);
+    STDMETHOD_(ULONG, AddRef)(void);
+    STDMETHOD_(ULONG, Release)(void);
+
+public: /* IDropSource methods. */
+
+    STDMETHOD(QueryContinueDrag)(BOOL fEscapePressed, DWORD dwKeyState);
+    STDMETHOD(GiveFeedback)(DWORD dwEffect);
+
+protected:
+
+    LONG                  mRefCount;
+    NemuDnDWnd           *mpWndParent;
+    VBGLR3GUESTDNDCMDCTX  mDnDCtx;
+    DWORD                 mdwCurEffect;
+    uint32_t              muCurAction;
+};
+
+class NemuDnDDropTarget : public IDropTarget
+{
+public:
+
+    NemuDnDDropTarget(NemuDnDWnd *pThis);
+    virtual ~NemuDnDDropTarget(void);
+
+public: /* IUnknown methods. */
+
+    STDMETHOD(QueryInterface)(REFIID iid, void ** ppvObject);
+    STDMETHOD_(ULONG, AddRef)(void);
+    STDMETHOD_(ULONG, Release)(void);
+
+public: /* IDropTarget methods. */
+
+    STDMETHOD(DragEnter)(IDataObject *pDataObject, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect);
+    STDMETHOD(DragOver)(DWORD grfKeyState, POINTL pt, DWORD *pdwEffect);
+    STDMETHOD(DragLeave)(void);
+    STDMETHOD(Drop)(IDataObject *pDataObject, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect);
+
+protected:
+
+    static DWORD GetDropEffect(DWORD grfKeyState, DWORD dwAllowedEffects);
+    void reset(void);
+
+public:
+
+    void *DataMutableRaw(void) { return mpvData; }
+    uint32_t DataSize(void) { return mcbData; }
+    RTCString Formats(void);
+    int WaitForDrop(RTMSINTERVAL msTimeout);
+
+protected:
+
+    LONG                  mRefCount;
+    NemuDnDWnd           *mpWndParent;
+    VBGLR3GUESTDNDCMDCTX  mDnDCtx;
+    DWORD                 mdwCurEffect;
+    /** Copy of the data object's FORMATETC struct.
+     *  Note: We don't keep the pointer of the DVTARGETDEVICE here! */
+    FORMATETC             mFormatEtc;
+    RTCString             mFormats;
+    void                 *mpvData;
+    uint32_t              mcbData;
+    RTSEMEVENT            hEventDrop;
+    int                   mDroppedRc;
+};
+
+class NemuDnDEnumFormatEtc : public IEnumFORMATETC
+{
+public:
+
+    NemuDnDEnumFormatEtc(LPFORMATETC pFormatEtc, ULONG cFormats);
+    virtual ~NemuDnDEnumFormatEtc(void);
+
+public:
+
+    STDMETHOD(QueryInterface)(REFIID iid, void ** ppvObject);
+    STDMETHOD_(ULONG, AddRef)(void);
+    STDMETHOD_(ULONG, Release)(void);
+
+    STDMETHOD(Next)(ULONG cFormats, LPFORMATETC pFormatEtc, ULONG *pcFetched);
+    STDMETHOD(Skip)(ULONG cFormats);
+    STDMETHOD(Reset)(void);
+    STDMETHOD(Clone)(IEnumFORMATETC **ppEnumFormatEtc);
+
+public:
+
+    static void CopyFormat(LPFORMATETC pFormatDest, LPFORMATETC pFormatSource);
+    static HRESULT CreateEnumFormatEtc(UINT cFormats, LPFORMATETC pFormatEtc, IEnumFORMATETC **ppEnumFormatEtc);
+
+private:
+
+    LONG        m_lRefCount;
+    ULONG       m_nIndex;
+    ULONG       m_nNumFormats;
+    LPFORMATETC m_pFormatEtc;
+};
+
+struct NEMUDNDCONTEXT;
+class NemuDnDWnd;
+
+/*
+ * A drag'n drop event from the host.
+ */
+typedef struct NEMUDNDEVENT
+{
+    /** The actual event data. */
+    VBGLR3DNDHGCMEVENT Event;
+
+} NEMUDNDEVENT, *PNEMUDNDEVENT;
+
+/**
+ * DnD context data.
+ */
+typedef struct NEMUDNDCONTEXT
+{
+    /** Pointer to the service environment. */
+    const NEMUSERVICEENV      *pEnv;
+    /** Shutdown indicator. */
+    bool                       fShutdown;
+    /** The DnD main event queue. */
+    RTCMTList<NEMUDNDEVENT>    lstEvtQueue;
+    /** Semaphore for waiting on main event queue
+     *  events. */
+    RTSEMEVENT                 hEvtQueueSem;
+    /** List of drag'n drop proxy windows.
+     *  Note: At the moment only one window is supported. */
+    RTCMTList<NemuDnDWnd*>     lstWnd;
+
+} NEMUDNDCONTEXT, *PNEMUDNDCONTEXT;
+static NEMUDNDCONTEXT gCtx = {0};
+
+/**
+ * Everything which is required to successfully start
+ * a drag'n drop operation via DoDragDrop().
+ */
+typedef struct NEMUDNDSTARTUPINFO
+{
+    /** Our DnD data object, holding
+     *  the raw DnD data. */
+    NemuDnDDataObject         *pDataObject;
+    /** The drop source for sending the
+     *  DnD request to a IDropTarget. */
+    NemuDnDDropSource         *pDropSource;
+    /** The DnD effects which are wanted / allowed. */
+    DWORD                      dwOKEffects;
+
+} NEMUDNDSTARTUPINFO, *PNEMUDNDSTARTUPINFO;
+
+/**
+ * Class for handling a DnD proxy window.
+ ** @todo Unify this and NemuClient's DragInstance!
+ */
+class NemuDnDWnd
+{
+    /**
+     * Current state of a DnD proxy
+     * window.
+     */
+    enum State
+    {
+        Uninitialized = 0,
+        Initialized,
+        Dragging,
+        Dropped,
+        Canceled
+    };
+
+    /**
+     * Current operation mode of
+     * a DnD proxy window.
+     */
+    enum Mode
+    {
+        /** Unknown mode. */
+        Unknown = 0,
+        /** Host to guest. */
+        HG,
+        /** Guest to host. */
+        GH
+    };
+
+public:
+
+    NemuDnDWnd(void);
+    virtual ~NemuDnDWnd(void);
+
+public:
+
+    int Initialize(PNEMUDNDCONTEXT pContext);
+    void Destroy(void);
+
+public:
+
+    /** The window's thread for the native message pump and
+     *  OLE context. */
+    static int Thread(RTTHREAD hThread, void *pvUser);
+
+public:
+
+    static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM lParam);
+    /** The per-instance wndproc routine. */
+    LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+public:
+
+#ifdef NEMU_WITH_DRAG_AND_DROP_GH
+    int RegisterAsDropTarget(void);
+    int UnregisterAsDropTarget(void);
+#endif
+
+public:
+
+    int OnCreate(void);
+    void OnDestroy(void);
+
+    /* H->G */
+    int OnHgEnter(const RTCList<RTCString> &formats, uint32_t uAllActions);
+    int OnHgMove(uint32_t u32xPos, uint32_t u32yPos, uint32_t uAllActions);
+    int OnHgDrop(void);
+    int OnHgLeave(void);
+    int OnHgDataReceived(const void *pvData, uint32_t cData);
+    int OnHgCancel(void);
+
+#ifdef NEMU_WITH_DRAG_AND_DROP_GH
+    /* G->H */
+    int OnGhIsDnDPending(uint32_t uScreenID);
+    int OnGhDropped(const char *pszFormat, uint32_t cbFormats, uint32_t uDefAction);
+#endif
+
+    int ProcessEvent(PNEMUDNDEVENT pEvent);
+
+public:
+
+    int hide(void);
+
+protected:
+
+    int makeFullscreen(void);
+    int mouseMove(int x, int y, DWORD dwMouseInputFlags);
+    int mouseRelease(void);
+    void reset(void);
+    int setMode(Mode enmMode);
+
+public: /** @todo Make protected! */
+
+    /** Pointer to DnD context. */
+    PNEMUDNDCONTEXT            pContext;
+    /** The proxy window's main thread for processing
+     *  window messages. */
+    RTTHREAD                   hThread;
+    RTCRITSECT                 mCritSect;
+    RTSEMEVENT                 mEventSem;
+#ifdef RT_OS_WINDOWS
+    /** The window's handle. */
+    HWND                       hWnd;
+    /** List of allowed MIME types this
+     *  client can handle. Make this a per-instance
+     *  property so that we can selectively allow/forbid
+     *  certain types later on runtime. */
+    RTCList<RTCString>         lstFmtSup;
+    /** List of formats for the current
+     *  drag'n drop operation. */
+    RTCList<RTCString>         lstFmtActive;
+    /** Flags of all current drag'n drop
+     *  actions allowed. */
+    uint32_t                   uAllActions;
+    /** The startup information required
+     *  for the actual DoDragDrop() call. */
+    NEMUDNDSTARTUPINFO         startupInfo;
+    /** Is the left mouse button being pressed
+     *  currently while being in this window? */
+    bool                       mfMouseButtonDown;
+# ifdef NEMU_WITH_DRAG_AND_DROP_GH
+    /** IDropTarget implementation for guest -> host
+     *  support. */
+    NemuDnDDropTarget         *pDropTarget;
+# endif /* NEMU_WITH_DRAG_AND_DROP_GH */
+#else
+    /** @todo Implement me. */
+#endif /* RT_OS_WINDOWS */
+
+    /** The window's own DnD context. */
+    VBGLR3GUESTDNDCMDCTX       mDnDCtx;
+    /** The current operation mode. */
+    Mode                       mMode;
+    /** The current state. */
+    State                      mState;
+    /** Format being requested. */
+    RTCString                  mFormatRequested;
+};
+#endif /* __NEMUTRAYDND__H */
+

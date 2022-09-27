@@ -1,0 +1,123 @@
+#!/bin/sh
+
+#
+# Create a tar archive containing the sources of the Linux guest kernel
+# modules
+#
+# Copyright (C) 2006-2010 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <filename.tar.gz>"
+    echo "  Export VirtualBox kernel modules to <filename.tar.gz>"
+    exit 1
+fi
+
+PATH_TMP="`cd \`dirname $1\`; pwd`/.nemu_modules"
+PATH_OUT=$PATH_TMP
+FILE_OUT="`cd \`dirname $1\`; pwd`/`basename $1`"
+PATH_ROOT="`cd \`dirname $0\`/../../../..; pwd`"
+PATH_LINUX="$PATH_ROOT/src/Nemu/Additions/linux"
+PATH_NEMUGUEST="$PATH_ROOT/src/Nemu/Additions/common/NemuGuest"
+PATH_NEMUSF="$PATH_ROOT/src/Nemu/Additions/linux/sharedfolders"
+PATH_NEMUVIDEO="$PATH_ROOT/src/Nemu/Additions/linux/drm"
+
+NEMU_VERSION_MAJOR=`sed -e "s/^ *NEMU_VERSION_MAJOR *= \+\([0-9]\+\)/\1/;t;d" $PATH_ROOT/Config.kmk`
+NEMU_VERSION_MINOR=`sed -e "s/^ *NEMU_VERSION_MINOR *= \+\([0-9]\+\)/\1/;t;d" $PATH_ROOT/Config.kmk`
+NEMU_VERSION_BUILD=`sed -e "s/^ *NEMU_VERSION_BUILD *= \+\([0-9]\+\)/\1/;t;d" $PATH_ROOT/Config.kmk`
+NEMU_SVN_REV=`sed -e 's/^ *NEMU_SVN_REV_FALLBACK *:= \+\$(patsubst *%:,, *\$Rev: *\([0-9]\+\) *\$ *) */\1/;t;d' $PATH_ROOT/Config.kmk`
+NEMU_VENDOR=`sed -e 's/^ *NEMU_VENDOR *= \+\(.\+\)/\1/;t;d' $PATH_ROOT/Config.kmk`
+NEMU_VENDOR_SHORT=`sed -e 's/^ *NEMU_VENDOR_SHORT *= \+\(.\+\)/\1/;t;d' $PATH_ROOT/Config.kmk`
+NEMU_PRODUCT=`sed -e 's/^ *NEMU_PRODUCT *= \+\(.\+\)/\1/;t;d' $PATH_ROOT/Config.kmk`
+NEMU_C_YEAR=`date +%Y`
+
+. $PATH_NEMUGUEST/linux/files_nemuguest
+. $PATH_NEMUSF/files_nemusf
+. $PATH_NEMUVIDEO/files_nemuvideo_drm
+
+# Temporary path for creating the modules, will be removed later
+mkdir $PATH_TMP || exit 1
+
+# Create auto-generated version file, needed by all modules
+echo "#ifndef ___version_generated_h___" > $PATH_TMP/version-generated.h
+echo "#define ___version_generated_h___" >> $PATH_TMP/version-generated.h
+echo "" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_MAJOR $NEMU_VERSION_MAJOR" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_MINOR $NEMU_VERSION_MINOR" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_BUILD $NEMU_VERSION_BUILD" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_STRING_RAW \"$NEMU_VERSION_MAJOR.$NEMU_VERSION_MINOR.$NEMU_VERSION_BUILD\"" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_STRING \"$NEMU_VERSION_MAJOR.$NEMU_VERSION_MINOR.$NEMU_VERSION_BUILD\"" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_API_VERSION_STRING \"${NEMU_VERSION_MAJOR}_${NEMU_VERSION_MINOR}\"" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_PRIVATE_BUILD_DESC \"Private build with export_modules\"" >> $PATH_TMP/version-generated.h
+echo "" >> $PATH_TMP/version-generated.h
+echo "#endif" >> $PATH_TMP/version-generated.h
+
+# Create auto-generated revision file, needed by all modules
+echo "#ifndef __revision_generated_h__" > $PATH_TMP/revision-generated.h
+echo "#define __revision_generated_h__" >> $PATH_TMP/revision-generated.h
+echo "" >> $PATH_TMP/revision-generated.h
+echo "#define NEMU_SVN_REV $NEMU_SVN_REV" >> $PATH_TMP/revision-generated.h
+echo "" >> $PATH_TMP/revision-generated.h
+echo "#endif" >> $PATH_TMP/revision-generated.h
+
+# Create auto-generated product file, needed by all modules
+echo "#ifndef ___product_generated_h___" > $PATH_TMP/product-generated.h
+echo "#define ___product_generated_h___" >> $PATH_TMP/product-generated.h
+echo "" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_VENDOR \"$NEMU_VENDOR\"" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_VENDOR_SHORT \"$NEMU_VENDOR_SHORT\"" >> $PATH_TMP/product-generated.h
+echo "" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_PRODUCT \"$NEMU_PRODUCT\"" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_C_YEAR \"$NEMU_C_YEAR\"" >> $PATH_TMP/product-generated.h
+echo "" >> $PATH_TMP/product-generated.h
+echo "#endif" >> $PATH_TMP/product-generated.h
+
+# nemuguest (VirtualBox guest kernel module)
+mkdir $PATH_TMP/nemuguest || exit 1
+for f in $FILES_NEMUGUEST_NOBIN; do
+    install -D -m 0644 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemuguest/`echo $f|cut -d'>' -f2`"
+done
+for f in $FILES_NEMUGUEST_BIN; do
+    install -D -m 0755 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemuguest/`echo $f|cut -d'>' -f2`"
+done
+
+# nemusf (VirtualBox guest kernel module for shared folders)
+mkdir $PATH_TMP/nemusf || exit 1
+for f in $FILES_NEMUSF_NOBIN; do
+    install -D -m 0644 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemusf/`echo $f|cut -d'>' -f2`"
+done
+for f in $FILES_NEMUSF_BIN; do
+    install -D -m 0755 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemusf/`echo $f|cut -d'>' -f2`"
+done
+
+# nemuvideo (VirtualBox guest kernel module for drm support)
+mkdir $PATH_TMP/nemuvideo || exit 1
+for f in $FILES_NEMUVIDEO_DRM_NOBIN; do
+    install -D -m 0644 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemuvideo/`echo $f|cut -d'>' -f2`"
+done
+for f in $FILES_NEMUVIDEO_DRM_BIN; do
+    install -D -m 0755 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemuvideo/`echo $f|cut -d'>' -f2`"
+done
+
+# convenience Makefile
+install -D -m 0644 $PATH_LINUX/Makefile "$PATH_TMP/Makefile"
+
+# Only temporary, omit from archive
+rm $PATH_TMP/version-generated.h
+rm $PATH_TMP/revision-generated.h
+rm $PATH_TMP/product-generated.h
+
+# Create the archive
+tar -czf $FILE_OUT -C $PATH_TMP . || exit 1
+
+# Remove the temporary directory
+rm -r $PATH_TMP
+

@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<VirtualBoxExtensionPack xmlns="http://www.virtualbox.org/VirtualBoxExtensionPack" version="1.0">
+    <Name>BusMouse</Name>
+    <Description>The bus mouse sample extension pack.</Description>
+    <Version revision="@NEMU_SVN_REV@">@NEMU_VERSION_STRING@</Version>
+    <MainModule>NemuBusMouseMain</MainModule>
+    <ShowLicense/>
+</VirtualBoxExtensionPack>
+

@@ -1,0 +1,65 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Nemu RDP authentication plugins.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# The plugin.
+ifndef NEMU_ONLY_SDK
+ if ("$(KBUILD_TARGET)" != "linux" && "$(KBUILD_TARGET)" != "solaris") || defined(NEMU_WITH_PAM)
+  DLLS += NemuAuth
+ endif
+endif
+NemuAuth_TEMPLATE = NEMUR3
+NemuAuth_SOURCES.linux = pam/NemuAuthPAM.c
+NemuAuth_SOURCES.solaris = pam/NemuAuthPAM.c
+NemuAuth_SOURCES.freebsd = pam/NemuAuthPAM.c
+NemuAuth_SOURCES.win = winlogon/winlogon.cpp winlogon/NemuAuth.rc
+NemuAuth_SOURCES.darwin = directoryservice/directoryservice.cpp
+NemuAuth_LIBS.linux = $(LIB_RUNTIME) dl
+NemuAuth_LIBS.solaris = $(LIB_RUNTIME) dl
+NemuAuth_LIBS.freebsd = $(LIB_RUNTIME)
+NemuAuth_LIBS.darwin = $(LIB_RUNTIME)
+NemuAuth_LDFLAGS.darwin = -framework DirectoryService
+
+# The simple plugin.
+ifndef NEMU_ONLY_SDK
+ if defined(NEMU_WITH_MAIN)
+  DLLS += NemuAuthSimple
+ endif
+endif
+NemuAuthSimple_TEMPLATE = NEMUMAINCLIENTDLL
+NemuAuthSimple_SOURCES = simple/NemuAuthSimple.cpp
+NemuAuthSimple_SOURCES.win = simple/NemuAuthSimple.rc
+
+# Install the SDK samples.
+INSTALLS += NemuAuth-samples
+NemuAuth-samples_INST = $(INST_SDK)bindings/auth/
+NemuAuth-samples_MODE = a+r,u+w
+NemuAuth-samples_SOURCES = simple/NemuAuthSimple.cpp
+NemuAuth-samples_SOURCES.linux = pam/NemuAuthPAM.c
+NemuAuth-samples_SOURCES.win = winlogon/winlogon.cpp
+
+# Install the SDK header.
+INSTALLS += NemuAuth-sdkhdr
+NemuAuth-sdkhdr_INST = $(INST_SDK)bindings/auth/include/
+NemuAuth-sdkhdr_MODE = a+r,u+w
+NemuAuth-sdkhdr_SOURCES = $(PATH_ROOT)/include/Nemu/NemuAuth.h=>NemuAuth.h
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

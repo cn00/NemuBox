@@ -1,0 +1,20 @@
+'VirtualBox_title' = '@NEMU_PRODUCT@';
+
+'choiceNemuKEXTs_title' = '@NEMU_PRODUCT@ Kernel Extensions';
+'choiceNemuKEXTs_msg' = 'Installs the @NEMU_PRODUCT@ Kernel Extensions into /Library/Application Support/VirtualBox.';
+
+'choiceNemu_title' = '@NEMU_PRODUCT@';
+'choiceNemu_msg' = 'Installs the @NEMU_PRODUCT@ application into /Applications.';
+
+'choiceNemuCLI_title' = '@NEMU_PRODUCT@ Command Line Utilities';
+'choiceNemuCLI_msg' = 'Installs the @NEMU_PRODUCT@ command line utilities into /usr/bin.';
+
+'RUNNING_VMS_TLE' = "Running VirtualBox virtual machines detected!";
+'RUNNING_VMS_MSG' = "The installer has detected running virtual machines. Please shut down all running VirtualBox machines and then restart the installation.";
+
+'UNSUPPORTED_HW_MACHINE_TLE' = "Unsupported hardware architecture detected!";
+'UNSUPPORTED_HW_MACHINE_MSG' = "The installer has detected an unsupported architecture. VirtualBox only runs on the amd64 architecture.";
+
+'UNSUPPORTED_OS_TLE' = "Unsupported OS version detected!";
+'UNSUPPORTED_OS_MSG' = "The installer has detected an unsupported operation system. VirtualBox requires Mac OS X 10.8 or later.";
+

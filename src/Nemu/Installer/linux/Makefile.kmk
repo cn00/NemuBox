@@ -1,0 +1,589 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Linux installer.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include sub-makefiles.
+include $(PATH_SUB_CURRENT)/install_service/Makefile.kmk
+ifdef NEMU_WITH_TESTCASES
+ include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+endif
+
+ifneq ($(KBUILD_HOST),linux)
+ $(error "The Linux installer can only be built on Linux!")
+endif
+
+#
+# Globals and targets.
+#
+NEMU_PATH_LNX_INST_SRC  := $(PATH_SUB_CURRENT)
+NEMU_LNX_INST_OUT_DIR   := $(PATH_TARGET)/Installer/linux
+NEMU_LNX_INST_STAGE_DIR := $(PATH_TARGET)/Installer/linux/install
+NEMU_LNX_INST_STAGE_DIR_REL := obj/Installer/linux/install
+NEMU_LNX_DBG_PATH       := usr/lib/debug/opt/VirtualBox
+NEMU_LNX_PACKAGE_NAME    = VirtualBox-$(NEMU_VERSION_STRING)-r$(NEMU_SVN_REV).run
+
+# Unset this to speed up things during makefile hacking.
+NEMU_LNX_INST_DEP_ON_MAKEFILE := $(MAKEFILE_CURRENT)
+
+BLDDIRS  += $(NEMU_LNX_INST_OUT_DIR) $(NEMU_LNX_INST_STAGE_DIR)
+if !defined(NEMU_NO_LINUX_RUN_INSTALLER)
+ PACKING += $(PATH_STAGE_BIN)/$(NEMU_LNX_PACKAGE_NAME) \
+            $(PATH_STAGE_BIN)/VirtualBox-dbg.tar.bz2
+else
+ PACKING += $(PATH_STAGE_BIN)/VirtualBox.tar
+endif
+
+OTHER_CLEAN   += \
+	$(addprefix $(NEMU_LNX_INST_STAGE_DIR)/,\
+		install.sh \
+		nemudrv.sh \
+		VirtualBox.tar.bz2 \
+		LICENSE) \
+	$(wildcard $(NEMU_LNX_INST_OUT_DIR)/VirtualBox-*) \
+	$(addprefix $(NEMU_LNX_INST_OUT_DIR)/,\
+		nemudrv.sh \
+		install.sh)
+
+#
+# Linux installs.
+#
+INSTALLS += linux-bin
+linux-bin_INST = bin/
+linux-bin_MODE = a+rx,u+w
+linux-bin_SOURCES = \
+	postinst-common.sh \
+	prerm-common.sh \
+	routines.sh \
+	scripts/install.sh=>scripts/install.sh \
+	scripts/NemuHeadlessXOrg.sh=>scripts/NemuHeadlessXOrg.sh \
+	NemuSysInfo.sh \
+	nemuautostart-service.sh \
+	nemuballoonctrl-service.sh \
+	NemuCreateUSBNode.sh \
+	nemuweb-service.sh \
+	Nemu.sh=>Nemu.sh \
+	$(if $(NEMU_WITH_PYTHON),$(PATH_ROOT)/src/Nemu/Frontends/NemuShell/nemushell.py=>nemushell.py,)
+
+INSTALLS += linux-scripts
+linux-scripts_INST = $(NEMU_LNX_INST_STAGE_DIR_REL)/
+linux-scripts_MODE = a+rx,u+w
+linux-scripts_SOURCES = \
+	deffiles \
+	postinst-common.sh \
+	prerm-common.sh \
+	routines.sh \
+	uninstall.sh \
+	nemuautostart-service.sh \
+	nemuballoonctrl-service.sh \
+	nemuweb-service.sh
+
+INSTALLS += linux-misc
+linux-misc_INST = bin/
+linux-misc_MODE = a+r,u+w
+linux-misc_SOURCES = \
+	$(PATH_ROOT)/src/Nemu/Frontends/VirtualBox/images/$(if $(NEMU_OSE),OSE,NonOSE)/VirtualBox_32px.png=>Nemu.png \
+	$(NEMU_PATH_INST_COMMON_SRC)/virtualbox.xml \
+	$(if $(NEMU_OSE),,$(NEMU_BRAND_LICENSE_TXT)=>LICENSE) \
+	$(linux-misc_0_OUTDIR)/generated.sh=>scripts/generated.sh \
+	$(if $(NEMU_WITH_QTGUI),$(linux-misc_0_OUTDIR)/virtualbox.desktop,)
+linux-misc_CLEAN = \
+	$(linux-misc_0_OUTDIR)/generated.sh \
+	$(linux-misc_0_OUTDIR)/virtualbox.desktop
+
+$$(linux-misc_0_OUTDIR)/generated.sh: $(NEMU_VERSION_STAMP) $(NEMU_LNX_INST_DEP_ON_MAKEFILE) | $$(dir $$@)
+	$(call MSG_GENERATE,,$@,$<)
+	$(QUIET)$(RM) -f '$@'
+	$(QUIET)$(APPEND) '$@' 'NEMU_PRODUCT="$(NEMU_PRODUCT)"'
+	$(QUIET)$(APPEND) '$@' 'NEMU_VERSION_STRING="$(NEMU_VERSION_STRING)"'
+	$(QUIET)$(APPEND) '$@' 'NEMU_C_YEAR="$(NEMU_C_YEAR)"'
+	$(QUIET)$(APPEND) '$@' 'NEMU_VENDOR="$(NEMU_VENDOR)"'
+
+$$(linux-misc_0_OUTDIR)/virtualbox.desktop: $(NEMU_PATH_INST_COMMON_SRC)/virtualbox.desktop.in $(NEMU_VERSION_STAMP) | $$(dir $$@)
+	$(call MSG_GENERATE,,$@,$<)
+ifdef NEMU_PATH_PACKAGE_DOCS
+	$(QUIET)$(SED) -e "s+@NEMU_DOC_PATH@+$(NEMU_PATH_PACKAGE_DOCS)+" \
+		-e "s+@NEMU_PRODUCT@+$(NEMU_PRODUCT)+" \
+		--output $@ $<
+else
+	$(QUIET)$(SED) -e "s+@NEMU_DOC_PATH@+/opt/VirtualBox+" \
+		-e "s+@NEMU_PRODUCT@+$(NEMU_PRODUCT)+" \
+		--output $@ $<
+endif
+
+INSTALLS += linux-icons
+linux-icons_INST = bin/icons/
+linux-icons_MODE = a+r,u+w
+linux-icons_SOURCES = $(NEMU_MIME_ICONS) $(NEMU_DESKTOP_ICONS)
+
+
+#
+# The files residing in bin/ that we'll ship.
+#
+
+# Strip these binaries
+NEMU_LNX_STRIP_BIN = \
+	NemuDD.so \
+	NemuDD2.so \
+	NemuREM.so \
+	NemuDDU.so \
+	NemuVMM.so \
+	$(if $(eq $(KBUILD_TARGET_ARCH),x86),NemuREM32.so,) \
+	$(if $(eq $(KBUILD_TARGET_ARCH),x86),NemuREM64.so,) \
+	NemuRT.so \
+	$(if $(NEMU_WITH_NEMUSDL),NemuSDL $(if $(NEMU_WITH_HARDENING),NemuSDL.so),) \
+	$(if $(NEMU_WITH_SHARED_CLIPBOARD), NemuSharedClipboard.so,) \
+	$(if $(NEMU_WITH_SHARED_FOLDERS), NemuSharedFolders.so,) \
+	$(if $(NEMU_WITH_GUEST_PROPS),NemuGuestPropSvc.so,) \
+	$(if $(NEMU_WITH_GUEST_CONTROL),NemuGuestControlSvc.so,) \
+	NemuHostChannel.so \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NemuDragAndDropSvc.so,) \
+	$(if $(NEMU_WITH_MAIN), \
+		NemuAutostart \
+		NemuBalloonCtrl \
+		NemuManage \
+		NemuNetDHCP $(if $(NEMU_WITH_HARDENING),NemuNetDHCP.so,) \
+		$(if $(NEMU_WITH_LWIP_NAT),NemuNetNAT $(if $(NEMU_WITH_HARDENING),NemuNetNAT.so,),) \
+		NemuNetAdpCtl \
+		$(if $(NEMU_WITH_DEVMAPPER),NemuVolInfo,) \
+		NemuSVC \
+		NemuXPCOM.so \
+		NemuXPCOMC.so \
+		NemuXPCOMIPCD \
+		components/NemuXPCOMIPCC.so \
+		components/NemuSVCM.so \
+		components/NemuC.so,) \
+	$(if $(NEMU_WITH_CROGL),\
+		NemuOGLhostcrutil.so \
+		NemuOGLhosterrorspu.so \
+		NemuOGLrenderspu.so \
+		$(if $(NEMU_WITH_QTGUI),NemuTestOGL,) \
+		NemuSharedCrOpenGL.so,) \
+	$(if $(NEMU_WITH_VMSVGA3D),NemuSVGA3D.so,) \
+	$(if $(NEMU_WITH_PYTHON),$(notdir $(wildcard $(PATH_STAGE_BIN)/NemuPython*.so)),) \
+	$(if $(NEMU_WITH_JXPCOM),libnemujxpcom.so,) \
+	$(if $(and $(NEMU_WITH_EXTPACK_VNC),$(NEMU_WITHOUT_EXTPACK_VNC_PACKING)), \
+		ExtensionPacks/VNC/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/NemuVNC.so \
+		ExtensionPacks/VNC/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)/NemuVNCMain.so,) \
+	$(if $(NEMU_WITH_DTRACE),NemuDTrace,)\
+	NemuTunctl \
+	helpers/generate_service_file
+
+# Do not remove relocation information of these binaries
+NEMU_LNX_STRIP_OBJ = \
+	NemuDD2R0.r0 \
+	NemuDDR0.r0 \
+	NemuVMMR0.r0
+ifdef NEMU_NO_LINUX_RUN_INSTALLER
+ NEMU_LNX_STRIP_OBJ += \
+	NemuDD2R0.debug \
+	NemuDDR0.debug \
+	VMMR0.debug
+else
+ NEMU_LNX_DBG_BIN = \
+	NemuDD2R0.debug \
+	NemuDDR0.debug \
+	VMMR0.debug
+endif
+
+ifdef NEMU_WITH_RAW_MODE
+ NEMU_LNX_STRIP_OBJ += \
+	NemuDD2RC.rc \
+	NemuDDRC.rc \
+	VMMRC.rc
+ ifdef NEMU_NO_LINUX_RUN_INSTALLER
+  NEMU_LNX_STRIP_OBJ += \
+	NemuDD2RC.debug \
+	NemuDDRC.debug \
+	VMMRC.debug
+ else
+  NEMU_LNX_DBG_BIN += \
+	NemuDD2RC.debug \
+	NemuDDRC.debug \
+	VMMRC.debug
+ endif
+endif
+
+# Do not strip anything of these files
+NEMU_LNX_NO_STRIP = \
+	$(if $(NEMU_OSE),,LICENSE) \
+	$(if $(NEMU_WITH_MAIN), \
+	  components/NemuXPCOMBase.xpt \
+	  components/VirtualBox_XPCOM.xpt) \
+	$(if $(NEMU_WITH_PYTHON),nemushell.py,) \
+	$(if $(and $(NEMU_WITH_EXTPACK_VNC),$(NEMU_WITHOUT_EXTPACK_VNC_PACKING)), \
+	  ExtensionPacks/VNC/ExtPack.xml \
+	  ExtensionPacks/VNC/ExtPack-license.html \
+	  ExtensionPacks/VNC/ExtPack-license.rtf \
+	  ExtensionPacks/VNC/ExtPack-license.txt,) \
+	postinst-common.sh \
+	prerm-common.sh \
+	routines.sh \
+	NemuSysInfo.sh \
+	nemuautostart-service.sh \
+	nemuballoonctrl-service.sh \
+	NemuCreateUSBNode.sh \
+	nemudrv.sh \
+	Nemu.sh \
+	nemuweb-service.sh \
+	Nemu.png \
+	scripts
+
+ifdef NEMU_WITH_EXTPACK
+ NEMU_LNX_STRIP_BIN += \
+	NemuExtPackHelperApp
+endif
+
+# Qt4 GUI
+ifdef NEMU_WITH_QTGUI
+ include $(PATH_ROOT)/src/Nemu/Frontends/VirtualBox/nls/ApprovedLanguages.kmk
+ NEMU_LNX_STRIP_BIN += \
+ 	NemuKeyboard.so \
+ 	VirtualBox \
+ 	$(if $(NEMU_WITH_HARDENING),VirtualBox.so) \
+	$(if $(NEMU_WITH_DEBUGGER_GUI),NemuDbg.so DbgPlugInDiggers.so)
+ NEMU_LNX_NO_STRIP += \
+	virtualbox.desktop \
+	virtualbox.xml \
+	$(NEMU_LICENSE_FILES) \
+ 	$(if $(NEMU_WITH_QT4_SUN),$(notdir $(wildcard $(PATH_STAGE_BIN)/lib*Nemu*)),) \
+	$(if $(NEMU_WITH_QT4_SUN),accessible/libqtaccessiblewidgets.so,) \
+ 	$(foreach f,$(NEMU_APPROVED_GUI_LANGUAGES),nls/VirtualBox_$(f).qm nls/qt_$(f).qm) \
+	icons
+endif
+
+# Guest Additions
+ifdef NEMU_WITH_ADDITIONS_PACKING
+ NEMU_LNX_NO_STRIP += \
+ 	additions/NemuGuestAdditions.iso
+endif
+
+# Documentation
+ifdef NEMU_WITH_DOCS_PACKING
+ NEMU_LNX_NO_STRIP += \
+	UserManual.pdf \
+	$(foreach f,$(NEMU_MANUAL_ADD_LANGUAGES),UserManual_$(f).pdf)
+ ifdef NEMU_WITH_DOCS_CHM
+  NEMU_LNX_NO_STRIP += \
+  	VirtualBox.chm \
+	$(foreach f,$(NEMU_MANUAL_ADD_LANGUAGES),VirtualBox_$(f).chm)
+ endif
+ NEMU_LNX_STRIP_BIN += \
+	$(if $(NEMU_WITH_KCHMVIEWER),kchmviewer,)
+endif
+
+# auth stuff
+NEMU_LNX_STRIP_BIN += \
+	$(if $(NEMU_WITH_PAM),NemuAuth.so,) \
+	NemuAuthSimple.so
+
+# VRDP
+ifdef NEMU_WITH_VRDP
+ ifndef NEMU_WITH_EXTPACK_PUEL
+  NEMU_LNX_STRIP_BIN += \
+  	NemuVRDP.so
+ endif
+endif
+ifdef NEMU_WITH_VRDP_RDESKTOP
+ NEMU_LNX_NO_STRIP += \
+	rdesktop-vrdp.tar.gz
+ NEMU_LNX_NO_STRIP += \
+ 	rdesktop-vrdp-keymaps
+ NEMU_LNX_STRIP_BIN += \
+ 	rdesktop-vrdp
+endif
+
+# Python XPCOM glue
+ifdef NEMU_WITH_PYTHON
+ NEMU_LNX_NO_STRIP += \
+ 	$(NEMUINST_SDK_BINDINGS_XPCOM_PYTHON_FILES) \
+ 	$(NEMUINST_SDK_INSTALLER_PYTHON_FILES)
+endif
+
+# Java XPCOM bridge
+ifdef NEMU_WITH_JXPCOM
+ NEMU_LNX_NO_STRIP += \
+	sdk/bindings/xpcom/java/nemujxpcom.jar
+endif
+
+# Headless
+ifdef NEMU_WITH_HEADLESS
+ NEMU_LNX_STRIP_BIN += \
+	NemuHeadless \
+	$(if $(NEMU_WITH_HARDENING),NemuHeadless.so)
+endif
+
+# Webservices
+ifdef NEMU_WITH_WEBSERVICES
+ NEMU_LNX_STRIP_BIN += \
+ 	nemuwebsrv \
+ 	webtest
+endif
+
+# nemu-img
+if defined(NEMU_WITH_TESTCASES) || defined(NEMU_WITH_NEMU_IMG)
+  NEMU_LNX_STRIP_BIN += \
+	nemu-img
+endif
+
+# EFI firmware
+ifdef NEMU_WITH_EFIFW_PACKING
+ NEMU_LNX_NO_STRIP += \
+ 	NemuEFI32.fd \
+ 	NemuEFI64.fd
+endif
+
+# DTrace library and scripts.
+ifdef NEMU_WITH_DTRACE
+ NEMU_LNX_NO_STRIP += \
+ 	$(addprefix dtrace/lib/$(KBUILD_TARGET_ARCH)/,$(NEMUINST_DTRACE_LIB_ARCH_FILES)) \
+ 	$(addprefix dtrace/testcase/$(KBUILD_TARGET_ARCH)/,$(NEMUINST_DTRACE_TESTCASE_ARCH_FILES)) \
+ 	$(addprefix dtrace/scripts/,$(NEMUINST_DTRACE_SCRIPTS_FILES))
+endif
+
+# Icons
+NEMU_MIME_ICONS = \
+	$(addprefix $(PATH_ROOT)/src/Nemu/Artwork/other/,\
+	    $(foreach f,ova ovf nemu nemu-extpack vdi vmdk vhd hdd, \
+	        $(foreach s,16 20 24 32 48 64 72 96 128 256,\
+		    virtualbox-$(f)-$(s)px.png=>$(s)x$(s)/virtualbox-$(f).png)))
+
+NEMU_DESKTOP_ICONS = \
+	$(addprefix $(PATH_ROOT)/src/Nemu/Artwork/$(if $(NEMU_OSE),OSE,NonOSE)/,\
+	    $(foreach s,16 20 32 40 48 64 128,\
+		virtualbox-$(s)px.png=>$(s)x$(s)/virtualbox.png) \
+		virtualbox.svg=>scalable/virtualbox.svg)
+
+#
+# All the bin files that goes into the archives.
+#
+NEMU_LNX_ARCH_FILES := $(NEMU_LNX_STRIP_BIN) $(NEMU_LNX_STRIP_OBJ) $(NEMU_LNX_NO_STRIP) src
+
+# Cleanup of the files we copy/symlink from bin.
+OTHER_CLEAN += $(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive/,$(filter-out src,$(NEMU_LNX_ARCH_FILES)) src/nemuhost) \
+	       $(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH)/,\
+		  $(NEMU_LNX_STRIP_BIN) $(NEMU_LNX_DBG_BIN))
+
+#
+# The generic installer.
+#
+$(PATH_STAGE_BIN)/$(NEMU_LNX_PACKAGE_NAME): \
+		$(NEMU_LNX_INST_STAGE_DIR)/VirtualBox.tar.bz2 \
+		$(NEMU_VERSION_STAMP) \
+		$(if $(NEMU_OSE),,$(NEMU_BRAND_LICENSE_TXT)) \
+		$(NEMU_LNX_INST_OUT_DIR)/nemudrv.sh \
+		$(NEMU_LNX_INST_OUT_DIR)/install.sh \
+		$(NEMU_PATH_LNX_INST_SRC)/installer-common.sh \
+		$$(linux-scripts_2_STAGE_TARGETS)
+	$(call MSG_TOOL,makeself,,$@)
+	$(QUIET)$(RM) -f $(wildcard $(PATH_STAGE_BIN)/VirtualBox-*.run)
+	$(QUIET)$(if $(NEMU_OSE),,$(INSTALL) -m 0644 $(NEMU_BRAND_LICENSE_TXT)    $(NEMU_LNX_INST_STAGE_DIR)/LICENSE)
+	$(QUIET)$(INSTALL) -m 0755 $(NEMU_LNX_INST_OUT_DIR)/nemudrv.sh            $(NEMU_LNX_INST_STAGE_DIR)/
+	$(QUIET)$(INSTALL) -m 0755 $(NEMU_LNX_INST_OUT_DIR)/install.sh            $(NEMU_LNX_INST_STAGE_DIR)/
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(NEMU_MAKESELF) --follow --nocomp $(NEMU_LNX_INST_STAGE_DIR) $@ \
+		"VirtualBox for Linux installation" ./install.sh "\$$0 1> /dev/null"
+
+# files that needs editing before they can be included in the generic installer.
+$(NEMU_LNX_INST_OUT_DIR)/nemudrv.sh: $(NEMU_PATH_LNX_INST_SRC)/nemudrv.sh.in | $$(dir $$@)
+	$(QUIET)$(SED_EXT) \
+		-e "s|%NOLSB%|yes|g" \
+		-e "s|%DEBIAN%||g" \
+		-e "s|%PACKAGE%|virtualbox|g" \
+		-e "s|%VERSION%|$(NEMU_VERSION_STRING)|g" \
+		-e "s|%GROUP%|$(if $(NEMU_WITHOUT_HARDENING),nemuusers,root)|g" \
+		--output $@ \
+		$<
+
+$(PATH_STAGE_BIN)/nemudrv.sh: $(NEMU_PATH_LNX_INST_SRC)/nemudrv.sh.in | $$(dir $$@)
+	$(QUIET)$(SED_EXT) \
+		-e "s|%VERSION%|$(NEMU_VERSION_STRING)|g" \
+		-e "s|%GROUP%|$(if $(NEMU_WITHOUT_HARDENING),nemuusers,root)|g" \
+		--output $@ \
+		$<
+	$(QUIET)$(CHMOD) 0755 $@
+
+$(NEMU_LNX_INST_OUT_DIR)/install.sh: $(NEMU_PATH_LNX_INST_SRC)/install.sh $(NEMU_PATH_LNX_INST_SRC)/installer-common.sh $(NEMU_VERSION_STAMP) $(NEMU_SVN_REV_KMK).ts | $$(dir $$@)
+	$(QUIET)$(SED) \
+		-e "s;_VERSION_;$(NEMU_VERSION_STRING);g" \
+		-e "s;_SVNREV_;$(NEMU_SVN_REV);g" \
+		-e "s;_BUILD_;$(date-utc );g" \
+		-e "s;_ARCH_;$(KBUILD_TARGET_ARCH);g" \
+		-e "s;_HARDENED_;$(NEMU_WITH_HARDENING);g" \
+		-e "s;_BUILDTYPE_;$(KBUILD_TYPE);g" \
+		-e "s;_USERNAME_;$(USERNAME);g" \
+		-e "s;_PYTHON_;$(NEMU_WITH_PYTHON);g" \
+		-e '/#include installer-common.sh/ {' \
+		-e "r $(PATH_ROOT)/src/Nemu/Installer/linux/installer-common.sh" \
+		-e 'd' \
+		-e '}' \
+		--output $@ \
+		$<
+
+#
+# The files that the tar archives depend on.  The wildcards are ugly, but they
+# do save us from having to update the makefile whenever something new is added
+# to the module source directories.
+#
+NEMU_LNX_INST_ARCH_DEPS := \
+	$(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive/, $(NEMU_LNX_ARCH_FILES)) \
+	$(NEMU_LNX_INST_DEP_ON_MAKEFILE) \
+	$(NEMU_VERSION_STAMP) \
+	$(wildcard $(PATH_STAGE_BIN)/src/*) \
+	$(wildcard $(PATH_STAGE_BIN)/src/*/*) \
+	$(wildcard $(PATH_STAGE_BIN)/src/*/*/*) \
+	$(wildcard $(PATH_STAGE_BIN)/src/*/*/*/*) \
+	$(wildcard $(PATH_STAGE_BIN)/scripts/*)
+
+
+#
+# .tar.bz2 for converting into .run
+#
+$(NEMU_LNX_INST_STAGE_DIR)/VirtualBox.tar.bz2: $(NEMU_LNX_INST_ARCH_DEPS)
+	$(call MSG_L1,Packing $@)
+	$(QUIET)$(RM) -f -- $@ $(patsubst %.bz2,%,$@)
+	$(QUIET)$(MKDIR) -p $(@D)
+ifdef NEMU_USE_PBZIP2
+	$(QUIET)tar --dereference --owner 0 --group 0 \
+		-cRhf $(patsubst %.bz2,%,$@) -C $(NEMU_LNX_INST_OUT_DIR)/archive $(NEMU_LNX_ARCH_FILES)
+	$(QUIET)pbzip2 $(patsubst %.bz2,%,$@)
+else
+	$(QUIET)tar --dereference --owner 0 --group 0 \
+		-cjRhf $@ -C $(NEMU_LNX_INST_OUT_DIR)/archive $(NEMU_LNX_ARCH_FILES)
+endif
+	$(QUIET)$(CHMOD) 0644 $@
+
+#
+# .tar for distribution with the files under VirtualBox-<ver>/.
+#
+$(PATH_STAGE_BIN)/VirtualBox.tar: $(NEMU_LNX_INST_ARCH_DEPS)
+	$(call MSG_L1,Packing $@)
+	$(QUIET)$(RM) -f -- $(NEMU_LNX_INST_OUT_DIR)/VirtualBox-$(NEMU_VERSION_STRING) $@ $(patsubst %.bz2,%,$@)
+	$(QUIET)$(LN_SYMLINK) $(NEMU_LNX_INST_OUT_DIR)/archive/ $(NEMU_LNX_INST_OUT_DIR)/VirtualBox-$(NEMU_VERSION_STRING)
+	$(QUIET)tar --dereference --owner 0 --group 0 \
+		-cRhf $@ -C $(NEMU_LNX_INST_OUT_DIR) \
+		$(addprefix VirtualBox-$(NEMU_VERSION_STRING)/,$(NEMU_LNX_ARCH_FILES))
+	$(QUIET)$(RM) -f -- $(NEMU_LNX_INST_OUT_DIR)/VirtualBox-$(NEMU_VERSION_STRING)
+
+
+# pattern rule for stripping and copying the NEMU_LNX_STRIP_BIN files to archive/
+$(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive/,$(NEMU_LNX_STRIP_BIN)): \
+		$(NEMU_LNX_INST_OUT_DIR)/archive/% : $(PATH_STAGE_BIN)/% \
+		$(if $(NEMU_NO_LINUX_RUN_INSTALLER),,\
+		    $(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH)/%) \
+		| $$(dir $$@)
+	$(call MSG_INST_FILE,$<,$@)
+	$(QUIET)$(INSTALL) -m 0755 $(if $(NEMU_DO_STRIP),-s,) $< $@
+	$(QUIET)$(if $(NEMU_NO_LINUX_RUN_INSTALLER),,objcopy --add-gnu-debuglink=$(subst $(NEMU_LNX_INST_OUT_DIR)/archive,$(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH),$@) $@)
+
+# pattern rule for copying NEMU_LNX_DBG_BIN files to archive-dbg/
+$(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH)/,$(NEMU_LNX_DBG_BIN)): \
+		$(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH)/% : $(PATH_STAGE_BIN)/% | $$(dir $$@)
+	$(call MSG_INST_FILE,$<,$@)
+	$(QUIET)$(CP) $< $@
+
+# pattern rule for striping and copying the NEMU_LNX_STRIP_OBJ files to archive/
+$(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive/,$(NEMU_LNX_STRIP_OBJ)): \
+		$(NEMU_LNX_INST_OUT_DIR)/archive/% : $(PATH_STAGE_BIN)/% | $$(dir $$@)
+	$(call MSG_INST_FILE,$<,$@)
+ifeq ($(NEMU_DO_STRIP),)
+	$(QUIET)$(INSTALL) -m 0644 $< $@
+else # strip to temp file because of umask.
+	$(QUIET)objcopy --strip-unneeded -R .comment $< $@.tmp
+	$(QUIET)$(INSTALL) -m 0644 $@.tmp $@
+	$(QUIET)$(RM) -f -- $@.tmp
+endif
+
+# special rule for the kernel modules
+$(NEMU_LNX_INST_OUT_DIR)/archive/src: $(PATH_STAGE_BIN)/src | $(dir $@)
+	$(call MSG_INST_SYM,$<,$@)
+	$(QUIET)$(RM) -Rf $@
+	$(QUIET)$(MKDIR) $@
+	$(QUIET)$(LN_SYMLINK) $< $@/nemuhost
+
+# pattern rule for linking the NEMU_LNX_NO_STRIP into archive/
+$(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive/,$(NEMU_LNX_NO_STRIP)): \
+		$(NEMU_LNX_INST_OUT_DIR)/archive/% : $(PATH_STAGE_BIN)/% | $$(dir $$@)
+	$(call MSG_INST_SYM,$<,$@)
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(LN_SYMLINK) $< $@
+
+# rules for creating directories in archive (the pattern rules depends on these).
+BLDDIRS += $(foreach d,\
+	archive \
+	archive/components \
+	archive/helpers \
+	archive/nls \
+	$(if $(NEMU_WITH_QT4_SUN),archive/accessible,) \
+	$(if $(NEMU_WITH_PYTHON),\
+	  archive/sdk/installer \
+	  archive/sdk/installer/nemuapi \
+	  archive/sdk/bindings/xpcom/python/xpcom \
+	  archive/sdk/bindings/xpcom/python/xpcom/client \
+	  archive/sdk/bindings/xpcom/python/xpcom/server,) \
+	$(if $(NEMU_WITH_JXPCOM),\
+	  archive/sdk/bindings/xpcom/java,) \
+	$(if $(and $(NEMU_WITH_EXTPACK_VNC),$(NEMU_WITHOUT_EXTPACK_VNC_PACKING)), \
+	  archive/ExtensionPacks/VNC \
+	  archive/ExtensionPacks/VNC/$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH),) \
+	archive/additions \
+	install \
+       $(if $(NEMU_WITH_DTRACE),\
+	  archive/dtrace \
+	  archive/dtrace/lib \
+	  archive/dtrace/lib/$(KBUILD_TARGET_ARCH) \
+	  archive/dtrace/testcase/ \
+	  archive/dtrace/testcase/$(KBUILD_TARGET_ARCH) \
+	  archive/dtrace/scripts,) \
+,$(NEMU_LNX_INST_OUT_DIR)/$(d)/)
+
+
+#
+# .tar.bz2 for with the debug info.
+#
+$(PATH_STAGE_BIN)/VirtualBox-dbg.tar.bz2: \
+		$(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH)/,\
+		    $(NEMU_LNX_STRIP_BIN) $(NEMU_LNX_DBG_BIN))
+	$(call MSG_L1,Packing $@)
+	$(QUIET)$(RM) -f -- $@ $(patsubst %.bz2,%,$@)
+ifdef NEMU_USE_PBZIP2
+	$(QUIET)tar --dereference --owner 0 --group 0 \
+		-cRhf $(patsubst %.bz2,%,$@) -C $(NEMU_LNX_INST_OUT_DIR)/archive-dbg \
+		$(addprefix $(NEMU_LNX_DBG_PATH)/,$(NEMU_LNX_STRIP_BIN) $(NEMU_LNX_DBG_BIN))
+	$(QUIET)pbzip2 $(patsubst %.bz2,%,$@)
+else
+	$(QUIET)tar --dereference --owner 0 --group 0 \
+		-cjRhf $@ -C $(NEMU_LNX_INST_OUT_DIR)/archive-dbg \
+		$(addprefix $(NEMU_LNX_DBG_PATH)/,$(NEMU_LNX_STRIP_BIN) $(NEMU_LNX_DBG_BIN))
+endif
+
+# pattern rule for copying the debug info from the NEMU_LNX_STRIP_BIN files into archive-dbg/$(NEMU_LNX_DBG_PATH)/
+$(addprefix $(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH)/,$(NEMU_LNX_STRIP_BIN)): \
+		$(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(NEMU_LNX_DBG_PATH)/% : $(PATH_STAGE_BIN)/% | $$(dir $$@)
+	$(call MSG_TOOL,copydbg,$<,$@)
+	$(QUIET)objcopy --only-keep-debug $< $@
+
+# rules for creating directories in archive-dbg (the pattern rules depends on these).
+BLDDIRS += $(foreach d,\
+	$(NEMU_LNX_DBG_PATH) \
+	$(NEMU_LNX_DBG_PATH)/components \
+	$(NEMU_LNX_DBG_PATH)/helpers \
+,$(NEMU_LNX_INST_OUT_DIR)/archive-dbg/$(d)/)
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

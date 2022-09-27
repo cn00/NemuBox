@@ -1,0 +1,733 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Solaris installer.
+#
+
+#
+# Copyright (C) 2007-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+ifneq ($(KBUILD_HOST),solaris)
+$(error "The Solaris installer can only be built on Solaris!") # yeah, right.
+endif
+
+
+#
+# Globals
+#
+NEMU_PATH_SOL_INST_SRC     := $(PATH_SUB_CURRENT)
+NEMU_PATH_SI_SCRATCH       := $(PATH_TARGET)/Installer-solaris
+NEMU_PATH_SI_SCRATCH_PKG   := $(PATH_TARGET)/Installer-solaris/pkg
+NEMU_PATH_SI_SCRATCH_DBG   := $(PATH_TARGET)/Installer-solaris/DebugPkg
+NEMU_SI_ARCH               := $(subst x86,i386,$(KBUILD_TARGET_ARCH))
+NEMU_SI_ICON_TYPES         := ova ovf nemu nemu-extpack vdi vmdk vhd hdd
+NEMU_SI_ICON_SIZES         := 16 20 24 32 48 64 72 96 128 256
+NEMU_SI_GTAR               := /usr/sfw/bin/gtar
+NEMU_SI_OBJCOPY_STRIP      := /usr/sfw/bin/gobjcopy --strip-debug -R .comment
+ifeq ($(KBUILD_TARGET_ARCH),amd64)
+ NEMU_SI_OBJCOPY_DBGINFO   := /usr/sfw/bin/gobjcopy --only-keep-debug
+else
+ NEMU_SI_OBJCOPY_DBGINFO   := $(CP) -p # Solaris ld/gobjcopy(2.15) don't get along on x86, works only on amd64. So just using cp for now.
+endif
+
+# Unset this to speed up things during makefile hacking.
+NEMU_SI_DEP_ON_MAKEFILE    := $(MAKEFILE_CURRENT)
+
+
+# Base package
+PKGINFO_ARCH      = $(shell uname -p)
+PKGINFO_REVSTAMP  = $(date %Y.%m.%d.%H.%M)
+PKG_FILENAME     := VirtualBox-$(NEMU_VERSION_STRING)-SunOS-$(KBUILD_TARGET_ARCH)-r$(NEMU_SVN_REV)
+
+
+#
+# Targets
+#
+PROGRAMS         += NemuZoneAccess NemuISAExec
+INSTALLS         += solaris-doc solaris-bin solaris-drv-confs solaris-icons
+BLDDIRS          += $(NEMU_PATH_SI_SCRATCH)
+PACKING          += \
+	$(PATH_STAGE_BIN)/$(PKG_FILENAME).tar.gz \
+	$(PATH_STAGE_BIN)/VirtualBoxDebug.tar.bz2
+OTHER_CLEAN      += \
+	$(NEMU_PATH_SI_SCRATCH)/$(PKG_FILENAME).pkg \
+	$(PATH_STAGE_BIN)/$(PKG_FILENAME).tar.gz \
+	$(PATH_STAGE_BIN)/VirtualBoxDebug.tar.bz2
+
+#
+# NemuZoneAccess
+#
+NemuZoneAccess_TEMPLATE = NEMUR3EXE
+NemuZoneAccess_DEPS     = $(NEMU_SVN_REV_KMK)
+NemuZoneAccess_SOURCES  = NemuZoneAccess.c
+NemuZoneAccess_LIBS     = $(LIB_RUNTIME)
+
+#
+# NemuISAExec
+#
+NemuISAExec_TEMPLATE = NEMUR3EXE
+NemuISAExec_DEPS     = $(NEMU_SVN_REV_KMK)
+NemuISAExec_SOURCES  = NemuISAExec.c
+
+#
+# Solaris installs.
+#
+solaris-doc_INST    = bin/
+solaris-doc_MODE    = a+r,u+w
+solaris-doc_SOURCES = \
+	$(NEMU_BRAND_LICENSE_TXT)=>LICENSE \
+	$(PATH_ROOT)/src/Nemu/Frontends/VirtualBox/images/$(if $(NEMU_OSE),OSE,NonOSE)/VirtualBox_64px.png=>Nemu.png \
+	$(PATH_ROOT)/src/Nemu/Artwork/$(if $(NEMU_OSE),OSE,NonOSE)/virtualbox-128px.png=>virtualbox.png
+
+solaris-bin_INST = bin/
+solaris-bin_MODE = a+rx,u+w
+solaris-bin_SOURCES = \
+	$(if $(NEMU_WITH_PYTHON),$(PATH_ROOT)/src/Nemu/Frontends/NemuShell/nemushell.py,) \
+	$(NEMU_PATH_SOL_INST_SRC)/nemuconfig.sh \
+	$(NEMU_PATH_SOL_INST_SRC)/Nemu.sh \
+	$(NEMU_PATH_SOL_INST_SRC)/pkginstall.sh \
+	$(NEMU_PATH_SOL_INST_SRC)/smf-nemuballoonctrl.sh \
+	$(NEMU_PATH_SOL_INST_SRC)/smf-nemuautostart.sh \
+	$(if $(NEMU_WITH_WEBSERVICES),$(NEMU_PATH_SOL_INST_SRC)/smf-nemuwebsrv.sh,)
+
+solaris-drv-confs_INST = bin/
+solaris-drv-confs_MODE = a+r,u+w
+solaris-drv-confs_SOURCES = \
+	$(PATH_ROOT)/src/Nemu/HostDrivers/Support/solaris/nemudrv.conf \
+	$(if $(NEMU_WITH_NETFLT),$(PATH_ROOT)/src/Nemu/HostDrivers/NemuNetFlt/solaris/nemuflt.conf) \
+	$(if $(NEMU_WITH_NETFLT_CROSSBOW),$(PATH_ROOT)/src/Nemu/HostDrivers/NemuNetFlt/solaris/nemubow.conf) \
+	$(if $(NEMU_WITH_NETADP),$(PATH_ROOT)/src/Nemu/HostDrivers/NemuNetAdp/solaris/nemunet.conf) \
+	$(if $(NEMU_WITH_USB),$(PATH_ROOT)/src/Nemu/HostDrivers/NemuUSB/solaris/nemuusbmon.conf) \
+	$(if $(NEMU_WITH_USB),$(PATH_ROOT)/src/Nemu/HostDrivers/NemuUSB/solaris/nemuusb.conf)
+
+solaris-icons_INST = bin/icons/
+solaris-icons_MODE = a+r,u+w
+solaris-icons_SOURCES = $(foreach f,$(NEMU_SI_ICON_TYPES), $(foreach s,$(NEMU_SI_ICON_SIZES)\
+	,$(PATH_ROOT)/src/Nemu/Artwork/other/virtualbox-$(f)-$(s)px.png=>$(s)x$(s)/mimetypes/virtualbox-$(f).png))
+
+
+#
+# What follows is various files lists (and a symlink list) that lists various
+# types of files going from/to various places during installation.
+#
+# Each list has the following attributes (used by makefile command and
+# dependency generation):
+#       .SUBDIRS := <yes|no>
+#       .STRIP   := <yes|objcopy|no>
+#       .MODE    := <0644|0755>
+#       .SRC     := <Directory to copy the files from>
+#       .DST     := <Directory to copy the files to>
+#
+
+
+## List of file list variable names.
+SOLARIS_FILE_LIST_VARS :=
+
+## @def SOLARIS_ETC_FILES
+# System-wide configuration files to copy from NEMU_PATH_SOL_INST_SRC to /etc.
+SOLARIS_FILE_LIST_VARS += SOLARIS_ETC_FILES
+SOLARIS_ETC_FILES.SUBDIRS := yes
+SOLARIS_ETC_FILES.STRIP   := no
+SOLARIS_ETC_FILES.MODE    := 0644
+SOLARIS_ETC_FILES.SRC     := $(PATH_ROOT)/src/Nemu/HostDrivers/NemuNetAdp/solaris
+SOLARIS_ETC_FILES.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/etc
+SOLARIS_ETC_FILES := $(if-expr defined(NEMU_WITH_NETADP),hostname.nemunet0,)
+
+## @def SOLARIS_SMF_FILES
+# Service management facility manifest files to copy from NEMU_PATH_SOL_INST_SRC to /var/svc/manifest/application/virtualbox/.
+SOLARIS_FILE_LIST_VARS += SOLARIS_SMF_FILES
+SOLARIS_SMF_FILES.SUBDIRS := yes
+SOLARIS_SMF_FILES.STRIP   := no
+SOLARIS_SMF_FILES.MODE    := 0644
+SOLARIS_SMF_FILES.SRC     := $(NEMU_PATH_SOL_INST_SRC)
+SOLARIS_SMF_FILES.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/var/svc/manifest/application/virtualbox
+SOLARIS_SMF_FILES = \
+	virtualbox-zoneaccess.xml \
+	virtualbox-balloonctrl.xml \
+	virtualbox-autostart.xml \
+	$(if-expr defined(NEMU_WITH_WEBSERVICES),virtualbox-webservice.xml,)
+
+## @def SOLARIS_MIME_INFO_FILES
+# MIME info files to be copied directly from NEMU_PATH_SOL_INST_SRC to /usr/share/mime-info/.
+SOLARIS_FILE_LIST_VARS += SOLARIS_MIME_INFO_FILES
+SOLARIS_MIME_INFO_FILES.SUBDIRS := yes
+SOLARIS_MIME_INFO_FILES.STRIP   := no
+SOLARIS_MIME_INFO_FILES.MODE    := 0644
+SOLARIS_MIME_INFO_FILES.SRC     := $(NEMU_PATH_SOL_INST_SRC)
+SOLARIS_MIME_INFO_FILES.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/mime-info
+SOLARIS_MIME_INFO_FILES = \
+	virtualbox.keys \
+	virtualbox.mime
+
+## @def SOLARIS_PIXMAP_FILES
+# Bitmap files to copy directly from INST_BIN to /usr/share/pixmaps/.
+SOLARIS_FILE_LIST_VARS += SOLARIS_PIXMAP_FILES
+SOLARIS_PIXMAP_FILES.SUBDIRS = no
+SOLARIS_PIXMAP_FILES.STRIP   = no
+SOLARIS_PIXMAP_FILES.MODE    = 0644
+SOLARIS_PIXMAP_FILES.SRC     = $(PATH_STAGE_BIN)
+SOLARIS_PIXMAP_FILES.DST     = $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/pixmaps
+SOLARIS_PIXMAP_FILES = \
+	Nemu.png \
+	virtualbox.png
+
+
+## @def SOLARIS_INSTALLER_SCRIPTS
+# Installer shell scripts that gets copied directly from NEMU_PATH_SOL_INST_SRC to NEMU_PATH_SI_SCRATCH_PKG (/).
+SOLARIS_FILE_LIST_VARS += SOLARIS_INSTALLER_SCRIPTS
+SOLARIS_INSTALLER_SCRIPTS.SUBDIRS = no
+SOLARIS_INSTALLER_SCRIPTS.STRIP   = no
+SOLARIS_INSTALLER_SCRIPTS.MODE    = 0755
+SOLARIS_INSTALLER_SCRIPTS.SRC     = $(NEMU_PATH_SOL_INST_SRC)
+SOLARIS_INSTALLER_SCRIPTS.DST     = $(NEMU_PATH_SI_SCRATCH_PKG)
+SOLARIS_INSTALLER_SCRIPTS = \
+	postinstall.sh \
+	checkinstall.sh \
+	preremove.sh \
+	makepackage.sh
+
+## @def SOLARIS_INSTALLER_FILES
+# Installer files that gets copied directly from NEMU_PATH_SOL_INST_SRC to NEMU_PATH_SI_SCRATCH_PKG (/).
+SOLARIS_FILE_LIST_VARS += SOLARIS_INSTALLER_FILES
+SOLARIS_INSTALLER_FILES.SUBDIRS = no
+SOLARIS_INSTALLER_FILES.STRIP   = no
+SOLARIS_INSTALLER_FILES.MODE    = 0644
+SOLARIS_INSTALLER_FILES.SRC     = $(NEMU_PATH_SOL_INST_SRC)
+SOLARIS_INSTALLER_FILES.DST     = $(NEMU_PATH_SI_SCRATCH_PKG)
+SOLARIS_INSTALLER_FILES = \
+	nemu.space
+
+## @def SOLARIS_DRIVER_BINS
+# List of kernel module files that are copied from INST_BIN to platform/i86pc/kernel/drv/[amd64/] and stripped of debug info.
+SOLARIS_FILE_LIST_VARS += SOLARIS_DRIVER_BINS
+SOLARIS_DRIVER_BINS.SUBDIRS := no
+SOLARIS_DRIVER_BINS.STRIP   := yes
+SOLARIS_DRIVER_BINS.MODE    := 0644
+SOLARIS_DRIVER_BINS.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_DRIVER_BINS.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/platform/i86pc/kernel/drv/$(subst x86,,$(KBUILD_TARGET_ARCH))
+SOLARIS_DRIVER_BINS = \
+	nemudrv \
+	$(if $(NEMU_WITH_NETFLT),nemuflt,) \
+	$(if $(NEMU_WITH_NETFLT_CROSSBOW),nemubow,) \
+	$(if $(NEMU_WITH_NETADP),nemunet,) \
+	$(if $(NEMU_WITH_USB),nemuusbmon,) \
+	$(if $(NEMU_WITH_USB),nemuusb,)
+
+## @def SOLARIS_DRIVER_CONFS
+# List of kernel module configuration files that are copied directly from INST_BIN to platform/i86pc/kernel/drv/.
+SOLARIS_FILE_LIST_VARS += SOLARIS_DRIVER_CONFS
+SOLARIS_DRIVER_CONFS.SUBDIRS := no
+SOLARIS_DRIVER_CONFS.STRIP   := no
+SOLARIS_DRIVER_CONFS.MODE    := 0644
+SOLARIS_DRIVER_CONFS.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_DRIVER_CONFS.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/platform/i86pc/kernel/drv
+SOLARIS_DRIVER_CONFS = \
+	nemudrv.conf \
+	$(if $(NEMU_WITH_NETFLT),nemuflt.conf,) \
+	$(if $(NEMU_WITH_NETFLT_CROSSBOW),nemubow.conf,) \
+	$(if $(NEMU_WITH_NETADP),nemunet.conf,) \
+	$(if $(NEMU_WITH_USB),nemuusbmon.conf,) \
+	$(if $(NEMU_WITH_USB),nemuusb.conf,)
+
+## @def SOLARIS_COMMON
+# List of files that are copied directly from INST_BIN to /opt/VirtualBox/.
+SOLARIS_FILE_LIST_VARS += SOLARIS_COMMON
+SOLARIS_COMMON.SUBDIRS := yes
+SOLARIS_COMMON.STRIP   := no
+SOLARIS_COMMON.MODE    := 0644
+SOLARIS_COMMON.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_COMMON.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox
+SOLARIS_COMMON = \
+	LICENSE
+## @def SOLARIS_COMMON_EXES
+# List of executable script (and NemuISAExec) files that are copied directly from INST_BIN to /opt/VirtualBox/.
+SOLARIS_FILE_LIST_VARS += SOLARIS_COMMON_EXES
+SOLARIS_COMMON_EXES.SUBDIRS := no
+SOLARIS_COMMON_EXES.STRIP   := no
+SOLARIS_COMMON_EXES.MODE    := 0755
+SOLARIS_COMMON_EXES.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_COMMON_EXES.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox
+SOLARIS_COMMON_EXES = \
+	NemuISAExec
+
+## @def SOLARIS_COMMON_BINS
+# List of INST_BIN shared libraries that should be copied into /opt/VirtualBox/ and stripped.
+SOLARIS_FILE_LIST_VARS += SOLARIS_COMMON_STRIP_BINS
+SOLARIS_COMMON_STRIP_BINS.SUBDIRS := yes
+SOLARIS_COMMON_STRIP_BINS.STRIP   := no
+SOLARIS_COMMON_STRIP_BINS.MODE    := 0644
+SOLARIS_COMMON_STRIP_BINS.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_COMMON_STRIP_BINS.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/
+SOLARIS_COMMON_STRIP_BINS =
+
+## @def SOLARIS_COMMON_64_STRIP_BINS
+# List of INST_BIN shared libraries that should be copied into /opt/VirtualBox/64/ and stripped.
+SOLARIS_FILE_LIST_VARS += SOLARIS_COMMON_64_STRIP_BINS
+SOLARIS_COMMON_64_STRIP_BINS.SUBDIRS := yes
+SOLARIS_COMMON_64_STRIP_BINS.STRIP   := yes
+SOLARIS_COMMON_64_STRIP_BINS.MODE    := 0644
+SOLARIS_COMMON_64_STRIP_BINS.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_COMMON_64_STRIP_BINS.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/64
+SOLARIS_COMMON_64_STRIP_BINS =
+
+
+## @def SOLARIS_STRIP_EXES
+# List of exectuables files that are copied from INST_BIN to /opt/VirtualBox/$(NEMU_SI_ARCH)/ and stripped of debug info.
+SOLARIS_FILE_LIST_VARS += SOLARIS_STRIP_EXES
+SOLARIS_STRIP_EXES.SUBDIRS := no
+SOLARIS_STRIP_EXES.STRIP   := yes
+SOLARIS_STRIP_EXES.MODE    := 0755
+SOLARIS_STRIP_EXES.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_STRIP_EXES.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)
+SOLARIS_STRIP_EXES = \
+	NemuZoneAccess \
+	$(if $(NEMU_WITH_QTGUI),VirtualBox,) \
+	NemuManage \
+	$(if $(NEMU_WITH_NEMUSDL),NemuSDL,) \
+	$(if $(NEMU_WITH_NETADP),NemuNetAdpCtl,) \
+	NemuNetDHCP \
+	NemuNetNAT \
+	$(if $(NEMU_WITH_EXTPACK),NemuExtPackHelperApp,) \
+	NemuSVC \
+	$(if $(NEMU_WITH_CROGL),NemuTestOGL,) \
+	NemuXPCOMIPCD \
+	$(if $(NEMU_WITH_KCHMVIEWER),kchmviewer,) \
+	$(if $(NEMU_WITH_DTRACE),NemuDTrace,)
+
+## @def SOLARIS_STRIP_BINS
+# List of shared libraries that are copied from INST_BIN to /opt/VirtualBox/$(NEMU_SI_ARCH)/ and stripped of debug info.
+SOLARIS_FILE_LIST_VARS += SOLARIS_STRIP_BINS
+SOLARIS_STRIP_BINS.SUBDIRS := yes
+SOLARIS_STRIP_BINS.STRIP   := yes
+SOLARIS_STRIP_BINS.MODE    := 0644
+SOLARIS_STRIP_BINS.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_STRIP_BINS.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)
+SOLARIS_STRIP_BINS = \
+	NemuDD.so \
+	NemuDD2.so \
+	NemuREM.so \
+	$(if-expr "$(KBUILD_TARGET_ARCH)" == "x86",NemuREM32.so NemuREM64.so,) \
+	NemuRT.so \
+	NemuDDU.so \
+	NemuVMM.so \
+	NemuXPCOM.so \
+	NemuXPCOMC.so \
+	$(if $(NEMU_WITH_SHARED_FOLDERS),NemuSharedFolders.so,) \
+	$(if $(NEMU_WITH_SHARED_CLIPBOARD),NemuSharedClipboard.so,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NemuDragAndDropSvc.so,) \
+	$(if $(NEMU_WITH_GUEST_PROPS),NemuGuestPropSvc.so,) \
+	$(if $(NEMU_WITH_GUEST_CONTROL),NemuGuestControlSvc.so,) \
+	NemuHostChannel.so \
+	$(if $(NEMU_WITH_JXPCOM),libnemujxpcom.so,) \
+	$(if $(NEMU_WITH_QTGUI),\
+	  NemuKeyboard.so \
+	  $(if $(NEMU_WITH_QT4_SUN),\
+	    libQtCoreNemu.so.4 \
+	    libQtGuiNemu.so.4 \
+	    $(if $(NEMU_GUI_USE_QGL),libQtOpenGLNemu.so.4,) \
+	    accessible/libqtaccessiblewidgets.so,)) \
+	$(if $(NEMU_WITH_DEBUGGER_GUI),NemuDbg.so DbgPlugInDiggers.so,) \
+	$(if $(NEMU_WITH_CROGL),\
+	  NemuOGLhostcrutil.so \
+	  NemuOGLhosterrorspu.so \
+	  NemuOGLrenderspu.so \
+	  NemuSharedCrOpenGL.so) \
+	components/NemuC.so \
+	components/NemuSVCM.so \
+	components/NemuXPCOMIPCC.so
+ifdef NEMU_WITH_32_ON_64_MAIN_API
+ SOLARIS_STRIP_BINS += \
+	NemuRT-x86.so \
+	NemuXPCOM-x86.so \
+	components/NemuClient-x86.so \
+	components/NemuSVCM-x86.so \
+	components/NemuXPCOMIPCC-x86.so
+endif
+ifdef NEMU_WITH_HARDENING
+ SOLARIS_STRIP_BINS += \
+	NemuNetDHCP.so \
+	NemuNetNAT.so \
+	$(if $(NEMU_WITH_NEMUSDL),NemuSDL.so,) \
+	$(if $(NEMU_WITH_QTGUI),VirtualBox.so,)
+endif
+
+## @def SOLARIS_STRIP_OBJS
+# List of relocable object files to be copied from INST_BIN to /opt/VirtualBox/$(NEMU_SI_ARCH)/ and carefully
+# stripped of debug info but not relocation information.  These are the ring-0 and raw-mode context modules.
+SOLARIS_FILE_LIST_VARS += SOLARIS_STRIP_OBJS
+SOLARIS_STRIP_OBJS.SUBDIRS := no
+SOLARIS_STRIP_OBJS.STRIP   := objcopy
+SOLARIS_STRIP_OBJS.MODE    := 0644
+SOLARIS_STRIP_OBJS.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_STRIP_OBJS.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)
+SOLARIS_STRIP_OBJS = \
+	NemuDD2RC.rc \
+	NemuDD2R0.r0 \
+	NemuDDRC.rc \
+	NemuDDR0.r0 \
+	VMMRC.rc \
+	NemuVMMR0.r0
+
+## @def SOLARIS_NO_STRIP
+# List of data files that should be copied from INST_BIN to /opt/VirtualBox/$(NEMU_SI_ARCH)/.
+SOLARIS_FILE_LIST_VARS += SOLARIS_NO_STRIP
+SOLARIS_NO_STRIP.SUBDIRS := yes
+SOLARIS_NO_STRIP.STRIP   := no
+SOLARIS_NO_STRIP.MODE    := 0644
+SOLARIS_NO_STRIP.SRC     := $(PATH_STAGE_BIN)
+SOLARIS_NO_STRIP.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)
+SOLARIS_NO_STRIP = \
+	components/NemuXPCOMBase.xpt \
+	components/VirtualBox_XPCOM.xpt \
+	$(if $(and $(NEMU_LICENSE_FILES),$(NEMU_WITH_QTGUI)),$(NEMU_LICENSE_FILES))
+
+## @def SOLARIS_USRBIN_LINKS
+# List of links to create in /usr/bin to /opt/VirtualBox/Nemu.sh.
+# Naturally no subdirectories.
+SOLARIS_USRBIN_LINKS = \
+	$(if $(NEMU_WITH_QTGUI),VirtualBox,) \
+	$(if $(NEMU_WITH_HEADLESS),NemuHeadless,) \
+	$(if $(NEMU_WITH_NEMUSDL),NemuSDL,) \
+	NemuManage \
+	$(if $(NEMU_WITH_DTRACE),NemuDTrace,)
+
+SOLARIS_COMMON_EXES += \
+	nemuconfig.sh \
+	Nemu.sh \
+	pkginstall.sh \
+	$(if $(NEMU_WITH_PYTHON),nemushell.py,) \
+	smf-nemuballoonctrl.sh \
+	smf-nemuautostart.sh \
+	$(if $(NEMU_WITH_WEBSERVICES),smf-nemuwebsrv.sh,)
+
+
+## @def SOLARIS_QTLIBS
+# List of Qt shared libs that we need to copy from $(NEMU_PATH_QT4)/lib/ to /opt/VirtualBox/$(NEMU_SI_ARCH)/
+# so that we can run NemuQtConfig.
+SOLARIS_FILE_LIST_VARS += SOLARIS_QTLIBS
+SOLARIS_QTLIBS.SUBDIRS := no
+SOLARIS_QTLIBS.STRIP   := no
+SOLARIS_QTLIBS.MODE    := 0644
+SOLARIS_QTLIBS.SRC     := $(NEMU_PATH_QT4)/lib
+SOLARIS_QTLIBS.DST     := $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)
+SOLARIS_QTLIBS =
+ifdef NEMU_WITH_QTGUI
+ ifdef NEMU_WITH_QT4_SUN
+  SOLARIS_QTLIBS += \
+  	libQtXmlNemu.so.4 \
+  	libQtSqlNemu.so.4 \
+  	libQt3SupportNemu.so.4
+  SOLARIS_USRBIN_LINKS += \
+  	NemuQtconfig
+ endif
+ include $(PATH_ROOT)/src/Nemu/Frontends/VirtualBox/nls/ApprovedLanguages.kmk
+ SOLARIS_COMMON += $(foreach f,$(NEMU_APPROVED_GUI_LANGUAGES),nls/VirtualBox_$(f).qm nls/qt_$(f).qm)
+endif
+
+# Documentation (packed as DOCS as they are arch. neutral)
+ifdef NEMU_WITH_DOCS_PACKING
+ SOLARIS_COMMON += \
+	VirtualBox.chm \
+	UserManual.pdf \
+	$(foreach f,$(NEMU_MANUAL_ADD_LANGUAGES),VirtualBox_$(f).chm UserManual_$(f).pdf)
+endif
+
+# Python XPCOM glue
+ifdef NEMU_WITH_PYTHON
+ SOLARIS_COMMON += \
+	$(NEMUINST_SDK_BINDINGS_XPCOM_PYTHON_FILES) \
+	$(NEMUINST_SDK_INSTALLER_PYTHON_FILES)
+ ifeq ($(KBUILD_TARGET_ARCH),amd64)
+  SOLARIS_PYTHON_32_ON_64_BINS = $(notdir $(wildcard $(PATH_STAGE_BIN)/NemuPython*_x86.so))
+  ifdef NEMU_WITH_32_ON_64_MAIN_API
+   SOLARIS_COMMON_STRIP_BINS   += $(SOLARIS_PYTHON_32_ON_64_BINS)
+  endif
+  SOLARIS_COMMON_64_STRIP_BINS += $(filter-out $(SOLARIS_PYTHON_32_ON_64_BINS), $(notdir $(wildcard $(PATH_STAGE_BIN)/NemuPython*.so)))
+ else
+  SOLARIS_COMMON_STRIP_BINS    += $(notdir $(wildcard $(PATH_STAGE_BIN)/NemuPython*.so)))
+ endif
+endif
+
+ifdef NEMU_WITH_JXPCOM
+ SOLARIS_COMMON += \
+ 	sdk/bindings/xpcom/java/nemujxpcom.jar
+endif
+
+# auth stuff
+SOLARIS_STRIP_BINS += \
+	NemuAuth.so \
+	NemuAuthSimple.so
+
+# VRDP
+ifdef NEMU_WITH_VRDP
+ ifndef NEMU_WITH_EXTPACK_PUEL
+  SOLARIS_STRIP_BINS += \
+  	NemuVRDP.so
+ endif
+ SOLARIS_COMMON += \
+ 	rdesktop-vrdp.tar.gz
+ ifdef NEMU_WITH_VRDP_RDESKTOP
+  SOLARIS_COMMON += $(addprefix rdesktop-vrdp-keymaps/,$(notdir $(wildcard $(PATH_STAGE_BIN)/rdesktop-vrdp-keymaps/*)))
+  SOLARIS_STRIP_EXES += \
+  	rdesktop-vrdp
+ endif
+endif
+
+SOLARIS_STRIP_BINS += \
+	$(if $(and $(NEMU_WITH_HARDENING),$(NEMU_WITH_HEADLESS)),NemuHeadless.so,)
+
+SOLARIS_STRIP_EXES += \
+	$(if $(NEMU_WITH_HEADLESS),NemuHeadless) \
+	NemuBalloonCtrl \
+	NemuAutostart \
+	$(if $(NEMU_WITH_WEBSERVICES),nemuwebsrv) \
+	$(if $(NEMU_WITH_WEBSERVICES),webtest) \
+	$(if $(NEMU_WITH_NEMU_IMG)$(NEMU_WITH_TESTCASES),nemu-img)
+
+# Guest Additions
+ifdef NEMU_WITH_ADDITIONS_PACKING
+# SOLARIS_COMMON += \
+#	additions/NemuGuestAdditions.iso
+endif
+
+
+# EFI firmware
+ifdef NEMU_WITH_EFIFW_PACKING
+ SOLARIS_COMMON += \
+	NemuEFI32.fd \
+	NemuEFI64.fd
+endif
+
+# DTrace library, testcase and scripts (as the rest of this file, this makes bold
+# ASSUMPTIONS about VBPX_INST_XXX variable values).
+ifdef NEMU_WITH_DTRACE
+ SOLARIS_COMMON += \
+ 	$(addprefix dtrace/lib/$(KBUILD_TARGET_ARCH)/,$(NEMUINST_DTRACE_LIB_ARCH_FILES)) \
+ 	$(addprefix dtrace/testcase/$(KBUILD_TARGET_ARCH)/,$(NEMUINST_DTRACE_TESTCASE_ARCH_FILES)) \
+ 	$(addprefix dtrace/scripts/,$(NEMUINST_DTRACE_SCRIPTS_FILES))
+endif
+
+
+#
+# End of file lists.
+#
+
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+
+#
+# Creates the System V style installer package.
+#
+solaris-package:: $(NEMU_PATH_SI_SCRATCH)/$(PKG_FILENAME).pkg
+$(NEMU_PATH_SI_SCRATCH)/$(PKG_FILENAME).pkg: \
+		$(NEMU_VERSION_STAMP) \
+		\
+		$(NEMU_PATH_INST_COMMON_SRC)/virtualbox.desktop.in \
+		$(NEMU_PATH_INST_COMMON_SRC)/virtualbox.xml \
+		$(NEMU_PATH_SOL_INST_SRC)/virtualbox.applications.in \
+		$(NEMU_PATH_SOL_INST_SRC)/nemu.pkginfo \
+		\
+		$(if-expr defined(NEMU_WITH_QTGUI) && defined(NEMU_WITH_QT4_SUN),$(NEMU_PATH_QT4)/bin/qtconfig,) \
+		$(if-expr defined(NEMU_WITH_ADDITIONS_PACKING),$(PATH_STAGE_BIN)/additions/NemuGuestAdditions.iso,) \
+		$(if-expr !defined(NEMU_OSE) && defined(NEMU_WITH_NEMUSDL),$(PATH_DEVTOOLS_TRG)/libsdl/v1.2.13/lib/libSDL-1.2.so.0.11.2,) \
+		\
+		$(foreach var, $(SOLARIS_FILE_LIST_VARS),$(foreach file, $($(var)), $($(var).SRC)/$(file))) \
+		\
+		$(foreach size, $(NEMU_SI_ICON_SIZES), $(foreach type, $(NEMU_SI_ICON_TYPES) \
+		,$(PATH_ROOT)/src/Nemu/Artwork/other/virtualbox-$(type)-$(size)px.png)) \
+		\
+		$(NEMU_SI_DEP_ON_MAKEFILE) \
+		| $$(dir $$@)
+	$(call MSG_L1,Creating $(PKG_FILENAME).pkg: Copying files)
+# Start with a clean slate, don't want to pick up random garbage.
+	$(RM) -Rf -- "$(NEMU_PATH_SI_SCRATCH_PKG)/"
+	$(QUIET)$(RM) -f -- "$@"
+
+# Create all the directories we need. We specify each sub directory to make sure the mode is correct.
+	$(MKDIR) -p -m 0755 -- $(sort $(NEMU_PATH_SI_SCRATCH_PKG)/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/opt/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/platform/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/platform/i86pc/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/platform/i86pc/kernel/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/platform/i86pc/kernel/drv/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/bin/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/applications/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/application-registry/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/icons/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/icons/hicolor/ \
+		$(foreach size, $(NEMU_SI_ICON_SIZES) \
+		,$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/icons/hicolor/$(size)x$(size)/ \
+		 $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/icons/hicolor/$(size)x$(size)/mimetypes/) \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/mime/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/mime/packages/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/var/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/var/svc/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/var/svc/manifest/ \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/var/svc/manifest/application/ \
+		$(foreach var,$(SOLARIS_FILE_LIST_VARS), $($(var).DST)/) \
+		$(foreach var,$(SOLARIS_FILE_LIST_VARS),$(if-expr "$($(var).SUBDIRS)" == "yes",$(sort $(dir $(addprefix $($(var).DST)/,$($(var))))),)) \
+	)
+
+# Generic copy file lists.
+	$(foreach var, $(SOLARIS_FILE_LIST_VARS), $(foreach file, $($(var)) \
+	,$(if-expr "$($(var).STRIP)" == "objcopy" && defined(NEMU_DO_STRIP)\
+	,$(NLTAB)$(NEMU_SI_OBJCOPY_STRIP) "$($(var).SRC)/$(file)" "$($(var).DST)/$(file)" \
+	 $(NLTAB)$(CHMOD) "$($(var).MODE)" "$($(var).DST)/$(file)" \
+	,$(NLTAB)$(INSTALL) -m "$($(var).MODE)" $(if-expr "$($(var).STRIP)" == "yes" && defined(NEMU_DO_STRIP),-s,) \
+		"$($(var).SRC)/$(file)" "$($(var).DST)/$(file)")))
+
+# VirtualBox: Common files.
+	$(if-expr defined(NEMU_WITH_ADDITIONS_PACKING) \
+	,$(INSTALL) -m 0644 $(PATH_STAGE_BIN)/additions/NemuGuestAdditions.iso  $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/,)
+	$(LN_SYMLINK) -f ./pkginstall.sh	$(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/ipsinstall.sh
+	$(SED)	-e "s/_HARDENED_/$(if $(NEMU_WITH_HARDENED),hardened,)/" \
+		--output $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/nemuconfig.sh \
+		 $(NEMU_PATH_SOL_INST_SRC)/nemuconfig.sh
+	$(CHMOD) 0755 $(NEMU_PATH_SOL_INST_SRC)/nemuconfig.sh
+	$(INSTALL) -m 0644 $(NEMU_PATH_SOL_INST_SRC)/nemu.pkgresponse	$(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/autoresponse
+
+# VirtualBox: Arch specific files.
+	$(if-expr defined(NEMU_WITH_QTGUI) && defined(NEMU_WITH_QT4_SUN)\
+	,$(INSTALL) -m 0755 \
+		$(NEMU_PATH_QT4)/bin/qtconfig	$(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)/NemuQtconfig,)
+
+	$(if-expr defined(NEMU_WITH_QTGUI) \
+	,$(NLTAB)$(LN_SYMLINK) ../rdesktop-vrdp-keymaps/ $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)/rdesktop-vrdp-keymaps,)
+
+	$(if-expr defined(NEMU_WITH_ADDITIONS_PACKING) \
+	,$(NLTAB)$(LN_SYMLINK) ../NemuGuestAdditions.iso $(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)/,)
+
+	$(if-expr !defined(NEMU_OSE) && defined(NEMU_WITH_NEMUSDL) \
+	,$(INSTALL) -m 0644 $(PATH_DEVTOOLS_TRG)/libsdl/v1.2.13/lib/libSDL-1.2.so.0.11.2 \
+		$(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)/libSDL-1.2.so.0,)
+
+	$(if-expr defined(NEMU_WITH_EFIFW_PACKING) \
+	,$(LN_SYMLINK) ../NemuEFI32.fd ../NemuEFI64.fd	$(NEMU_PATH_SI_SCRATCH_PKG)/opt/VirtualBox/$(NEMU_SI_ARCH)/,)
+
+# Links to /usr/bin.
+	$(foreach link,$(SOLARIS_USRBIN_LINKS) \
+	,$(NLTAB)$(LN_SYMLINK) ../../opt/VirtualBox/Nemu.sh $(NEMU_PATH_SI_SCRATCH_PKG)/usr/bin/$(link))
+
+# Desktop stuff in /usr/share/applications/.
+	$(SED)  -e "s+@NEMU_PRODUCT@+$(NEMU_PRODUCT)+" \
+		-e "s+@NEMU_DOC_PATH@+/opt/VirtualBox+" \
+		--output $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/applications/virtualbox.desktop \
+		$(NEMU_PATH_INST_COMMON_SRC)/virtualbox.desktop.in
+	$(CHMOD) 0644 $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/applications/virtualbox.desktop
+
+# Desktop stuff in /usr/share/mime/packages/ (S10 cannot deal with icon information in virtualbox.xml).
+	$(SED)	-e '/<icon/d' \
+		--output $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/mime/packages/virtualbox.xml \
+		$(NEMU_PATH_INST_COMMON_SRC)/virtualbox.xml
+	$(CHMOD) 0644 $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/mime/packages/virtualbox.xml
+
+# Desktop stuff in /usr/share/application-registry.
+	$(SED)	-e "s+@NEMU_PRODUCT@+$(NEMU_PRODUCT)+" \
+		--output $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/application-registry/virtualbox.applications \
+		$(NEMU_PATH_SOL_INST_SRC)/virtualbox.applications.in
+	$(CHMOD) 0644 $(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/application-registry/virtualbox.applications
+
+# Icons stuff under /usr/share/icons/hicolor/<size>x<size>/mimetypes/.
+	$(foreach size, $(NEMU_SI_ICON_SIZES), $(foreach type, $(NEMU_SI_ICON_TYPES) \
+		,$(NLTAB)$(INSTALL) -m 0644 \
+			$(PATH_ROOT)/src/Nemu/Artwork/other/virtualbox-$(type)-$(size)px.png \
+			$(NEMU_PATH_SI_SCRATCH_PKG)/usr/share/icons/hicolor/$(size)x$(size)/mimetypes/virtualbox-$(type).png))
+
+# Files related to package creation.
+	$(SED)	-e "s/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g" \
+		-e "s/@NEMU_VENDOR@/$(NEMU_VENDOR)/g" \
+		-e "s/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g" \
+		-e "s/@NEMU_SVN_REV@/$(NEMU_SVN_REV)/g" \
+		-e "s/@NEMU_VERSION_REVSTAMP@/$(PKGINFO_REVSTAMP)/g" \
+		-e "s/@UNAME_P@/$(PKGINFO_ARCH)/g" \
+		--output $(NEMU_PATH_SI_SCRATCH_PKG)/nemu.pkginfo \
+		$(NEMU_PATH_SOL_INST_SRC)/nemu.pkginfo
+	$(INSTALL) -m 0644 $(NEMU_PATH_SOL_INST_SRC)/nemu.pkgresponse	$(NEMU_PATH_SI_SCRATCH_PKG)/autoresponse
+
+# Done copying file, create the package!
+	$(call MSG_L1,Creating install package: $(PKG_FILENAME).pkg)
+	$(REDIRECT) -C $(NEMU_PATH_SOL_INST_SRC) -- $(NEMU_PATH_SI_SCRATCH_PKG)/makepackage.sh \
+		$(if-expr defined(NEMU_WITH_HARDENING),--hardened,) \
+		$(NEMU_PATH_SI_SCRATCH_PKG) \
+		$(PKG_FILENAME) \
+		$(KBUILD_TARGET_ARCH) \
+		$(NEMU_SVN_REV)
+	$(MV) -- "$(NEMU_PATH_SI_SCRATCH_PKG)/$(PKG_FILENAME).pkg" "$@"
+	$(RM) -Rf -- "$(NEMU_PATH_SI_SCRATCH_PKG)/"
+
+
+#
+# Creates the tar file containing license, readme and autoresponse file in addition to the system V package.
+#
+solaris-package-tar-gz:: $(PATH_STAGE_BIN)/$(PKG_FILENAME).tar.gz
+$(PATH_STAGE_BIN)/$(PKG_FILENAME).tar.gz: \
+		$(NEMU_PATH_SI_SCRATCH)/$(PKG_FILENAME).pkg \
+		$(PATH_STAGE_BIN)/LICENSE \
+		$(NEMU_PATH_SOL_INST_SRC)/nemu.pkgresponse \
+		$(PATH_ROOT)/doc/ReadMe-Solaris.txt \
+		$(NEMU_SI_DEP_ON_MAKEFILE) \
+		| $(NEMU_PATH_SI_SCRATCH)/
+	$(call MSG_L1,Creating final tar.gz package: $(PKG_FILENAME).tar.gz)
+	$(QUIET)$(RM) -f -- $(NEMU_PATH_SI_SCRATCH)/ReadMe.txt "$@"
+	$(QUIET)$(SED) \
+		-e "s/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g" \
+		-e "s/@NEMU_VENDOR@/$(NEMU_VENDOR)/g" \
+		-e "s/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g" \
+		-e "s/@BUILD_TARGET_ARCH@/$(KBUILD_TARGET_ARCH)/g" \
+		-e "s/@NEMU_SVN_REV@/$(NEMU_SVN_REV)/g" \
+		--output $(NEMU_PATH_SI_SCRATCH)/ReadMe.txt \
+		$(PATH_ROOT)/doc/ReadMe-Solaris.txt
+	$(QUIET)$(NEMU_SI_GTAR) -C $(NEMU_PATH_SI_SCRATCH) -czvf "$@" --show-transformed-name \
+		--xform 's,^.*/,,g' --xform 's,nemu.pkgresponse,autoresponse,' \
+		$(NEMU_PATH_SI_SCRATCH)/ReadMe.txt \
+		$(PATH_STAGE_BIN)/LICENSE \
+		$(NEMU_PATH_SOL_INST_SRC)/nemu.pkgresponse \
+		$(NEMU_PATH_SI_SCRATCH)/$(PKG_FILENAME).pkg
+	$(QUIET)$(RM) -f -- $(NEMU_PATH_SI_SCRATCH)/ReadMe.txt
+	$(call MSG_L1,Packaging $@ is completed.)
+
+
+## List of file list variable names relevant for debug info.
+SOLARIS_FILE_LIST_DBGINFO_VARS := $(foreach var, $(SOLARIS_FILE_LIST_VARS), $(if-expr "$($(var).STRIP)" != "no",$(var),))
+## Adds a .DBGDST property to each of the debug info file lists. Simplifies our job below
+$(foreach var,$(SOLARIS_FILE_LIST_DBGINFO_VARS) \
+	,$(eval $(var).DBGDST := $(subst $(NEMU_PATH_SI_SCRATCH_PKG)/,$(NEMU_PATH_SI_SCRATCH_DBG)/,$(subst /opt/VirtualBox,,$($(var).DST)))))
+
+#
+# Creates a tar file containing the debug info.
+#
+$(PATH_STAGE_BIN)/VirtualBoxDebug.tar.bz2: \
+		$(NEMU_VERSION_STAMP) \
+		$(NEMU_SI_DEP_ON_MAKEFILE) \
+		$(foreach var, $(SOLARIS_FILE_LIST_DBGINFO_VARS), $(foreach file, $($(var)), $($(var).SRC)/$(file)))
+	$(call MSG_L1,Preparing $@)
+	$(RM) -Rf -- "$(NEMU_PATH_SI_SCRATCH_DBG)/"
+	$(RM) -f -- "$@"
+	$(MKDIR) -p -m 0755 \
+		$(NEMU_PATH_SI_SCRATCH_DBG)/ \
+		$(sort $(foreach var, $(SOLARIS_FILE_LIST_DBGINFO_VARS), $($(var).DBGDST)/ $(if-expr "$($(var).SUBDIRS)" == "yes" \
+		,$(sort $(dir $(foreach file, $($(var)), $($(var).DBGDST)/$(file)))),)))
+	$(foreach var, $(SOLARIS_FILE_LIST_DBGINFO_VARS),$(foreach file, $($(var)) \
+	,$(NLTAB)$(NEMU_SI_OBJCOPY_DBGINFO) "$($(var).SRC)/$(file)" "$($(var).DBGDST)/$(file)"))
+	$(call MSG_L1,Packing $@)
+	$(QUIET)$(NEMU_SI_GTAR) --dereference --owner 0 --group 0 \
+		-cvjRhf "$@" -C "$(NEMU_PATH_SI_SCRATCH_DBG)/.." "./$(notdir $(NEMU_PATH_SI_SCRATCH_DBG))/"
+	$(QUIET)$(CHMOD) 0644 $@
+	$(call MSG_L1,Packaging $@ is completed.)
+	$(RM) -Rf "$(NEMU_PATH_SI_SCRATCH_DBG)/"
+

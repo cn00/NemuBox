@@ -1,0 +1,118 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for NemuTray, Haiku Guest Additions.
+#
+
+#
+# Copyright (C) 2012-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+#
+# This code is based on:
+#
+# VirtualBox Guest Additions for Haiku.
+# Copyright (c) 2011 Mike Smith <mike@scgtrp.net>
+#                    François Revol <revol@free.fr>
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation
+# files (the "Software"), to deal in the Software without
+# restriction, including without limitation the rights to use,
+# copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following
+# conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+
+SUB_DEPTH = ../../../../..
+include	$(KBUILD_PATH)/subheader.kmk
+
+# @todo split the tray code,
+# single bin will cause problems loading gcc4 binary from a gcc2-built Deskbar!
+
+PROGRAMS += NemuTray
+NemuTray_TEMPLATE = NEMUGUESTR3EXE
+NemuTray_DEFS     = NEMU_WITH_HGCM LOG_TO_BACKDOOR
+NemuTray_DEFS    += LOG_ENABLED
+NemuTray_INCS     = ../include
+NemuTray_SOURCES  = \
+	NemuClipboard.cpp \
+	NemuDisplay.cpp \
+	NemuGuestApplication.cpp \
+	NemuGuestDeskbarView.cpp
+
+NemuTray_SOURCES += \
+  	$(PATH_ROOT)/src/Nemu/GuestHost/SharedClipboard/clipboard-helper.cpp
+
+NemuTray_LIBS     = \
+	be translation \
+	$(NEMU_LIB_VBGL_R3) \
+	$(NEMU_LIB_IPRT_GUEST_R3) \
+	$(NEMU_LIB_VBGL_R3)
+
+NemuTray_RSRCS   += $(NemuTray_0_OUTDIR)/NemuTray.rsrc
+NemuTray_DEPS    += $(NemuTray_0_OUTDIR)/NemuTray.rsrc
+NemuTray_CLEAN   += $(NemuTray_0_OUTDIR)/NemuTray.rsrc
+
+# NemuGuestApplication.cpp uses NEMU_SVN_REV.
+NemuGuestApplication.cpp_DEFS += NEMU_SVN_REV=$(NEMU_SVN_REV)
+NemuGuestApplication.cpp_DEPS = $(NEMU_SVN_REV_KMK)
+NemuGuestDeskbarView.cpp_DEFS += NEMU_SVN_REV=$(NEMU_SVN_REV)
+NemuGuestDeskbarView.cpp_DEPS = $(NEMU_SVN_REV_KMK)
+
+## The icon location is configurable.
+NemuTray.rdef_INCS = $(NemuTray_0_OUTDIR)
+NemuTray.rdef_DEFS += NEMU_SVN_REV=$(NEMU_SVN_REV) \
+	NEMU_HAIKU_DESKBAR_ICON_PNG=\"$(NEMU_BRAND_GUI_NEMU_16PX_PNG)\"
+NemuTray.rdef_DEPS = $(NEMU_SVN_REV_KMK)
+
+NemuTray.rsrc_DEPS = NemuTray.rdef
+NemuTray.rsrc_CLEAN = NemuTray.rdef
+
+
+
+#XXX: cleanup!
+#XXX: handle deps correctly
+#XXX: -I / is due to a bug in rc with absolute paths
+## Resource file.
+$$(NemuTray_0_OUTDIR)/NemuTray.rsrc: $$(NemuTray_DEFPATH)/NemuTray.rdef $$(NemuTray_DEFPATH)/Makefile.kmk | $$(dir $$@)
+	$(call MSG_TOOL,$(NEMU_HAIKU_RCTOOL),HaikuResources,$<,$@)
+	$(QUIET)cat $< | gcc -E -I $(dir $<) -I $(dir $<)/../include $(foreach name, $(INCS), -I $(name)) $(foreach dname, $(NemuTray.rdef_DEFS), -D$(dname)) - | grep -v '^#' | $(NEMU_HAIKU_RCTOOL) -I / -I $(dir $<) -I $(dir $<)/../include -o "$@" -
+
+
+#	rc -I $(NemuTray_DEFPATH)/../include -o $@ $<
+#	$(RM) -f $@
+#	$(APPEND) $@ 'IDI_VIRTUALBOX ICON DISCARDABLE "$(subst /,\\,$(NEMU_WINDOWS_ADDITIONS_ICON_FILE))"'
+
+## The icon location is configurable.
+#NemuTray.rc_INCS = $(NemuTray_0_OUTDIR)
+#NemuTray.rc_DEPS = $(NemuTray_0_OUTDIR)/NemuTray-icon.rc
+#NemuTray.rc_CLEAN = $(NemuTray_0_OUTDIR)/NemuTray-icon.rc
+
+## Icon include file.
+#$$(NemuTray_0_OUTDIR)/NemuTray-icon.rc: $(NEMU_WINDOWS_ADDITIONS_ICON_FILE) $$(NemuTray_DEFPATH)/Makefile.kmk | $$(dir $$@)
+#	$(RM) -f $@
+#	$(APPEND) $@ 'IDI_VIRTUALBOX ICON DISCARDABLE "$(subst /,\\,$(NEMU_WINDOWS_ADDITIONS_ICON_FILE))"'
+
+include	$(KBUILD_PATH)/subfooter.kmk
+

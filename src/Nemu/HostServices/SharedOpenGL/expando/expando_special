@@ -1,0 +1,18 @@
+CreateContext
+DestroyContext
+MakeCurrent
+NewList
+EndList
+DeleteLists
+GenLists
+ListBase
+IsList
+CallList
+CallLists
+
+# Calls to be ignored.
+#NemuConCreate
+#NemuCreateContext
+#NemuPackSetInjectThread
+#NemuPresentComposition
+#NemuWindowCreate

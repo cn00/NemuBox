@@ -1,0 +1,822 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Windows installer.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+ifneq ($(KBUILD_HOST),win)
+ $(error "The Windows installer can only be built on Windows!")
+endif
+
+
+#
+# Include Sub-Makefiles.
+#
+include $(PATH_SUB_CURRENT)/InstallHelper/Makefile.kmk
+
+ifdef NEMU_WITH_BUNDLED_INSTALLER
+ ifeq ($(KBUILD_TARGET_ARCH),x86)
+  include $(PATH_SUB_CURRENT)/BundleMachine/Makefile.kmk
+ endif
+endif
+
+ifeq ($(KBUILD_TARGET_ARCH),x86)
+ include $(PATH_SUB_CURRENT)/Stub/Makefile.kmk
+ include $(PATH_SUB_CURRENT)/StubBld/Makefile.kmk
+ ifdef NEMU_BRAND_WIN_AS_MENU
+  include $(PATH_SUB_CURRENT)/AutoStartMenu/Makefile.kmk
+ endif
+endif
+
+include $(PATH_SUB_CURRENT)/Resources/Makefile.kmk
+
+
+#
+# Globals and targets.
+# Note: en_US *must* come first for the dependency file generation.
+#
+ifndef NEMU_INSTALLER_LANGUAGES
+ NEMU_INSTALLER_LANGUAGES  = en_US de_DE fr_FR it_IT zh_TW
+ NEMU_INSTALLER_LANGUAGES += $(NEMU_INSTALLER_ADD_LANGUAGES)
+endif
+
+#
+# List of merge modules to use.
+#
+NEMU_INSTALLER_MERGE_MODULES = App USB NetAdp NetFlt NetAdp6 NetLwf Python
+ifeq ($(KBUILD_TARGET_ARCH),amd64)
+ NEMU_INSTALLER_MERGE_MODULES += COM32On64
+endif
+
+# We only ship the merge modules in locale en_US for the moment.
+ifdef NEMU_WITH_MSM_INSTALL
+ NEMU_INSTALLER_LANGUAGES := en_US
+ NEMU_INSTALLER_MERGE_LANGUAGES = $(NEMU_INSTALLER_LANGUAGES)
+endif
+
+#
+# We don't have the license text in another language than English yet,
+# so just define the branding targets to use the English one for now.
+# The installer generation assumes that there is a translation for each
+# of NEMU_INSTALLER_LANGUAGES.
+#
+$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+	$(eval NEMU_BRAND_$(lang)_LICENSE_RTF := $(NEMU_BRAND_LICENSE_RTF)))
+
+# Set the codepage for all languages to 1252, covers most cases.
+$(foreach lang,$(sort $(NEMU_INSTALLER_LANGUAGES) $(NEMU_LICENSE_ADD_LANGUAGES) $(NEMU_MANUAL_ADD_LANGUAGES)), \
+	$(eval NEMU_BRAND_$(lang)_LANGUAGE_CODEPAGE := 1252))
+
+# Some languages need another codepage than 1252. Override them here.
+NEMU_BRAND_zh_TW_LANGUAGE_CODEPAGE := 950
+
+# Standard language names (in the native language), to be extended as we go.
+# NEMU_BRAND_$(lang)_LANG_NAME must be defined for each language which occurs
+# in either # NEMU_LICENSE_ADD_LANGUAGES or NEMU_MANUAL_ADD_LANGUAGES.
+NEMU_BRAND_fr_FR_LANG_NAME := Français
+
+NEMU_PATH_WIN_INST_SRC := $(PATH_SUB_CURRENT)
+NEMU_WIN_INST_OUT_DIR := $(PATH_TARGET)/Installer/win
+
+#
+# If we want to build a combined package, we separate all common stuff
+# (that is all 100% identical content between 32-/64-bit builds)
+# into an own .cab file to save space. This .cab file then gets included
+# and used by the 32-/64-bit installers.
+#
+ifdef NEMU_WITH_COMBINED_PACKAGE
+  NEMU_INSTALLER_COMMON_DISKID := 2
+else
+  NEMU_INSTALLER_COMMON_DISKID := 1
+endif
+
+## @todo NEMU_ prefixes!
+PACKAGE_BASE                := VirtualBox-$(NEMU_VERSION_STRING)
+PACKAGE_NAME_LANG           := $(PACKAGE_BASE)-r$(NEMU_SVN_REV)
+PACKAGE_NAME_FINAL          := $(PATH_STAGE_BIN)/$(PACKAGE_NAME_LANG).msi
+
+ifdef NEMU_WITH_COMBINED_PACKAGE
+ PATH_MULTIARCH_TEMP                := $(PATH_OUT_BASE)/win.x86/$(KBUILD_TYPE)/obj/Installer
+ PATH_MULTIARCH_GUEST_ADDITIONS_ISO := $(PATH_OUT_BASE)/win.amd64/$(KBUILD_TYPE)/bin/additions
+ PACKAGE_NAME_MULTIARCH             := $(PACKAGE_NAME_LANG)-MultiArch
+ PACKAGE_NAME_MULTIARCH.x86         := $(PACKAGE_NAME_MULTIARCH)_x86.msi
+ PACKAGE_NAME_MULTIARCH.amd64       := $(PACKAGE_NAME_MULTIARCH)_amd64.msi
+ PACKAGE_NAME_FINAL                 := $(PATH_MULTIARCH_TEMP)/$(PACKAGE_NAME_MULTIARCH.$(KBUILD_TARGET_ARCH))
+ PACKAGE_NAME_MULTIARCH_FINAL       := $(PACKAGE_NAME_MULTIARCH).exe
+ # Always take the common.cab from the amd64 build, as it
+ # might contain certain files for x86 compatibility such
+ # as our 32-on-64-bit COM stuff.
+ PACKAGE_NAME_MULTIARCH_COMMONCAB   := $(PATH_OUT_BASE)/win.amd64/$(KBUILD_TYPE)/obj/Installer/win/common.cab
+
+ BLDDIRS += $(PATH_MULTIARCH_TEMP)
+ PACKING += $(PACKAGE_NAME_FINAL)
+ ifeq ($(KBUILD_TARGET_ARCH),x86)
+  PACKING += $(PATH_STAGE_BIN)/$(PACKAGE_NAME_MULTIARCH_FINAL)
+ endif
+else
+ PACKING += $(PACKAGE_NAME_FINAL)
+endif
+BLDDIRS += \
+	$(NEMU_WIN_INST_OUT_DIR) \
+	$(NEMU_WIN_INST_OUT_DIR)/NLS/
+
+OTHER_CLEAN += \
+	$(NEMU_WIN_INST_OUT_DIR)/VirtualBox.wixobj \
+	$(NEMU_WIN_INST_OUT_DIR)/VirtualBox.wixobj.dep \
+	$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib.wxi \
+	$(if $(NEMU_WITH_QTGUI),$(NEMU_WIN_INST_OUT_DIR)/NemuGuiNLS.wxi) \
+	$(NEMU_WIN_INST_OUT_DIR)/NemuKey.wxi \
+	$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+		$(NEMU_WIN_INST_OUT_DIR)/NLS/Language_$(lang).wxl \
+		$(NEMU_WIN_INST_OUT_DIR)/NLS/License_$(lang).wxl \
+		$(NEMU_WIN_INST_OUT_DIR)/NLS/$(lang).mst \
+		$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_$(lang).wixobj \
+		$(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_$(lang).msi) \
+	$(NEMU_WIN_INST_OUT_DIR)/DirComponentsAndFiles_DTrace.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/Files_Main.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/Files_Doc.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/Files_License.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/Shortcuts_StartMenu.wxi
+
+ifdef NEMU_WITH_COMBINED_PACKAGE
+ ifeq ($(KBUILD_TARGET_ARCH),x86)
+  OTHER_CLEAN += \
+  	$(PATH_STAGE_BIN)/$(PACKAGE_NAME_MULTIARCH_FINAL) \
+  	$(PATH_MULTIARCH_TEMP)/$(PACKAGE_NAME_MULTIARCH.x86) \
+  	$(PATH_MULTIARCH_TEMP)/$(PACKAGE_NAME_MULTIARCH.am64) \
+  	$(PACKAGE_NAME_MULTIARCH_COMMONCAB)
+ else
+  # Nothing to do here yet.
+ endif
+else
+ OTHER_CLEAN += \
+	$(PACKAGE_NAME_FINAL)
+endif
+
+ifdef NEMU_WITH_MSM_INSTALL
+ OTHER_CLEAN += \
+  $(foreach module,$(NEMU_INSTALLER_MERGE_MODULES), \
+   $(foreach lang,$(NEMU_INSTALLER_MERGE_LANGUAGES), \
+		$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module).msm.dep \
+		$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).msm \
+		$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).wixobj \
+		$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).wixpdb))
+endif
+
+ifdef NEMU_WITH_BUNDLED_INSTALLER
+ ifeq ($(KBUILD_TARGET),darwin)
+  NEMU_TMP_DIR ?= /Nemu
+  ZIP = /usr/bin/zip
+ else
+  NEMU_TMP_DIR ?= c:\Temp
+  ZIP = zip
+ endif
+
+ ifndef NEMU_PATH_PACK_TMP
+  NEMU_PATH_PACK_TMP := $(NEMU_WIN_INST_OUT_DIR)
+ endif
+
+ NEMU_PATH_PACK_BUNDLE_TMP = $(PATH_STAGE_BIN)/NemuWinBundleInstaller
+ NEMU_PATH_PACK_BUNDLE_ZIP = $(PATH_STAGE_BIN)/NemuWinBundleInstaller-$(KBUILD_TARGET_ARCH).zip
+
+ NEMU_BRAND_WIN_INST_NAME.x86   = $(PACKAGE_BASE)-Win_x86$(NEMU_BRAND_WIN_INST_EXT).msi
+ NEMU_BRAND_WIN_INST_NAME.amd64 = $(PACKAGE_BASE)-Win_amd64$(NEMU_BRAND_WIN_INST_EXT).msi
+
+ PACKING.win += $(NEMU_PATH_PACK_BUNDLE_ZIP)
+endif
+
+#
+# Suppress/skip the following ICE (Internal Consistency Evaluators):
+# - ICE64: Checks that new directories in the user profile are removed correctly in roaming scenarios.
+#          -> We don't want to remove system folders (like "Microsoft/Internet Explorer/Quick Launch").
+# - ICE69: Checks if file references are within the same component.
+#          -> We reference to files within different components, but these components are installed using
+#             the same feature, so that's fine.
+#
+NEMU_MSI_ICE_IGNORE := \
+	-ice:64 \
+	-ice:69
+
+#
+# Create intermediate XML file for languages (needed for .MSI linking).
+#
+# Note: The double escaping of $(dir $@) in the prereq/dep list is because we first have
+#       to escape the expansion of the $(eval ) argument and then the definition of the
+#       rule. The statement is finally expanded during second dependency expansion, which
+#       takes place after all makefiles has been loaded and with the @ variable defined.
+#
+define def_nemu_lang_xml
+$(NEMU_WIN_INST_OUT_DIR)/NLS/Language_$(lang).wxl: $(NEMU_PATH_WIN_INST_SRC)/NLS/$(lang).wxl | $$$$(dir $$$$@)
+	$$(call MSG_GENERATE,,$$@,$$<)
+	$(QUIET)$(INSTALL) -m 0644 $$< $$@
+endef
+
+$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+	$(eval $(def_nemu_lang_xml)))
+
+#
+# Create intermediate XML file for licenses (needed for .MSI linking).
+# These files are created from the original .RTF files in the /docs directory.
+#
+# Note: The redirect command below will open $$@ as stdout in append+text mode
+#       and then exec cat, thus appending the license file to the result file.
+#
+# Note: The license_file variable has to be created before def_nemu_license_xml
+#       is expanded by the 2nd eval because we rely on the that expansion
+#       replacing all $(license_file) (and $(lang)) references before evaluation.
+#
+# Note: The REDIRECT + ECHO_EXT is because WiX gets upset if there a newline
+#       between the tag and the RTF license text.
+#
+define def_nemu_license_xml
+$(NEMU_WIN_INST_OUT_DIR)/NLS/License_$(lang).wxl: $(license_file) $(MAKEFILE_CURRENT) | $$$$(dir $$$$@)
+	$$(call MSG_GENERATE,,$$@,$$<)
+	$(APPEND) -t $$@ '<?xml version="1.0" encoding="utf-8"?>'
+	$(APPEND) $$@ '<WixLocalization xmlns="http://schemas.microsoft.com/wix/2006/localization" Codepage="$(NEMU_BRAND_$(lang)_LANGUAGE_CODEPAGE)" Culture="$(lang)">'
+
+	$(REDIRECT) -a+to $$@ -- $(ECHO_EXT) -n '<String Id="LicenseText">'
+	$(REDIRECT) -a+to $$@ -- $(SED) -e "s|<|\&lt;|g" -e "s|>|\&gt;|g" $(license_file)
+	$(APPEND) $$@ '</String>'
+
+	$(APPEND) $$@ '<String Id="LicenseFile">$(license_file)</String>'
+	$(APPEND) $$@ '<String Id="LicenseInstallFileLong">License_$(lang).rtf</String>'
+	$(APPEND) $$@ '<String Id="LicenseInstallFileShort">L_$(lang).rtf</String>'
+
+	$(APPEND) $$@ '</WixLocalization>'
+endef
+
+$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+	$(eval local license_file := $(NEMU_BRAND_$(subst en_US_,,$(lang)_)LICENSE_RTF)) \
+	$(eval $(def_nemu_license_xml)))
+
+#
+# Create one intermediate WXI (Windows Installer Include) file for all installers (needed for .MSI compiling).
+# This file includes all language-specific files (PDFs, CHMs, ...) to install.
+#
+# Note: When using the -n switch, append will append a new line after each
+#       argument. The -t switch makes it truncate the file.
+#
+$(NEMU_WIN_INST_OUT_DIR)/Files_Main.wxi: $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,,$@,$<)
+	$(APPEND) -t $@ '<?xml version="1.0" ?>'
+	$(APPEND) $@ '<Include xmlns="http://schemas.microsoft.com/wix/2006/wi">'
+ifdef NEMU_WITH_DOCS_PACKING
+	$(APPEND) $@ '	<File Id="file_VirtualBox.chm" Name="VirtualBox.chm" DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$(PATH_STAGE_BIN)/VirtualBox.chm"></File>'
+	$(APPEND) -n $@ $(foreach lang,$(NEMU_MANUAL_ADD_LANGUAGES), \
+		     '	<File Id="file_VirtualBox_$(lang).chm" Name="VirtualBox_$(lang).chm" DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$(PATH_STAGE_BIN)/VirtualBox_$(lang).chm"></File>')
+endif
+	$(APPEND) $@ '</Include>'
+
+$(NEMU_WIN_INST_OUT_DIR)/Files_Doc.wxi: $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,,$@,$<)
+	$(APPEND) -t $@ '<?xml version="1.0" ?>'
+	$(APPEND) $@ '<Include xmlns="http://schemas.microsoft.com/wix/2006/wi">'
+ifdef NEMU_WITH_DOCS_PACKING
+	$(APPEND) $@ '	<File Id="file_UserManual.pdf" Name="UserManual.pdf" DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$(PATH_STAGE_BIN)/UserManual.pdf">'
+	$(APPEND) $@ '	</File>'
+	$(APPEND) -n $@ $(foreach lang,$(NEMU_MANUAL_ADD_LANGUAGES), \
+	             '	<File Id="file_UserManual_$(lang).pdf" Name="UserManual_$(lang).pdf" DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$(PATH_STAGE_BIN)/UserManual_$(lang).pdf">' \
+	             '	</File>')
+endif
+	$(APPEND) $@ '</Include>'
+
+$(NEMU_WIN_INST_OUT_DIR)/Files_License.wxi: $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,,$@,$<)
+	$(APPEND) -t $@ '<?xml version="1.0" ?>'
+	$(APPEND) $@ '<Include xmlns="http://schemas.microsoft.com/wix/2006/wi">'
+	$(APPEND) $@ '	<File Id="file_License_en_US.rtf" Name="License_en_US.rtf" DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$(NEMU_BRAND_LICENSE_RTF)">' \
+	             '	</File>'
+	$(APPEND) -n $@ $(foreach lang,$(NEMU_LICENSE_ADD_LANGUAGES), \
+	             '	<File Id="file_License_$(lang).rtf" Name="License_$(lang).rtf" DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$(NEMU_BRAND_$(lang)_LICENSE_RTF)">' \
+	             '	</File>')
+	$(APPEND) $@ '</Include>'
+
+$(NEMU_WIN_INST_OUT_DIR)/DirComponentsAndFiles_DTrace.wxi: $(MAKEFILE_CURRENT) $(PATH_SUB_CURRENT)/../Config.kmk | $$(dir $$@)
+	$(call MSG_GENERATE,,$@,$<)
+	$(QUIET)$(APPEND) -nt "$@" \
+		'<?xml version="1.0" ?>' \
+		'<Include xmlns="http://schemas.microsoft.com/wix/2006/wi">'
+ifdef NEMU_WITH_DTRACE
+	$(QUIET)$(APPEND) -n "$@" \
+		'<Directory Id="dir_DTrace" Name="dtrace">' \
+		'  <Directory Id="dir_DTrace_lib" Name="lib">' \
+		'    <Directory Id="dir_DTrace_lib_arch" Name="$(KBUILD_TARGET_ARCH)">' \
+		'      <Component Id="cp_dir_DTrace_lib_arch" Guid="7476CDF6-4157-2E17-5CCC-FF92528D2854" Win64="$$(var.Property_Win64)">' \
+		$(foreach file, $(NEMUINST_DTRACE_LIB_ARCH_FILES) \
+                	, '        <File Id="file_dtrace_lib_arch_$(subst -,_,$(file))" Name="$(file)" Vital="yes" ' \
+			  '              Source="$(PATH_STAGE_BIN)/dtrace/lib/$(KBUILD_TARGET_ARCH)/$(file)" />' ) \
+		'      </Component>' \
+		'    </Directory>' \
+		'  </Directory>' \
+        $(if $(NEMUINST_DTRACE_TESTCASE_ARCH_FILES), \
+		'  <Directory Id="dir_DTrace_testcase" Name="testcase">' \
+		'    <Directory Id="dir_DTrace_testcase_arch" Name="$(KBUILD_TARGET_ARCH)">' \
+		'      <Component Id="cp_dir_DTrace_testcase_arch" Guid="45DF7014-4431-6C40-6DB0-35AF7C690EE1" Win64="$$(var.Property_Win64)">' \
+		$(foreach file, $(NEMUINST_DTRACE_TESTCASE_ARCH_FILES) \
+                	, '        <File Id="file_dtrace_testcase_arch_$(subst -,_,$(file))" Name="$(file)" Vital="yes" ' \
+			  '              Source="$(PATH_STAGE_BIN)/dtrace/testcase/$(KBUILD_TARGET_ARCH)/$(file)" />' ) \
+		'      </Component>' \
+		'    </Directory>' \
+		'  </Directory>') \
+        $(if $(NEMUINST_DTRACE_SCRIPTS_FILES), \
+		'  <Directory Id="dir_DTrace_scripts" Name="scripts">' \
+		'    <Component Id="cp_dir_DTrace_scripts" Guid="AE07F9D5-4FD9-ACC7-C760-E9923CE01E16" Win64="$$(var.Property_Win64)">' \
+		$(foreach file, $(NEMUINST_DTRACE_SCRIPTS_FILES) \
+                	, '      <File Id="file_dtrace_scripts_$(subst -,_,$(file))" Name="$(file)" Vital="yes" ' \
+			  '            Source="$(PATH_STAGE_BIN)/dtrace/scripts/$(file)" />' ) \
+		'    </Component>' \
+		'  </Directory>') \
+		'</Directory>'
+endif
+	$(QUIET)$(APPEND) "$@" '</Include>'
+
+
+$(NEMU_WIN_INST_OUT_DIR)/Shortcuts_StartMenu.wxi: $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,,$@,$<)
+	$(APPEND) -t $@ '<?xml version="1.0" ?>'
+	$(APPEND) $@ '<Include xmlns="http://schemas.microsoft.com/wix/2006/wi">'
+	#
+	# Documentation (PDF/CHM)
+	#
+ifdef NEMU_WITH_DOCS_PACKING
+	$(APPEND) $@ '	<Shortcut Id="sc_StartMenu_ManualCHM_en_US" Directory="dir_StartMenuNemu" Name="!(loc.StartMenu_UserManual) (CHM, English)" Description="!(loc.StartMenu_UserManual)"' \
+	             '            Target="[INSTALLDIR]\VirtualBox.chm" WorkingDirectory="dir_Documents" Advertise="no"/>'
+	$(APPEND) -n $@ $(foreach lang,$(NEMU_MANUAL_ADD_LANGUAGES), \
+	             '	<Shortcut Id="sc_StartMenu_ManualCHM_$(lang)" Directory="dir_StartMenuNemu" Name="!(loc.StartMenu_UserManual) (CHM, $(NEMU_BRAND_$(lang)_LANG_NAME))"' \
+		     '            Description="!(loc.StartMenu_UserManual) ($(NEMU_BRAND_$(lang)_LANG_NAME))" Target="[INSTALLDIR]\VirtualBox_$(lang).chm" WorkingDirectory="dir_Documents"/>')
+endif
+	$(APPEND) $@ '	<Shortcut Id="sc_StartMenu_ManualPDF_en_US" Directory="dir_StartMenuNemu" Name="!(loc.StartMenu_UserManual) (PDF, English)" Description="!(loc.StartMenu_UserManual)"' \
+	             '            Target="[INSTALLDIR]\doc\UserManual.pdf" WorkingDirectory="dir_Documents" Advertise="no"/>'
+	$(APPEND) -n $@ $(foreach lang,$(NEMU_MANUAL_ADD_LANGUAGES), \
+	             '	<Shortcut Id="sc_StartMenu_ManualPDF_$(lang)" Directory="dir_StartMenuNemu" Name="!(loc.StartMenu_UserManual) (PDF, $(NEMU_BRAND_$(lang)_LANG_NAME))"' \
+		     '            Description="!(loc.StartMenu_UserManual) ($(NEMU_BRAND_$(lang)_LANG_NAME))" Target="[INSTALLDIR]\doc\UserManual_$(lang).pdf" WorkingDirectory="dir_Documents"/>')
+	#
+	# License(s) (RTF)
+	#
+	$(APPEND) $@ '	<Shortcut Id="sc_StartMenu_License_en_US" Directory="dir_StartMenuNemu" Name="!(loc.StartMenu_License) (English)" Description="!(loc.StartMenu_License)"' \
+	             '            Target="[INSTALLDIR]License_en_US.rtf" WorkingDirectory="INSTALLDIR" Advertise="no"/>'
+	$(APPEND) -n $@ $(foreach lang,$(NEMU_LICENSE_ADD_LANGUAGES), \
+	             '	<Shortcut Id="sc_StartMenu_License_$(lang)" Directory="dir_StartMenuNemu" Name="!(loc.StartMenu_License) ($(NEMU_BRAND_$(lang)_LANG_NAME))"' \
+		     '            Description="!(loc.StartMenu_License) ($(NEMU_BRAND_$(lang)_LANG_NAME))" Target="License_$(lang).rtf" WorkingDirectory="INSTALLDIR"/>')
+	$(APPEND) $@ '</Include>'
+
+#
+# .MSI link (all languages).
+#
+# Note: This will clean up any previous .msi to prevent dep build boxes from
+#       filling up with old files.
+#
+# Note: Disable parallel jobs here because of shared common.cab access issues.
+#
+define def_nemu_link_msi
+.NOTPARALLEL: $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_$(lang).msi
+$(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_$(lang).msi: \
+		$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_$(lang).wixobj \
+		$(NEMU_WIN_INST_OUT_DIR)/NLS/Language_$(lang).wxl \
+		$(NEMU_WIN_INST_OUT_DIR)/NLS/License_$(lang).wxl \
+		$(PATH_STAGE_BIN)/NemuInstallHelper.dll \
+		$(NEMU_SVN_REV_KMK) \
+		$(MAKEFILE_CURRENT) \
+		| $$$$(dir $$$$@)
+	$$(call MSG_L1,Linking installer $$@)
+	$(QUIET)$(RM) -f $$(wildcard $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_BASE)-r*_$(lang).msi)
+	$(NEMU_PATH_WIX)/light.exe -v -nologo \
+		-loc $(NEMU_WIN_INST_OUT_DIR)/NLS/Language_$(lang).wxl \
+		-loc $(NEMU_WIN_INST_OUT_DIR)/NLS/License_$(lang).wxl \
+		-ext $(NEMU_PATH_WIX)/WixUIExtension.dll \
+		-ext $(NEMU_PATH_WIX)/WixDifxAppExtension.dll \
+		$(NEMU_MSI_ICE_IGNORE) \
+		-out $$@ \
+		$$< \
+		$(if-expr "$(KBUILD_TARGET_ARCH)" == "x86", \
+			$(NEMU_PATH_WIX)/difxapp_x86.wixlib, \
+			$(NEMU_PATH_WIX)/difxapp_x64.wixlib)
+	$(RM) -f $(NEMU_WIN_INST_OUT_DIR)/NLS/$(lang).mst
+	$(call NEMU_SIGN_FILE_FN,$$@,$(NEMU_PRODUCT) $(NEMU_VERSION_STRING)r$(NEMU_SVN_REV) ($(KBUILD_TARGET_ARCH)))
+endef
+
+$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+	$(eval $(def_nemu_link_msi)))
+
+#
+# Merge module linking (all languages).
+#
+# Note: This will clean up any previous .msm to prevent dep build boxes from
+#       filling up with old files.
+#
+define def_nemu_link_msm
+$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).msm: \
+		$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).wixobj \
+		$(NEMU_WIN_INST_OUT_DIR)/NLS/Language_$(lang).wxl \
+		$(NEMU_WIN_INST_OUT_DIR)/NLS/License_$(lang).wxl \
+		$(PATH_STAGE_BIN)/NemuInstallHelper.dll \
+		$(NEMU_SVN_REV_KMK) \
+		$(MAKEFILE_CURRENT) \
+		| $$$$(dir $$$$@)
+	$$(call MSG_L1,Linking installer $$@)
+	$(QUIET)$(RM) -f $$(wildcard $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_BASE)-r*_$(lang).msi)
+	$(NEMU_PATH_WIX)/light.exe -v -nologo \
+		-loc $(NEMU_WIN_INST_OUT_DIR)/NLS/Language_$(lang).wxl \
+		-loc $(NEMU_WIN_INST_OUT_DIR)/NLS/License_$(lang).wxl \
+		-ext $(NEMU_PATH_WIX)/WixDifxAppExtension.dll \
+		$(NEMU_MSI_ICE_IGNORE) \
+		-out $$@ \
+		$$< \
+		$(if-expr "$(KBUILD_TARGET_ARCH)" == "x86", \
+			$(NEMU_PATH_WIX)/difxapp_x86.wixlib, \
+			$(NEMU_PATH_WIX)/difxapp_x64.wixlib)
+	$(RM) -f $(NEMU_WIN_INST_OUT_DIR)/NLS/$(lang).mst
+	$(call NEMU_SIGN_FILE_FN,$$@,$(NEMU_PRODUCT) $(NEMU_VERSION_STRING)r$(NEMU_SVN_REV) ($(KBUILD_TARGET_ARCH)))
+endef
+
+$(if $(NEMU_WITH_MSM_INSTALL), \
+	$(foreach module,$(NEMU_INSTALLER_MERGE_MODULES), \
+		$(foreach lang,$(NEMU_INSTALLER_MERGE_LANGUAGES), \
+			$(eval $(def_nemu_link_msm)))),)
+
+
+#
+# Add dependencies that makes sure necessary bits gets built.
+# For combined packages we always use the .ISO from the amd64 build.
+#
+ifdef NEMU_WITH_COMBINED_PACKAGE
+ NEMU_MSI_DEPENDENCIES := \
+	$(if $(NEMU_WITH_ADDITIONS_PACKING),$(PATH_MULTIARCH_GUEST_ADDITIONS_ISO)/NemuGuestAdditions.iso)
+else
+ NEMU_MSI_DEPENDENCIES := \
+	$(if $(NEMU_WITH_ADDITIONS_PACKING),$(NEMU_PATH_ADDITIONS_ISO)/NemuGuestAdditions.iso)
+endif
+
+#
+# A few manual dependencies to make sure everything is rebuilt when they should.
+#
+$(PATH_SUB_CURRENT)/VirtualBox.wxs: \
+	$(PATH_SUB_CURRENT)/Properties.wxi \
+	$(PATH_SUB_CURRENT)/NemuMergeApp.wxi
+
+$(PATH_SUB_CURRENT)/NemuMergeApp.wxi $(PATH_SUB_CURRENT)/VirtualBox.wxs: \
+	$(NEMU_WIN_INST_OUT_DIR)/Files_Doc.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/DirComponentsAndFiles_DTrace.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/Files_License.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/Files_Main.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/NemuKey.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/NemuGuiNLS.wxi \
+	$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib.wxi
+
+#
+# MSI compile.
+#
+define def_nemu_compile_wixobj
+includedep $(NEMU_WIN_INST_OUT_DIR)/VirtualBox_$(lang).wixobj.dep
+$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_$(lang).wixobj: \
+			$(PATH_SUB_CURRENT)/VirtualBox.wxs \
+			$(PATH_SUB_CURRENT)/UserInterface.wxi \
+			$(if $(NEMU_WITH_MSM_INSTALL), \
+				$(foreach module,$(NEMU_INSTALLER_MERGE_MODULES), \
+					$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).msm), \
+				$(NEMU_WIN_INST_OUT_DIR)/Shortcuts_StartMenu.wxi \
+				$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib.wxi \
+				$(if $(NEMU_WITH_32_ON_64_MAIN_API),$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib_x86.wxi,) \
+				$(NEMU_WIN_INST_OUT_DIR)/NemuKey.wxi \
+				$(if $(NEMU_WITH_QTGUI),$(NEMU_WIN_INST_OUT_DIR)/NemuGuiNLS.wxi) \
+				$(NEMU_MSI_DEPENDENCIES)) \
+			$(NEMU_VERSION_STAMP) \
+			| $$$$(dir $$$$@)
+	$(QUIET)$(RM) -f $@
+	$(REDIRECT) \
+		-E 'PATH_OUT=$(subst /,\,$(PATH_OUT))' \
+		-E 'PATH_TARGET=$(subst /,\,$(NEMU_WIN_INST_OUT_DIR))' \
+		-E 'PATH_ROOT=$(subst /,\,$(PATH_ROOT))' \
+		-E 'PATH_MULTIARCH_GUEST_ADDITIONS_ISO=$(subst /,\,$(PATH_MULTIARCH_GUEST_ADDITIONS_ISO))' \
+		-E 'NEMU_PATH_WIN_INST_SRC=$(subst /,\,$(NEMU_PATH_WIN_INST_SRC))' \
+		-E 'NEMU_BRAND_WIN_INST_DLGJPG=$(subst /,\,$(NEMU_BRAND_WIN_INST_DLGJPG))' \
+		-E 'NEMU_ADD_LANGUAGES=$(NEMU_INSTALLER_ADD_LANGUAGES)' \
+		-E 'NEMU_BRAND_LICENSE_RTF=$(subst /,\,$(NEMU_BRAND_LICENSE_RTF))' \
+		$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+			-E 'NEMU_BRAND_$(lang)_LICENSE_RTF=$(subst /,\,$(NEMU_BRAND_$(subst en_US_,,$(lang)_)LICENSE_RTF))') \
+		-E 'NEMU_BUILD_NR_FOR_INST=$(NEMU_VERSION_BUILD)' \
+		-E 'NEMU_VENDOR=$(NEMU_VENDOR)' \
+		-E 'NEMU_VENDOR_SHORT=$(NEMU_VENDOR_SHORT)' \
+		-E 'NEMU_PRODUCT=$(NEMU_PRODUCT)' \
+		-E 'NEMU_C_YEAR=$(NEMU_C_YEAR)' \
+		-E 'NEMU_VERSION_STRING=$(NEMU_VERSION_STRING)' \
+		-E 'NEMU_VERSION_STRING_RAW=$(NEMU_VERSION_STRING_RAW)' \
+		-E 'NEMU_VERSION_MAJOR_INST=$(NEMU_VERSION_MAJOR)' \
+		-E 'NEMU_VERSION_MINOR_INST=$(NEMU_VERSION_MINOR)' \
+		-E 'NEMU_SIGNING_MODE=$(strip $(if $(NEMU_SIGNING_MODE),$(NEMU_SIGNING_MODE),none))' \
+		-E 'NEMU_GUI_USE_QGL=$(if $(NEMU_GUI_USE_QGL),yes,no)' \
+		$(if $(NEMU_WITH_MSM_INSTALL), \
+			$(foreach module,$(NEMU_INSTALLER_MERGE_MODULES), \
+				-E 'NEMU_WIN_INST_MERGE_$(toupper $(module))=$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).msm'),) \
+		-E 'NEMU_WITH_32_ON_64_MAIN_API=$(if $(NEMU_WITH_32_ON_64_MAIN_API),yes,no)' \
+		-E 'NEMU_WITH_ADDITIONS_PACKING=$(if $(NEMU_WITH_ADDITIONS_PACKING),yes,no)' \
+		-E 'NEMU_WITH_COMBINED_PACKAGE=$(if $(NEMU_WITH_COMBINED_PACKAGE),yes,no)' \
+		-E 'NEMU_WITH_CROGL=$(if $(NEMU_WITH_CROGL),yes,no)' \
+		-E 'NEMU_WITH_DEBUGGER_GUI=$(if-expr defined(NEMU_WITH_DEBUGGER_GUI) && defined(NEMU_WITH_QTGUI),yes,no)' \
+		-E 'NEMU_WITH_DOCS_PACKING=$(if $(NEMU_WITH_DOCS_PACKING),yes,no)' \
+		-E 'NEMU_WITH_DTRACE=$(if $(NEMU_WITH_DTRACE),yes,no)' \
+		-E 'NEMU_WITH_EFIFW_PACKING=$(if $(NEMU_WITH_EFIFW_PACKING),yes,no)' \
+		-E 'NEMU_WITH_EXTPACK=$(if $(NEMU_WITH_EXTPACK),yes,no)' \
+		-E 'NEMU_WITH_GUEST_CONTROL=$(if $(NEMU_WITH_GUEST_CONTROL),yes,no)' \
+		-E 'NEMU_WITH_GUEST_PROPS=$(if $(NEMU_WITH_GUEST_PROPS),yes,no)' \
+		-E 'NEMU_WITH_HARDENING=$(if $(NEMU_WITH_HARDENING),yes,no)' \
+		-E 'NEMU_WITH_DRAG_AND_DROP=$(if $(NEMU_WITH_DRAG_AND_DROP),yes,no)' \
+		-E 'NEMU_WITH_NETFLT=$(if $(NEMU_WITH_NETFLT),yes,no)' \
+		-E 'NEMU_WITH_PYTHON=$(if $(NEMU_WITH_PYTHON),yes,no)' \
+		-E 'NEMU_WITH_QTGUI=$(if $(NEMU_WITH_QTGUI),yes,no)' \
+		-E 'NEMU_WITH_VIDEOHWACCEL=$(if $(NEMU_WITH_VIDEOHWACCEL),yes,no)' \
+		-E 'NEMU_WITH_VRDP=$(if-expr defined(NEMU_WITH_VRDP) && !defined(NEMU_WITH_EXTPACK_PUEL),yes,no)' \
+		-E 'NEMU_WITH_WEBSERVICES=$(if $(NEMU_WITH_WEBSERVICES),yes,no)' \
+		-E 'NEMU_WITH_SECURELABEL=$(if $(NEMU_WITH_SECURELABEL),yes,no)' \
+		-E 'NEMU_WITH_MSM_INSTALL=$(if $(NEMU_WITH_MSM_INSTALL),yes,no)' \
+		-E 'NEMU_WITH_SERIALNUMBER_INSTALL=$(if $(NEMU_WITH_SERIALNUMBER_INSTALL),yes,no)' \
+		-E 'NEMU_WITH_LICENSE_DISPLAY=$(if $(NEMU_WITH_LICENSE_DISPLAY),yes,no)' \
+		-E 'NEMU_WINDOWS_ICON_FILE=$(subst /,\,$(NEMU_WINDOWS_ICON_FILE))' \
+		-E 'BUILD_TYPE=$(KBUILD_TYPE)' \
+		-E 'BUILD_TARGET_ARCH=$(KBUILD_TARGET_ARCH)' \
+		-E 'NEMU_VCC_TOOL_STEM=$(NEMU_VCC_TOOL_STEM)' \
+		-- \
+		$(NEMU_PATH_WIX)/candle.exe $(filter-out $(NEMU_VERSION_STAMP),$$<) \
+			-ext $(NEMU_PATH_WIX)/WixUIExtension.dll \
+			-ext $(NEMU_PATH_WIX)/WixDifxAppExtension.dll \
+			-out $$@
+# Generate wxi dependencies based on the sourceLineNumber references in the output.
+	$(QUIET)$(APPEND) -t '$$@.dep' '$$@: \'
+	$(QUIET)$(NEMU_XSLTPROC) $(NEMU_PATH_WIN_INST_SRC)/dep.xsl "$$@" >> "$$@.dep"
+	$(QUIET)$(NEMU_XSLTPROC) $(NEMU_PATH_WIN_INST_SRC)/dep2.xsl "$$@" | sort  | $(SED) '$!N; /^\(.*\)\n\1$$$$/!P; D' >> "$$@.dep"
+	$(QUIET)$(APPEND) -n '$$@.dep' '' ''
+endef
+
+$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+	$(eval $(def_nemu_compile_wixobj)))
+
+#
+# MSM (merge module) compile.
+#
+define def_nemu_compile_msm
+includedep $(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).wixobj
+$(NEMU_WIN_INST_OUT_DIR)/NemuMerge$(module)_$(lang).wixobj: \
+		$(PATH_SUB_CURRENT)/NemuMerge$(module).wxs \
+		$(PATH_SUB_CURRENT)/NemuMerge$(module).wxi \
+		$(PATH_SUB_CURRENT)/NemuMerge$(module)CA.wxi \
+		$(PATH_SUB_CURRENT)/NemuMerge$(module)Seq.wxi \
+		$(PATH_SUB_CURRENT)/UserInterface.wxi \
+		$(NEMU_WIN_INST_OUT_DIR)/Shortcuts_StartMenu.wxi \
+		$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib.wxi \
+		$(if $(NEMU_WITH_32_ON_64_MAIN_API),$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib_x86.wxi,) \
+		$(NEMU_WIN_INST_OUT_DIR)/NemuKey.wxi \
+		$(if $(NEMU_WITH_QTGUI),$(NEMU_WIN_INST_OUT_DIR)/NemuGuiNLS.wxi) \
+		$(NEMU_MSI_DEPENDENCIES) \
+		$(NEMU_VERSION_STAMP) \
+		| $$$$(dir $$$$@)
+	$(QUIET)$(RM) -f $@
+	$(REDIRECT) \
+		-E 'PATH_OUT=$(subst /,\,$(PATH_OUT))' \
+		-E 'PATH_TARGET=$(subst /,\,$(NEMU_WIN_INST_OUT_DIR))' \
+		-E 'PATH_ROOT=$(subst /,\,$(PATH_ROOT))' \
+		-E 'PATH_MULTIARCH_GUEST_ADDITIONS_ISO=$(subst /,\,$(PATH_MULTIARCH_GUEST_ADDITIONS_ISO))' \
+		-E 'NEMU_PATH_WIN_INST_SRC=$(subst /,\,$(NEMU_PATH_WIN_INST_SRC))' \
+		-E 'NEMU_BRAND_WIN_INST_DLGJPG=$(subst /,\,$(NEMU_BRAND_WIN_INST_DLGJPG))' \
+		-E 'NEMU_ADD_LANGUAGES=$(NEMU_INSTALLER_ADD_LANGUAGES)' \
+		-E 'NEMU_BRAND_LICENSE_RTF=$(subst /,\,$(NEMU_BRAND_LICENSE_RTF))' \
+		$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), \
+			-E 'NEMU_BRAND_$(lang)_LICENSE_RTF=$(subst /,\,$(NEMU_BRAND_$(subst en_US_,,$(lang)_)LICENSE_RTF))') \
+		-E 'NEMU_BUILD_NR_FOR_INST=$(NEMU_VERSION_BUILD)' \
+		-E 'NEMU_VENDOR=$(NEMU_VENDOR)' \
+		-E 'NEMU_VENDOR_SHORT=$(NEMU_VENDOR_SHORT)' \
+		-E 'NEMU_PRODUCT=$(NEMU_PRODUCT)' \
+		-E 'NEMU_C_YEAR=$(NEMU_C_YEAR)' \
+		-E 'NEMU_VERSION_STRING=$(NEMU_VERSION_STRING)' \
+		-E 'NEMU_VERSION_STRING_RAW=$(NEMU_VERSION_STRING_RAW)' \
+		-E 'NEMU_VERSION_MAJOR_INST=$(NEMU_VERSION_MAJOR)' \
+		-E 'NEMU_VERSION_MINOR_INST=$(NEMU_VERSION_MINOR)' \
+		-E 'NEMU_SIGNING_MODE=$(strip $(if $(NEMU_SIGNING_MODE),$(NEMU_SIGNING_MODE),none))' \
+		-E 'NEMU_GUI_USE_QGL=$(if $(NEMU_GUI_USE_QGL),yes,no)' \
+		-E 'NEMU_WITH_32_ON_64_MAIN_API=$(if $(NEMU_WITH_32_ON_64_MAIN_API),yes,no)' \
+		-E 'NEMU_WITH_ADDITIONS_PACKING=$(if $(NEMU_WITH_ADDITIONS_PACKING),yes,no)' \
+		-E 'NEMU_WITH_COMBINED_PACKAGE=$(if $(NEMU_WITH_COMBINED_PACKAGE),yes,no)' \
+		-E 'NEMU_WITH_CROGL=$(if $(NEMU_WITH_CROGL),yes,no)' \
+		-E 'NEMU_WITH_DEBUGGER_GUI=$(if-expr defined(NEMU_WITH_DEBUGGER_GUI) && defined(NEMU_WITH_QTGUI),yes,no)' \
+		-E 'NEMU_WITH_DOCS_PACKING=$(if $(NEMU_WITH_DOCS_PACKING),yes,no)' \
+		-E 'NEMU_WITH_DTRACE=$(if $(NEMU_WITH_DTRACE),yes,no)' \
+		-E 'NEMU_WITH_EFIFW_PACKING=$(if $(NEMU_WITH_EFIFW_PACKING),yes,no)' \
+		-E 'NEMU_WITH_EXTPACK=$(if $(NEMU_WITH_EXTPACK),yes,no)' \
+		-E 'NEMU_WITH_GUEST_CONTROL=$(if $(NEMU_WITH_GUEST_CONTROL),yes,no)' \
+		-E 'NEMU_WITH_GUEST_PROPS=$(if $(NEMU_WITH_GUEST_PROPS),yes,no)' \
+		-E 'NEMU_WITH_HARDENING=$(if $(NEMU_WITH_HARDENING),yes,no)' \
+		-E 'NEMU_WITH_DRAG_AND_DROP=$(if $(NEMU_WITH_DRAG_AND_DROP),yes,no)' \
+		-E 'NEMU_WITH_NETFLT=$(if $(NEMU_WITH_NETFLT),yes,no)' \
+		-E 'NEMU_WITH_PYTHON=$(if $(NEMU_WITH_PYTHON),yes,no)' \
+		-E 'NEMU_WITH_QTGUI=$(if $(NEMU_WITH_QTGUI),yes,no)' \
+		-E 'NEMU_WITH_VIDEOHWACCEL=$(if $(NEMU_WITH_VIDEOHWACCEL),yes,no)' \
+		-E 'NEMU_WITH_VRDP=$(if-expr defined(NEMU_WITH_VRDP) && !defined(NEMU_WITH_EXTPACK_PUEL),yes,no)' \
+		-E 'NEMU_WITH_WEBSERVICES=$(if $(NEMU_WITH_WEBSERVICES),yes,no)' \
+		-E 'NEMU_WITH_MSM_INSTALL=$(if $(NEMU_WITH_MSM_INSTALL),yes,no)' \
+		-E 'NEMU_WITH_SECURELABEL=$(if $(NEMU_WITH_SECURELABEL),yes,no)' \
+		-E 'NEMU_WITH_SERIALNUMBER_INSTALL=$(if $(NEMU_WITH_SERIALNUMBER_INSTALL),yes,no)' \
+		-E 'NEMU_WITH_LICENSE_DISPLAY=$(if $(NEMU_WITH_LICENSE_DISPLAY),yes,no)' \
+		-E 'NEMU_WINDOWS_ICON_FILE=$(subst /,\,$(NEMU_WINDOWS_ICON_FILE))' \
+		-E 'BUILD_TYPE=$(KBUILD_TYPE)' \
+		-E 'BUILD_TARGET_ARCH=$(KBUILD_TARGET_ARCH)' \
+		-E 'NEMU_VCC_TOOL_STEM=$(NEMU_VCC_TOOL_STEM)' \
+		-- \
+		$(NEMU_PATH_WIX)/candle.exe $(filter-out $(NEMU_VERSION_STAMP),$$<) \
+			-ext $(NEMU_PATH_WIX)/WixUIExtension.dll \
+			-ext $(NEMU_PATH_WIX)/WixDifxAppExtension.dll \
+			-out $$@
+# Generate wxi dependencies based on the sourceLineNumber references in the output.
+	$(QUIET)$(APPEND) -t '$$@.dep' '$$@: \'
+	$(QUIET)$(NEMU_XSLTPROC) $(NEMU_PATH_WIN_INST_SRC)/dep.xsl "$$@" >> "$$@.dep"
+	$(QUIET)$(NEMU_XSLTPROC) $(NEMU_PATH_WIN_INST_SRC)/dep2.xsl "$$@" | sort  | $(SED) '$!N; /^\(.*\)\n\1$$$$/!P; D' >> "$$@.dep"
+	$(QUIET)$(APPEND) -n '$$@.dep' '' ''
+endef
+
+$(foreach module,$(NEMU_INSTALLER_MERGE_MODULES), \
+	$(foreach lang,$(NEMU_INSTALLER_MERGE_LANGUAGES), \
+		$(eval $(def_nemu_compile_msm))))
+
+#
+# VirtualBox Type Library definition.
+#
+$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib.wxi: \
+		$(PATH_SUB_CURRENT)/VirtualBox_TypeLib.xsl \
+		$(NEMU_XIDL_FILE) \
+		| $$(dir $$@)
+	$(NEMU_XSLTPROC) -o $@ $< $(NEMU_XIDL_FILE)
+
+$(NEMU_WIN_INST_OUT_DIR)/VirtualBox_TypeLib_x86.wxi: \
+		$(PATH_SUB_CURRENT)/VirtualBox_TypeLib.xsl \
+		$(NEMU_XIDL_FILE) \
+		| $$(dir $$@)
+	$(NEMU_XSLTPROC) --stringparam "a_sTarget" "NemuClient-x86"  -o $@.tmp $< $(NEMU_XIDL_FILE)
+	$(SED) -e 's/NemuC/NemuClient_x86/g' --output $@ $@.tmp
+	$(RM) -f $@.tmp
+
+#
+# Construct the list of GUI translations.
+# ('-t' -- truncate file; '-n' -- new line between arguments)
+#
+include $(PATH_ROOT)/src/Nemu/Frontends/VirtualBox/nls/ApprovedLanguages.kmk
+$(NEMU_WIN_INST_OUT_DIR)/NemuGuiNLS.wxi: $(PATH_ROOT)/src/Nemu/Frontends/VirtualBox/nls/ApprovedLanguages.kmk $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(APPEND) -t $@ '<?xml version="1.0" ?>'
+	$(APPEND) $@ '<Include>'
+	$(APPEND) -n $@ $(foreach lang,$(NEMU_APPROVED_GUI_LANGUAGES), \
+	             '  <File Id="nlsqt${lang}"  Name="qt_${lang}.qm"         DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$$(env.PATH_OUT)\bin\nls\qt_${lang}.qm"         />' \
+	             '  <File Id="nlsgui${lang}" Name="VirtualBox_${lang}.qm" DiskId="$(NEMU_INSTALLER_COMMON_DISKID)" Vital="yes" Source="$$(env.PATH_OUT)\bin\nls\VirtualBox_${lang}.qm" />')
+	$(APPEND) $@ '</Include>'
+
+#
+# Edit the version stored in the registry.
+#
+$(NEMU_WIN_INST_OUT_DIR)/NemuKey.wxi: $(PATH_SUB_CURRENT)/NemuKey.wxi $(NEMU_VERSION_STAMP) | $$(dir $$@)
+	$(SED)	-e 's/%VER%/$(NEMU_VERSION_STRING_RAW)/' \
+		-e 's/%VER_EXT%/$(NEMU_VERSION_STRING)/' \
+		--output $@ $<
+
+#
+# Build the multi-language version of the .MSI installer (final installer).
+# This is done by creating binary .MST diffs of all the language-specific installers
+# and then merging the diffs into the existing .MSI using tools from the MS Installer SDK.
+#
+# .MSI link (all languages).
+#
+# Note: Prereqs of the special .NOTPARALLEL target will be executed with parallel
+#       make jobs temporarily disabled.  This is a hack to work around what seems
+#       to be a problem with the sharing mode set by one or more of the three
+#       programs / scripts involved in this step.
+#
+define def_nemu_create_mst
+.NOTPARALLEL: $(NEMU_WIN_INST_OUT_DIR)/NLS/$(lang).mst
+$(NEMU_WIN_INST_OUT_DIR)/NLS/$(lang).mst: \
+		$(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_en_US.msi \
+		$(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_$(lang).msi \
+		| $$$$(dir $$$$@)
+	$(call MSG_L1,Integrating language ($(lang)))
+	$(REDIRECT) -C $$(@D) -- $(NEMU_PATH_MSITRAN) -g $$< $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_$(lang).msi $(lang).mst
+	$(REDIRECT) -C $$(@D) -- $(NEMU_PATH_MSIDB)   -d $$< -r $(lang).mst
+	$(REDIRECT) -C $$(@D) -- wscript.exe $(NEMU_PATH_WISUBSTG) $$< $(lang).mst $(lang_id)
+endef
+
+$(foreach lang,$(NEMU_INSTALLER_ADD_LANGUAGES), \
+	$(eval local lang_id := $(NEMU_BRAND_$(lang)_LANG_ID)) \
+	$(eval $(def_nemu_create_mst)))
+
+#
+# Create all xxx_<Lang>.msi installers and prepare the final xxx_MultiLang.msi installer.
+#
+## @todo this rule must not modify $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_en_US.msi but a copy of it. def_nemu_compile_wixobj is
+#        where en_US.msi is created, it shouldn't be changed after that (if possible). Also, document the path length issue.
+NEMU_INS_PROD_ARCH.amd64 = x64
+NEMU_INS_PROD_ARCH.x86   = Intel
+NEMU_INS_PROD_ARCH := $(NEMU_INS_PROD_ARCH.$(KBUILD_TARGET_ARCH))
+$(if $(NEMU_INS_PROD_ARCH),,$(error NEMU_INS_PROD_ARCH is empty!))
+NEMU_INS_PROD_LANG := 7="$(NEMU_INS_PROD_ARCH);1033
+$(foreach lang, $(NEMU_INSTALLER_ADD_LANGUAGES), $(eval NEMU_INS_PROD_LANG := $(NEMU_INS_PROD_LANG)$(COMMA)$(NEMU_BRAND_$(lang)_LANG_ID)))
+NEMU_INS_PROD_LANG := $(NEMU_INS_PROD_LANG)"
+
+$(PACKAGE_NAME_FINAL): \
+		$(NEMU_WIN_INST_OUT_DIR)/Files_Main.wxi \
+		$(NEMU_WIN_INST_OUT_DIR)/Files_Doc.wxi \
+		$(NEMU_WIN_INST_OUT_DIR)/Files_License.wxi \
+		$(NEMU_WIN_INST_OUT_DIR)/Shortcuts_StartMenu.wxi \
+		$(foreach lang,$(NEMU_INSTALLER_LANGUAGES), $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_$(lang).msi) \
+		$(foreach lang,$(NEMU_INSTALLER_ADD_LANGUAGES),	$(NEMU_WIN_INST_OUT_DIR)/NLS/$(lang).mst) \
+		$(NEMU_SVN_REV_KMK) \
+		| $$(dir $$@)
+	$(QUIET)$(RM) -f $(wildcard $(PATH_STAGE_BIN)/$(PACKAGE_BASE)-r*.msi)
+	$(REDIRECT) -C $(@D) -- \
+		wscript.exe $(NEMU_PATH_WISUMINFO) $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_en_US.msi $(NEMU_INS_PROD_LANG)
+	$(CP) -f $(NEMU_WIN_INST_OUT_DIR)/$(PACKAGE_NAME_LANG)_en_US.msi $@
+	$(call NEMU_SIGN_FILE_FN,$@,$(NEMU_PRODUCT) $(NEMU_VERSION_STRING)r$(NEMU_SVN_REV))
+
+
+if defined(NEMU_WITH_COMBINED_PACKAGE) && "$(KBUILD_TARGET_ARCH)" == "x86"
+#
+# Make the multi-architecture installer by calling our stub builder
+# with both platform installers (x86 and amd64) + common cab. The common
+# cab only is needed when we don't use merge modules. We only
+# need to do this once; so do it on x86 only.
+#
+$(PATH_STAGE_BIN)/$(PACKAGE_NAME_MULTIARCH_FINAL): \
+		$(PATH_MULTIARCH_TEMP)/$(PACKAGE_NAME_MULTIARCH.x86) \
+		$(PATH_MULTIARCH_TEMP)/$(PACKAGE_NAME_MULTIARCH.amd64) \
+		$(PATH_STAGE_BIN)/NemuStub.exe \
+		$$(NemuStubBld_1_TARGET)
+	$(call MSG_L1,Building Windows combined package)
+	$(if $(NEMU_WITH_MSM_INSTALL),,$(call NEMU_SIGN_FILE_FN,$(PACKAGE_NAME_MULTIARCH_COMMONCAB)))
+	$(REDIRECT) -C $(@D) -- \
+		$(NemuStubBld_1_TARGET) -out $@ \
+			-target-x86 $(PATH_MULTIARCH_TEMP)/$(PACKAGE_NAME_MULTIARCH.x86) \
+			-target-amd64 $(PATH_MULTIARCH_TEMP)/$(PACKAGE_NAME_MULTIARCH.amd64) \
+			$(if $(NEMU_WITH_MSM_INSTALL),,-target-all $(PACKAGE_NAME_MULTIARCH_COMMONCAB)) \
+			-stub $(PATH_STAGE_BIN)/NemuStub.exe
+	$(NEMU_VCC_EDITBIN) /IntegrityCheck:NO $@
+	$(call NEMU_SIGN_FILE_FN,$@)
+endif
+
+
+#
+# Make the bundle installer (for retail ISOs) (zip-file).
+#
+$(NEMU_PATH_PACK_BUNDLE_ZIP): \
+		$(PACKAGE_NAME_FINAL) \
+		$(if-expr "$(KBUILD_TARGET_ARCH)" == "x86", \
+			$(PATH_STAGE_BIN)/NemuBundleMachine.exe \
+			$(if $(NEMU_BRAND_WIN_AS_MENU), $(PATH_STAGE_BIN)/AutoStartMenu.exe) \
+			$(if $(NEMU_WITH_COMBINED_PACKAGE), $(PATH_STAGE_BIN)/$(PACKAGE_NAME_MULTIARCH_FINAL)),)
+	$(RM) -Rf -- $(NEMU_PATH_PACK_BUNDLE_TMP)/
+	$(MKDIR) -p $(NEMU_PATH_PACK_BUNDLE_TMP)/
+ifndef NEMU_WITH_COMBINED_PACKAGE
+	$(CP) $(PACKAGE_NAME_FINAL)                 $(NEMU_PATH_PACK_BUNDLE_TMP)/$(NEMU_BRAND_WIN_INST_NAME.$(KBUILD_TARGET_ARCH))
+endif
+ifeq ($(KBUILD_TARGET_ARCH),x86)
+ ifdef NEMU_WITH_COMBINED_PACKAGE
+	$(CP) $(PATH_STAGE_BIN)/$(PACKAGE_NAME_MULTIARCH_FINAL)       $(NEMU_PATH_PACK_BUNDLE_TMP)/$(PACKAGE_NAME_MULTIARCH_FINAL)
+ endif
+	$(CP) $(PATH_STAGE_BIN)/NemuBundleMachine.exe     $(NEMU_PATH_PACK_BUNDLE_TMP)/
+	$(CP) $(PATH_STAGE_BIN)/AutoStartMenu.exe         $(NEMU_PATH_PACK_BUNDLE_TMP)/
+ ifdef NEMU_BRAND_WIN_AS_MENU
+	$(MKDIR) -p $(NEMU_PATH_PACK_BUNDLE_TMP)/Menu/Graphics/
+	$(CP) $(NEMU_BRAND_WIN_AS_CONTENT)          $(NEMU_PATH_PACK_BUNDLE_TMP)/
+	$(CP) $(NEMU_BRAND_WIN_AS_MENU_CONTENT)     $(NEMU_PATH_PACK_BUNDLE_TMP)/Menu/
+	$(CP) $(NEMU_BRAND_WIN_AS_MENU_CONTENT_GFX) $(NEMU_PATH_PACK_BUNDLE_TMP)/Menu/Graphics/
+  ifdef NEMU_WITH_COMBINED_PACKAGE
+	$(SED) -e 's/NEMUEXE/$(PACKAGE_NAME_MULTIARCH_FINAL)/g' \
+	       --output $(NEMU_PATH_PACK_BUNDLE_TMP)/Menu/index.html \
+	       $(NEMU_BRAND_WIN_AS_MENU)/index_combined.html
+  else
+	$(SED) -e 's/NEMU32EXE/$(NEMU_BRAND_WIN_INST_NAME.x86)/g' \
+	       -e 's/NEMU64EXE/$(NEMU_BRAND_WIN_INST_NAME.amd64)/g' \
+	       --output $(NEMU_PATH_PACK_BUNDLE_TMP)/Menu/index.html \
+	       $(NEMU_BRAND_WIN_AS_MENU)/index.html
+  endif
+ endif
+endif
+ifeq ($(KBUILD_TARGET_ARCH),amd64)
+ ifndef NEMU_WITH_COMBINED_PACKAGE
+	# Only needed if *not* combined package -- otherwise the 64-bit build
+	# has nothing to do here since the one and only amd64 .MSI file is already
+	# included in the x86 combined package.
+	$(REDIRECT) -C $(NEMU_PATH_PACK_BUNDLE_TMP) -- $(ZIP) -9r $@ .
+ endif
+else
+	# Do a bundle .zip in every case on x86. On a combined package this also
+	# will include the amd64 installer we left out in the block above (see comment).
+	$(REDIRECT) -C $(NEMU_PATH_PACK_BUNDLE_TMP) -- $(ZIP) -9r $@ .
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)

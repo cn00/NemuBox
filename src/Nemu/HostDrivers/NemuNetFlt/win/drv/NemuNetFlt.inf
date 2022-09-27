@@ -1,0 +1,104 @@
+; $Id: NemuNetFlt.inf $
+; @file
+; NemuNetFlt.inf - VirtualBox Bridged Networking Driver inf file
+; Protocol edge
+;
+;
+; Copyright (C) 2011-2015 Oracle Corporation
+;
+; This file is part of VirtualBox Open Source Edition (OSE), as
+; available from http://www.virtualbox.org. This file is free software;
+; you can redistribute it and/or modify it under the terms of the GNU
+; General Public License (GPL) as published by the Free Software
+; Foundation, in version 2 as it comes in the "COPYING" file of the
+; VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+; hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+;
+
+[Version]
+Signature  = "$Windows NT$"
+;cat   CatalogFile = NemuNetFlt.cat
+Class      = NetService
+ClassGUID  = {4D36E974-E325-11CE-BFC1-08002BE10318}
+Provider   = %Provider%
+;DriverPackageType=Network
+;DriverPackageDisplayName=%NemuNetFlt_Desc%
+;edit-DriverVer=08/13/2008,1.1.0.1
+
+
+[Manufacturer]
+%Provider% = Nemu,NTx86,NTamd64
+
+[ControlFlags]
+
+[Nemu]
+%NemuNetFlt_Desc% = NemuNetFlt.ndi, sun_NemuNetFlt
+
+[Nemu.NTx86]
+%NemuNetFlt_Desc% = NemuNetFlt.ndi, sun_NemuNetFlt
+
+[Nemu.NTamd64]
+%NemuNetFlt_Desc% = NemuNetFlt.ndi, sun_NemuNetFlt
+
+[NemuNetFlt.ndi]
+AddReg          = NemuNetFlt.ndi.AddReg, NemuNetFlt.AddReg
+Characteristics = 0x4410 ;  NCF_FILTER | NCF_NDIS_PROTOCOL
+CopyFiles       = NemuNetFlt.Files.DLL, NemuNetFlt.Files.Sys
+CopyInf         = NemuNetFltM.inf
+
+[NemuNetFlt.ndi.Remove]
+DelFiles        = NemuNetFlt.Files.DLL, NemuNetFlt.Files.Sys
+
+[NemuNetFlt.ndi.Services]
+AddService = NemuNetFlt,, NemuNetFlt.AddService
+
+[NemuNetFlt.AddService]
+DisplayName    = %NemuNetFltService_Desc%
+ServiceType    = 1 ;SERVICE_KERNEL_DRIVER
+StartType      = 3 ;SERVICE_DEMAND_START
+ErrorControl   = 1 ;SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\NemuNetFlt.sys
+LoadOrderGroup = PNP_TDI
+AddReg         = NemuNetFlt.AddService.AddReg
+
+
+[NemuNetFlt.AddService.AddReg]
+
+[SourceDisksNames]
+1=%DiskDescription%,"",,
+
+[SourceDisksFiles]
+NemuNetFlt.sys=1
+NemuNetFltNobj.dll=1
+
+[DestinationDirs]
+DefaultDestDir = 12
+NemuNetFlt.Files.DLL   = 11   ; %windir%\System32
+NemuNetFlt.Files.Sys   = 12   ; %windir%\System32\drivers
+
+[NemuNetFlt.Files.Sys]
+NemuNetFlt.sys,,,2
+
+[NemuNetFlt.Files.DLL]
+NemuNetFltNobj.dll,,,2
+
+[NemuNetFlt.ndi.AddReg]
+HKR, Ndi, HelpText, , %NemuNetFlt_HELP%
+HKR, Ndi,            ClsID,              0, {f374d1a0-bf08-4bdc-9cb2-c15ddaeef955}
+HKR, Ndi,            ComponentDll,        , NemuNetFltNobj.dll
+HKR, Ndi,            FilterClass,         , failover
+HKR, Ndi,            FilterDeviceInfId,   , sun_NemuNetFltmp
+HKR, Ndi,            Service,             , NemuNetFlt
+HKR, Ndi\Interfaces, UpperRange,          , noupper
+HKR, Ndi\Interfaces, LowerRange,          , nolower
+HKR, Ndi\Interfaces, FilterMediaTypes,    , "ethernet, nolower"
+
+[NemuNetFlt.AddReg]
+HKR, Parameters, Param1, 0, 4
+
+[Strings]
+Provider = "Oracle Corporation"
+DiskDescription = "VirtualBox Bridged Networking Driver"
+NemuNetFlt_Desc = "VirtualBox Bridged Networking Driver"
+NemuNetFlt_HELP = "VirtualBox Bridged Networking Driver"
+NemuNetFltService_Desc = "VirtualBox Bridged Networking Service"

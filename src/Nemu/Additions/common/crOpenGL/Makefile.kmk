@@ -1,0 +1,707 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the VirtualBox Guest OpenGL part
+#
+
+#
+# Copyright (C) 2008-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Target lists.
+#
+BLDDIRS += \
+	$(NEMU_PATH_CROGL_GENFILES)/
+
+if1of ($(KBUILD_TARGET), win linux solaris freebsd)
+ DLLS += \
+    NemuOGL \
+    NemuOGLarrayspu \
+    NemuOGLpassthroughspu \
+    NemuOGLpackspu \
+    NemuOGLfeedbackspu
+endif
+
+NEMU_OGL_X86_GUEST_DLLS = \
+     NemuOGL-x86 \
+     NemuOGLarrayspu-x86 \
+     NemuOGLpassthroughspu-x86 \
+     NemuOGLpackspu-x86 \
+     NemuOGLfeedbackspu-x86
+
+ifdef NEMU_WITH_WDDM
+ DLLS.win.amd64 += $(NEMU_OGL_X86_GUEST_DLLS)
+endif
+
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ #NemuOGL_DRI = 1
+ ifn1of ($(KBUILD_TARGET),solaris)   # No DRI on Solaris yet
+  NemuOGL_FAKEDRI = 1
+ endif
+
+ # Only Solaris right now needs C stubs because I can't figure out how to
+ # generate the GOT based relocation ASM yet.
+ ifdef NemuOGL_FAKEDRI
+  if1of ($(KBUILD_TARGET).$(KBUILD_TARGET_ARCH),solaris.x86 solaris.amd64 linux.x86 linux.amd64 freebsd.x86 freebsd.amd64)
+   NEMU_OGL_GLX_USE_CSTUBS = 1
+  endif
+ endif
+endif
+
+
+#
+# NemuOGL
+#
+NemuOGL_TEMPLATE       = NEMUCROGLR3GUESTDLL
+NemuOGL_INCS           = .
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ NemuOGL_INCS     += \
+	$(NEMU_PATH_X11_ROOT)/libXdamage-1.1 \
+	$(NEMU_PATH_X11_ROOT)/libXcomposite-0.4.0 \
+	$(NEMU_PATH_X11_ROOT)/libXext-1.3.1 \
+	$(NEMU_PATH_X11_ROOT)/libXfixes-4.0.3 \
+	$(NEMU_PATH_X11_ROOT)/damageproto-1.1.0 \
+	$(NEMU_PATH_X11_ROOT)/compositeproto-0.4 \
+	$(NEMU_PATH_X11_ROOT)/fixesproto-4.0 \
+	$(NEMU_PATH_X11_ROOT)/libx11-1.1.5-other \
+	$(NEMU_PATH_X11_ROOT)/xextproto-7.1.1 \
+	$(NEMU_PATH_X11_ROOT)/xproto-7.0.18 \
+	$(NEMU_MESA_INCS) \
+	$(PATH_ROOT)/src/Nemu/Additions/x11/x11include/libdrm-2.4.13
+ NemuOGL_DEFS     += NEMU_NO_NATIVEGL
+endif
+
+ifdef NemuOGL_DRI
+ NemuOGL_DEFS          += NEMUOGL_DRI IN_DRI_DRIVER
+else ifdef NemuOGL_FAKEDRI
+ NemuOGL_DEFS          += NEMUOGL_FAKEDRI
+ ifdef NEMU_OGL_GLX_USE_CSTUBS
+  NemuOGL_DEFS         += NEMU_OGL_GLX_USE_CSTUBS
+ endif
+endif
+
+ifdef NEMU_WITH_WDDM
+ NemuOGL_DEFS.win += NEMU_WITH_WDDM
+ NemuOGL_SDKS.win += $(NEMU_WINDDK_GST_WLH)
+endif
+
+ifeq ($(KBUILD_TARGET),win)
+#fixme?, INTERMEDIATES.win ain't working
+ NemuOGL_INTERMEDIATES += $(NEMU_PATH_CROGL_GENFILES)/cr_gl.h
+ if defined(NEMU_SIGNING_MODE) && defined(NEMU_WITH_WDDM)
+  NemuOGL_INSTTYPE.win = none
+  NemuOGL_DEBUG_INSTTYPE.win = both
+ endif
+endif
+ifdef NemuOGL_DRI
+ NemuOGL_INTERMEDIATES += \
+	$(NEMU_PATH_CROGL_GENFILES)/cr_gl.h \
+	$(NEMU_PATH_CROGL_GENFILES)/DD_gl.h
+else ifdef NemuOGL_FAKEDRI
+ NemuOGL_INTERMEDIATES += \
+	$(NEMU_PATH_CROGL_GENFILES)/cr_gl.h
+endif
+NemuOGL_SOURCES       += \
+	load.c \
+	stub.c \
+	context.c \
+	$(NEMU_PATH_CROGL_GENFILES)/getprocaddress.c \
+	$(NEMU_PATH_CROGL_GENFILES)/NULLfuncs.c \
+	$(NEMU_PATH_CROGL_GENFILES)/tsfuncs.c
+
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ NemuOGL_SOURCES += \
+	glx.c \
+	xfont.c
+ ifdef NEMU_OGL_GLX_USE_CSTUBS
+  NemuOGL_SOURCES += glx_c_exports.c
+ endif
+
+ ifdef NemuOGL_DRI
+  NemuOGL_SOURCES += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/DD_gl.c \
+ 	dri_drv.c
+  NemuOGL_SOURCES.linux += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/linux_exports_dri.asm
+  NemuOGL_SOURCES.solaris += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/solaris_exports_dri.asm
+  NemuOGL_SOURCES.freebsd += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/freebsd_exports_dri.asm
+ else ifdef NemuOGL_FAKEDRI
+  NemuOGL_SOURCES += \
+ 	fakedri_drv.c
+  ifndef NEMU_OGL_GLX_USE_CSTUBS
+   NemuOGL_SOURCES.solaris += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/solaris_glxapi_exports.asm \
+ 	$(NEMU_PATH_CROGL_GENFILES)/solaris_exports_dri.asm
+   NemuOGL_SOURCES.linux += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/linux_glxapi_exports.asm \
+ 	$(NEMU_PATH_CROGL_GENFILES)/linux_exports_dri.asm
+   NemuOGL_SOURCES.freebsd += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/freebsd_glxapi_exports.asm \
+ 	$(NEMU_PATH_CROGL_GENFILES)/freebsd_exports_dri.asm
+  else
+   NemuOGL_SOURCES.solaris += \
+  	$(NEMU_PATH_CROGL_GENFILES)/solaris_exports.c
+  NemuOGL_SOURCES.linux += \
+  	$(NEMU_PATH_CROGL_GENFILES)/linux_exports.c
+  NemuOGL_SOURCES.freebsd += \
+  	$(NEMU_PATH_CROGL_GENFILES)/freebsd_exports.c
+  endif
+ else
+  NemuOGL_SOURCES.linux += \
+  	$(NEMU_PATH_CROGL_GENFILES)/linux_exports.asm
+  NemuOGL_SOURCES.solaris += \
+  	$(NEMU_PATH_CROGL_GENFILES)/solaris_exports.c
+  NemuOGL_SOURCES.freebsd += \
+  	$(NEMU_PATH_CROGL_GENFILES)/freebsd_exports.c
+ endif
+endif
+
+NemuOGL_SOURCES.win    = \
+	wgl.c \
+	icd_drv.c \
+	NemuCROGL.rc \
+	$(NEMU_PATH_CROGL_GENFILES)/windows_exports.asm \
+	$(NEMU_PATH_CROGL_GENFILES)/cropengl.def
+NemuOGL_CLEAN          = \
+	$(NEMU_PATH_CROGL_GENFILES)/getprocaddress.c \
+	$(NEMU_PATH_CROGL_GENFILES)/NULLfuncs.c \
+	$(NEMU_PATH_CROGL_GENFILES)/tsfuncs.c
+NemuOGL_CLEAN.linux        += \
+	$(NEMU_PATH_CROGL_GENFILES)/linux_exports.asm
+NemuOGL_CLEAN.solaris        += \
+	$(NEMU_PATH_CROGL_GENFILES)/solaris_exports.c
+NemuOGL_CLEAN.win      = \
+	$(NEMU_PATH_CROGL_GENFILES)/windows_exports.asm \
+	$(NEMU_PATH_CROGL_GENFILES)/cropengl.def
+if1of ($(KBUILD_TARGET), linux solaris)
+ ifdef NemuOGL_DRI
+  NemuOGL_CLEAN   += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/cr_gl.h \
+ 	$(NEMU_PATH_CROGL_GENFILES)/DD_gl.h \
+ 	$(NEMU_PATH_CROGL_GENFILES)/DD_gl.c
+ else ifdef NemuOGL_FAKEDRI
+  NemuOGL_CLEAN   += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/cr_gl.h
+  NemuOGL_CLEAN.linux   += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/linux_glxapi_exports.asm
+  NemuOGL_CLEAN.solaris   += \
+ 	$(NEMU_PATH_CROGL_GENFILES)/solaris_glxapi_exports.asm
+ endif
+endif
+NemuOGL_LIBS = \
+	$(NEMU_LIB_IPRT_GUEST_R3_SHARED) \
+	$(NEMU_LIB_VBGL_R3_SHARED) \
+	$(NEMU_LIB_OGL_CRUTIL) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload$(NEMU_SUFF_LIB)
+
+NemuOGL_LIBS.win += \
+	$(PATH_STAGE_LIB)/additions/NemuDispMpLogger$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuCrHgsmi$(NEMU_SUFF_LIB)
+
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ NemuOGL_LIBS += \
+ 	$(PATH_STAGE_LIB)/libXcomposite.so \
+ 	$(PATH_STAGE_LIB)/libXdamage.so \
+ 	$(PATH_STAGE_LIB)/libXfixes.so \
+ 	$(PATH_STAGE_LIB)/libXext.so
+ ifdef NemuOGL_FAKEDRI
+  ifeq ($(KBUILD_TARGET), freebsd)
+    NemuOGL_LIBS += \
+        elf
+  else
+    NemuOGL_LIBS += \
+  	dl
+  endif
+ endif
+endif
+ifdef NEMU_WITH_CRHGSMI
+NemuOGL_DEFS.win   += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_WDDM
+NemuOGL_DEFS.win   += NEMU_WITH_WDDM
+endif
+if1of ($(KBUILD_TARGET), linux)
+NemuOGL_LDFLAGS += -Wl,-z,nodelete
+endif
+ifdef NEMU_WITH_WDDM
+#
+# NemuOGL-x86 - x86 NemuOGL version built for amd64 build
+#
+NemuOGL-x86_EXTENDS = NemuOGL
+NemuOGL-x86_BLD_TRG_ARCH = x86
+NemuOGL-x86_LIBS = $(NEMU_LIB_IPRT_GUEST_R3_SHARED_X86) \
+	$(NEMU_LIB_VBGL_R3_SHARED_X86) \
+	$(NEMU_LIB_OGL_CRUTIL_X86) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload-x86$(NEMU_SUFF_LIB)
+
+NemuOGL-x86_LIBS.win += \
+	$(PATH_STAGE_LIB)/additions/NemuDispMpLogger-x86$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuCrHgsmi-x86$(NEMU_SUFF_LIB)
+
+
+NemuOGL-x86_SOURCES.win = $(subst cropengl.def,cropengl-x86.def,$(NemuOGL_SOURCES.win))
+NemuOGL-x86_CLEAN.win = $(subst cropengl.def,cropengl-x86.def,$(NemuOGL_CLEAN.win))
+NemuOGL-x86_DEFS = $(NemuOGL_DEFS) NEMU_WDDM_WOW64
+endif
+
+#
+# Generate files for NemuOGL.
+#
+$(NEMU_PATH_CROGL_GENFILES)/NULLfuncs.c: $(PATH_SUB_CURRENT)/NULLfuncs.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+$(NEMU_PATH_CROGL_GENFILES)/tsfuncs.c: $(PATH_SUB_CURRENT)/tsfuncs.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+
+ifeq ($(KBUILD_TARGET),win)
+ # Windows
+$(NEMU_PATH_CROGL_GENFILES)/getprocaddress.c: $(PATH_SUB_CURRENT)/windows_getprocaddress.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+ ifeq ($(KBUILD_TARGET_ARCH),amd64)
+$(NEMU_PATH_CROGL_GENFILES)/cropengl.def: $(PATH_SUB_CURRENT)/defs64.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+ else
+$(NEMU_PATH_CROGL_GENFILES)/cropengl.def: $(PATH_SUB_CURRENT)/defs.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+ endif
+
+$(NEMU_PATH_CROGL_GENFILES)/cr_gl.h: $(PATH_SUB_CURRENT)/cr_gl.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+$(NEMU_PATH_CROGL_GENFILES)/windows_exports.asm: \
+		$(PATH_SUB_CURRENT)/windows_i386_exports.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+ ifdef NEMU_WITH_WDDM
+  ifeq ($(KBUILD_TARGET).$(KBUILD_TARGET_ARCH),win.amd64)
+$(NEMU_PATH_CROGL_GENFILES)/cropengl-x86.def: $(PATH_SUB_CURRENT)/defs.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+  endif #ifeq ($(KBUILD_TARGET).$(KBUILD_TARGET_ARCH),win.amd64)
+ endif #ifdef NEMU_WITH_WDDM
+
+
+else if1of ($(KBUILD_TARGET), freebsd linux solaris)
+ # FreeBSD, Linux, Solaris
+$(NEMU_PATH_CROGL_GENFILES)/getprocaddress.c: $(PATH_SUB_CURRENT)/getprocaddress.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+ if !defined(NemuOGL_DRI) && !defined(NemuOGL_FAKEDRI)
+  ifeq ($(KBUILD_TARGET),solaris)
+$(NEMU_PATH_CROGL_GENFILES)/solaris_exports.c: \
+		$(PATH_SUB_CURRENT)/SunOS_exports.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+  else ifeq ($(KBUILD_TARGET),freebsd)
+$(NEMU_PATH_CROGL_GENFILES)/freebsd_exports.c: \
+		$(PATH_SUB_CURRENT)/FreeBSD_exports.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+  else
+$(NEMU_PATH_CROGL_GENFILES)/linux_exports.asm: \
+		$(PATH_SUB_CURRENT)/Linux_i386_exports.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+  endif
+
+ else ifdef NemuOGL_DRI
+$(NEMU_PATH_CROGL_GENFILES)/cr_gl.h: $(PATH_SUB_CURRENT)/cr_gl.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+$(NEMU_PATH_CROGL_GENFILES)/DD_gl.h: $(PATH_SUB_CURRENT)/DD_glh.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+$(NEMU_PATH_CROGL_GENFILES)/DD_gl.c: $(PATH_SUB_CURRENT)/DD_glc.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+  ifeq ($(KBUILD_TARGET),solaris)
+$(NEMU_PATH_CROGL_GENFILES)/solaris_exports_dri.asm: \
+		$(PATH_SUB_CURRENT)/SunOS_i386_exports_dri.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+  else ifeq ($(KBUILD_TARGET),freebsd)
+$(NEMU_PATH_CROGL_GENFILES)/freebsd_exports_dri.asm: \
+		$(PATH_SUB_CURRENT)/FreeBSD_i386_exports_dri.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+  else
+$(NEMU_PATH_CROGL_GENFILES)/linux_exports_dri.asm: \
+		$(PATH_SUB_CURRENT)/Linux_i386_exports_dri.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+  endif
+
+ else ifdef NemuOGL_FAKEDRI
+$(NEMU_PATH_CROGL_GENFILES)/cr_gl.h: $(PATH_SUB_CURRENT)/cr_gl.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+  ifndef NEMU_OGL_GLX_USE_CSTUBS
+   ifeq ($(KBUILD_TARGET),solaris)
+$(NEMU_PATH_CROGL_GENFILES)/solaris_exports_dri.asm: \
+		$(PATH_SUB_CURRENT)/SunOS_i386_exports_dri.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+$(NEMU_PATH_CROGL_GENFILES)/solaris_glxapi_exports.asm: $(PATH_SUB_CURRENT)/SunOS_i386_glxapi_exports.py | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $<
+
+   else
+$(NEMU_PATH_CROGL_GENFILES)/linux_exports_dri.asm: \
+		$(PATH_SUB_CURRENT)/Linux_i386_exports_dri.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+$(NEMU_PATH_CROGL_GENFILES)/linux_glxapi_exports.asm: $(PATH_SUB_CURRENT)/Linux_i386_glxapi_exports.py | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $<
+   endif
+
+  else
+   ifeq ($(KBUILD_TARGET),solaris)
+$(NEMU_PATH_CROGL_GENFILES)/solaris_exports.c: \
+		$(PATH_SUB_CURRENT)/SunOS_exports.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+  else ifeq ($(KBUILD_TARGET),freebsd)
+$(NEMU_PATH_CROGL_GENFILES)/freebsd_exports.c: \
+		$(PATH_SUB_CURRENT)/FreeBSD_exports.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+  else
+$(NEMU_PATH_CROGL_GENFILES)/linux_exports.c: \
+		$(PATH_SUB_CURRENT)/Linux_exports.py \
+		$(NEMU_CROGL_API_FILES) $(PATH_SUB_CURRENT)/entrypoints.py \
+		| $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+   endif
+
+  endif # NEMU_OGL_GLX_USE_CSTUBS
+ endif
+endif
+
+#
+# NemuOGLarrayspu
+#
+NemuOGLarrayspu_TEMPLATE      = NEMUCROGLR3GUESTDLL
+NemuOGLarrayspu_INCS          = \
+	array
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ NemuOGLarrayspu_INCS += \
+        $(NEMU_MESA_INCS)
+endif
+if defined(NEMU_SIGNING_MODE) && defined(NEMU_WITH_WDDM)
+ NemuOGLarrayspu_INSTTYPE.win = none
+ NemuOGLarrayspu_DEBUG_INSTTYPE.win = both
+endif
+NemuOGLarrayspu_INCS.darwin  += $(PATH_OUT)/obj/NemuOGL
+NemuOGLarrayspu_INTERMEDIATES = \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_currentpointers.h \
+	$(NEMU_PATH_CROGL_GENFILES)/state/cr_statefuncs.h
+NemuOGLarrayspu_SOURCES       = \
+	array/arrayspu.c \
+	array/arrayspu_config.c \
+	array/arrayspu_init.c
+NemuOGLarrayspu_SOURCES.win   = \
+	array/arrayspu.def \
+	array/arrayspu.rc
+NemuOGLarrayspu_LIBS          = \
+	$(NEMU_LIB_OGL_CRUTIL) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrstate$(NEMU_SUFF_LIB)
+ifdef NEMU_WITH_CRHGSMI
+NemuOGLarrayspu_DEFS.win   += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_WDDM
+NemuOGLarrayspu_DEFS.win   += NEMU_WITH_WDDM
+endif
+
+ifdef NEMU_WITH_WDDM
+#
+# NemuOGLarrayspu-x86 - x86 version of NemuOGLarrayspu built for amd64 build
+#
+NemuOGLarrayspu-x86_EXTENDS = NemuOGLarrayspu
+NemuOGLarrayspu-x86_BLD_TRG_ARCH = x86
+NemuOGLarrayspu-x86_LIBS = $(NEMU_LIB_OGL_CRUTIL_X86) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload-x86$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrstate-x86$(NEMU_SUFF_LIB)
+NemuOGLarrayspu-x86_DEFS = $(NemuOGLarrayspu_DEFS) NEMU_WDDM_WOW64
+endif
+
+#
+# NemuOGLpassthroughspu
+#
+NemuOGLpassthroughspu_TEMPLATE    = NEMUCROGLR3GUESTDLL
+NemuOGLpassthroughspu_INCS        = \
+	passthrough
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ NemuOGLpassthroughspu_INCS += \
+        $(NEMU_MESA_INCS)
+endif
+if defined(NEMU_SIGNING_MODE) && defined(NEMU_WITH_WDDM)
+ NemuOGLpassthroughspu_INSTTYPE.win = none
+ NemuOGLpassthroughspu_DEBUG_INSTTYPE.win = both
+endif
+NemuOGLpassthroughspu_SOURCES     = \
+	passthrough/passthroughspu_init.c \
+	$(NEMU_PATH_CROGL_GENFILES)/passthroughspu.c
+NemuOGLpassthroughspu_SOURCES.win = \
+	passthrough/passthrough.def \
+	passthrough/passthroughspu.rc
+NemuOGLpassthroughspu_CLEAN       = \
+	$(NEMU_PATH_CROGL_GENFILES)/passthroughspu.c
+NemuOGLpassthroughspu_LIBS        = \
+	$(NEMU_LIB_OGL_CRUTIL)
+ifdef NEMU_WITH_CRHGSMI
+NemuOGLpassthroughspu_DEFS.win   += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_WDDM
+NemuOGLpassthroughspu_DEFS.win   += NEMU_WITH_WDDM
+endif
+
+ifdef NEMU_WITH_WDDM
+#
+# NemuOGLpassthroughspu-x86 - x86 version of NemuOGLpassthroughspu built for amd64 build
+#
+NemuOGLpassthroughspu-x86_EXTENDS = NemuOGLpassthroughspu
+NemuOGLpassthroughspu-x86_BLD_TRG_ARCH = x86
+NemuOGLpassthroughspu-x86_LIBS = $(NEMU_LIB_OGL_CRUTIL_X86)
+NemuOGLpassthroughspu-x86_DEFS = $(NemuOGLpassthroughspu_DEFS) NEMU_WDDM_WOW64
+endif
+
+#
+# Generate files for NemuOGLpassthroughspu.
+#
+$(NEMU_PATH_CROGL_GENFILES)/passthroughspu.c: $(PATH_SUB_CURRENT)/passthrough/passthrough.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI)
+
+#
+# NemuOGLpackspu
+#
+NemuOGLpackspu_TEMPLATE      = NEMUCROGLR3GUESTDLL
+NemuOGLpackspu_DEFS          = TRACKS_STATE=1 PACKS=1
+NemuOGLpackspu_INCS          = \
+	pack
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ NemuOGLpackspu_INCS += \
+        $(NEMU_MESA_INCS)
+endif
+if defined(NEMU_SIGNING_MODE) && defined(NEMU_WITH_WDDM)
+ NemuOGLpackspu_INSTTYPE.win = none
+ NemuOGLpackspu_DEBUG_INSTTYPE.win = both
+endif
+NemuOGLpackspu_INTERMEDIATES = \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_proto.h \
+	$(NEMU_PATH_CROGL_GENFILES)/cr_packfunctions.h
+NemuOGLpackspu_SOURCES    = \
+	pack/packspu_bufferobject.c \
+	pack/packspu_client.c \
+	pack/packspu_config.c \
+	pack/packspu_context.c \
+	pack/packspu_getstring.c \
+	pack/packspu_init.c \
+	pack/packspu_misc.c \
+	pack/packspu_net.c \
+	pack/packspu_swapbuf.c \
+	pack/packspu_pixel.c \
+	pack/packspu_texture.c \
+	pack/packspu_getshaders.c \
+	pack/packspu_glsl.c \
+	pack/packspu_framebuffer.c \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu.c \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_get.c \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_flush.c \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_beginend.c
+NemuOGLpackspu_SOURCES.win = \
+	pack/pack.def \
+	pack/packspu.rc
+NemuOGLpackspu_CLEAN       = \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_proto.h \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu.c \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_get.c \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_flush.c \
+	$(NEMU_PATH_CROGL_GENFILES)/packspu_beginend.c
+NemuOGLpackspu_LIBS        = \
+	$(NEMU_LIB_OGL_CRUTIL) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrstate$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrpacker$(NEMU_SUFF_LIB)
+NemuOGLpackspu_LIBS.win += \
+	$(PATH_STAGE_LIB)/additions/NemuDispMpLogger$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuCrHgsmi$(NEMU_SUFF_LIB)
+
+ifdef NEMU_WITH_CRHGSMI
+NemuOGLpackspu_DEFS.win   += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_CRDUMPER
+NemuOGLpackspu_DEFS       += NEMU_WITH_CRDUMPER
+endif
+ifdef NEMU_WITH_CRPACKSPU_DUMPER
+NemuOGLpackspu_DEFS       += NEMU_WITH_CRPACKSPU_DUMPER
+endif
+ifdef NEMU_WITH_WDDM
+NemuOGLpackspu_DEFS.win   += NEMU_WITH_WDDM
+endif
+
+ifdef NEMU_WITH_WDDM
+#
+# NemuOGLpackspu-x86 - x86 version of NemuOGLpackspu built for amd64 build
+#
+NemuOGLpackspu-x86_EXTENDS = NemuOGLpackspu
+NemuOGLpackspu-x86_BLD_TRG_ARCH = x86
+NemuOGLpackspu-x86_LIBS = $(NEMU_LIB_OGL_CRUTIL_X86) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload-x86$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrstate-x86$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrpacker-x86$(NEMU_SUFF_LIB)
+NemuOGLpackspu-x86_LIBS.win += \
+	$(PATH_STAGE_LIB)/additions/NemuDispMpLogger-x86$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuCrHgsmi-x86$(NEMU_SUFF_LIB)
+NemuOGLpackspu-x86_DEFS = $(NemuOGLpackspu_DEFS) NEMU_WDDM_WOW64
+endif
+
+#
+# Generate files for NemuOGLpackspu.
+#
+$(NEMU_PATH_CROGL_GENFILES)/packspu.c: $(addprefix $(PATH_SUB_CURRENT)/pack/,pack.py packspu_special packspu_unimplemented_special) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/packspu_get.c: $(PATH_SUB_CURRENT)/pack/packspu_get.py $(PATH_SUB_CURRENT)/pack/packspu_special $(PATH_ROOT)/src/Nemu/HostServices/SharedOpenGL/crserverlib/get_sizes.py $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/packspu_flush.c: $(PATH_SUB_CURRENT)/pack/packspu_flush.py $(PATH_SUB_CURRENT)/pack/packspu_flush_special $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/packspu_beginend.c: $(PATH_SUB_CURRENT)/pack/packspu_beginend.py $(PATH_SUB_CURRENT)/pack/packspu_vertex_special $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/packspu_proto.h: $(addprefix $(PATH_SUB_CURRENT)/pack/,packspu_proto.py packspu_special packspu_unimplemented_special) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+#
+# NemuOGLfeedbackspu
+#
+NemuOGLfeedbackspu_TEMPLATE    = NEMUCROGLR3GUESTDLL
+NemuOGLfeedbackspu_INCS        = \
+	feedback
+if1of ($(KBUILD_TARGET), linux solaris freebsd)
+ NemuOGLfeedbackspu_INCS += \
+        $(NEMU_MESA_INCS)
+endif
+if defined(NEMU_SIGNING_MODE) && defined(NEMU_WITH_WDDM)
+ NemuOGLfeedbackspu_INSTTYPE.win = none
+ NemuOGLfeedbackspu_DEBUG_INSTTYPE.win = both
+endif
+NemuOGLarrayspu_INTERMEDIATES = \
+	$(NEMU_PATH_CROGL_GENFILES)/feedbackspu_proto.h
+NemuOGLfeedbackspu_SOURCES     = \
+	feedback/feedbackspu_config.c \
+	feedback/feedbackspu_init.c \
+	feedback/feedback_context.c \
+	$(NEMU_PATH_CROGL_GENFILES)/feedbackspu.c \
+	$(NEMU_PATH_CROGL_GENFILES)/feedbackspu_state.c
+NemuOGLfeedbackspu_SOURCES.win = \
+	feedback/feedback.def \
+	feedback/feedbackspu.rc
+NemuOGLfeedbackspu_CLEAN       = \
+	$(NEMU_PATH_CROGL_GENFILES)/feedbackspu_proto.h \
+	$(NEMU_PATH_CROGL_GENFILES)/feedbackspu.c \
+	$(NEMU_PATH_CROGL_GENFILES)/feedbackspu_state.c
+NemuOGLfeedbackspu_LIBS        = \
+	$(NEMU_LIB_OGL_CRUTIL) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrstate$(NEMU_SUFF_LIB)
+ifdef NEMU_WITH_CRHGSMI
+NemuOGLfeedbackspu_DEFS.win   += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_WDDM
+NemuOGLfeedbackspu_DEFS.win   += NEMU_WITH_WDDM
+endif
+
+ifdef NEMU_WITH_WDDM
+#
+# NemuOGLfeedbackspu-x86 - x86 version of NemuOGLfeedbackspu built for amd64 build
+#
+NemuOGLfeedbackspu-x86_EXTENDS = NemuOGLfeedbackspu
+NemuOGLfeedbackspu-x86_BLD_TRG_ARCH = x86
+NemuOGLfeedbackspu-x86_LIBS = $(NEMU_LIB_OGL_CRUTIL_X86) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLspuload-x86$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/additions/NemuOGLcrstate-x86$(NEMU_SUFF_LIB)
+NemuOGLfeedbackspu-x86_DEFS = $(NemuOGLfeedbackspu_DEFS) NEMU_WDDM_WOW64
+endif
+
+#
+# Generate files for NemuOGLfeedbackspu.
+#
+$(NEMU_PATH_CROGL_GENFILES)/feedbackspu.c: $(addprefix $(PATH_SUB_CURRENT)/feedback/,feedback.py feedback_special select_special feedback_state_special) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/feedbackspu_state.c: $(addprefix $(PATH_SUB_CURRENT)/feedback/,feedback_state.py feedback_state_special) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+$(NEMU_PATH_CROGL_GENFILES)/feedbackspu_proto.h: $(addprefix $(PATH_SUB_CURRENT)/feedback/,feedbackspu_proto.py feedback_special select_special feedback_state_special) $(NEMU_CROGL_API_FILES) | $$(dir $$@)
+	$(call MSG_GENERATE,python,$@,$<)
+	$(QUIET)$(call NEMU_CROGL_PYTHON_ENV,$(NEMU_PATH_CROGL_PYTHON_INCLUDE),$@) $(NEMU_BLD_PYTHON) $< $(NEMU_PATH_CROGL_GLAPI) $(<D)
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

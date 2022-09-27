@@ -1,0 +1,1456 @@
+# $Id: Makefile.kmk $
+## @file
+# Top-level sub-makefile for the devices, drivers and services.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Make sure our Config.kmk is included.
+ifndef NEMU_DEVICES_CONFIG_KMK_INCLUDED
+ include $(PATH_SUB_CURRENT)/Config.kmk
+endif
+
+# Include sub-makefiles.
+include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+include $(PATH_SUB_CURRENT)/Audio/testcase/Makefile.kmk
+include $(PATH_SUB_CURRENT)/Input/testcase/Makefile.kmk
+if defined(NEMU_WITH_INTEL_PXE) || defined(NEMU_ONLY_EXTPACKS)
+ include $(PATH_SUB_CURRENT)/PC/PXE/Makefile.kmk
+else if defined(NEMU_WITH_PXE_ROM)
+ if !defined(NEMU_WITHOUT_IPXE)
+  include $(PATH_SUB_CURRENT)/PC/ipxe/Makefile.kmk
+ endif
+endif
+if !defined(NEMU_ONLY_EXTPACKS)         # Goes on almost to the end of the file.
+ include $(PATH_SUB_CURRENT)/BiosCommonCode/Makefile.kmk
+ include $(PATH_SUB_CURRENT)/PC/BIOS/Makefile.kmk
+ include $(PATH_SUB_CURRENT)/Graphics/BIOS/Makefile.kmk
+
+ #
+ # Main targets.
+ #
+ LIBRARIES += ServicesR0
+ DLLS      += NemuDDU NemuDD NemuDD2
+ SYSMODS   += NemuDDR0 NemuDD2R0
+ ifdef NEMU_WITH_RAW_MODE
+  SYSMODS   += NemuDDRC NemuDD2RC
+ endif
+
+
+ #
+ # NemuDDU (shared object)
+ #
+ NemuDDU_TEMPLATE         = NemuR3DllWarnNoPic
+ NemuDDU_NAME             = $(basename $(notdir $(LIB_DDU)))
+ NemuDDU_INST.darwin      = $(INST_DLL) $(INST_TESTCASE)
+ NemuDDU_DEFS             = IN_NEMUDDU
+ ifdef NEMU_WITH_VUSB
+  NemuDDU_DEFS           += NEMU_WITH_VUSB
+ endif
+ ifdef NEMU_WITH_USB
+  NemuDDU_DEFS           += NEMU_WITH_USB IN_USBLIB
+  NemuDDU_SDKS.win        = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK)
+  if defined(NEMU_WITH_EHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+   NemuDDU_DEFS          += NEMU_WITH_EHCI_IMPL
+  endif
+  if defined(NEMU_WITH_XHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+   NemuDDU_DEFS          += NEMU_WITH_XHCI_IMPL
+  endif
+ else
+  NemuDDU_SDKS.win        = ReorderCompilerIncs $(NEMU_WINPSDK)
+ endif
+ NemuDDU_SOURCES          = \
+ 	Storage/VSCSI/VSCSIDevice.cpp \
+ 	Storage/VSCSI/VSCSILun.cpp \
+ 	Storage/VSCSI/VSCSILunSbc.cpp \
+ 	Storage/VSCSI/VSCSILunMmc.cpp \
+ 	Storage/VSCSI/VSCSISense.cpp \
+ 	Storage/VSCSI/VSCSIIoReq.cpp \
+ 	Storage/VSCSI/VSCSIVpdPagePool.cpp \
+ 	build/NemuDDUDeps.cpp
+ ifdef NEMU_WITH_USB
+  NemuDDU_INCS.os2       += \
+ 	$(PATH_ROOT)/src/Nemu/HostDrivers/NemuUSB/os2
+ endif
+ NemuDDU_LIBS             = \
+ 	$(LIB_RUNTIME) \
+ 	$(PATH_STAGE_LIB)/StorageLib$(NEMU_SUFF_LIB)
+ ifdef NEMU_WITH_USB
+  NemuDDU_LIBS           += \
+ 	$(PATH_STAGE_LIB)/USBLib$(NEMU_SUFF_LIB)
+  NemuDDU_LIBS.win       += \
+ 	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/Newdev.lib
+ endif
+ NemuDDU_LDFLAGS.darwin   = -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuDDU.dylib
+ ifdef NEMU_WITH_USB
+  NemuDDU_LDFLAGS.darwin += -framework IOKit
+ endif
+
+ NemuDDU_LDFLAGS.linux    = -Wl,--no-undefined
+ $(call NEMU_SET_VER_INFO_DLL,NemuDDU,VirtualBox VMM Devices and Drivers Utilities)
+
+ #
+ # NemuDD (shared object)
+ #
+ NemuDD_TEMPLATE         = NemuR3DllWarnNoPic
+ NemuDD_SDKS.win         = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+ Storage/DrvHostDVD.cpp_SDKS.win = ReorderCompilerIncs $(NEMU_WINDDK)
+ NemuDD_INCS             = \
+ 	build \
+ 	Network/slirp
+ NemuDD_DEFS             = \
+ 	NEMU_ACPI \
+ 	NEMU_HGCM_HOST_CODE \
+ 	$(if $(NEMU_WITH_HGCM),NEMU_WITH_HGCM,) \
+ 	$(if $(NEMU_BIOS_DMI_FALLBACK),NEMU_BIOS_DMI_FALLBACK,) \
+ 	NEMU_WITH_DMI_CHASSIS \
+ 	NEMU_WITH_DMI_OEMSTRINGS
+ NemuDD_DEFS.win         = _WIN32_WINNT=0x0510
+ ifeq ($(KBUILD_TARGET_ARCH),x86)
+  NemuDD_DEFS.darwin     = NEMU_WITH_2X_4GB_ADDR_SPACE
+ endif
+ NemuDD_SOURCES          = \
+ 	build/NemuDD.cpp \
+	\
+ 	Input/DevPS2.cpp \
+ 	Input/PS2K.cpp \
+ 	Input/PS2M.cpp \
+ 	Input/UsbKbd.cpp \
+ 	Input/UsbMouse.cpp \
+ 	Bus/DevPCI.cpp \
+ 	Bus/DevPciIch9.cpp \
+ 	Bus/MsiCommon.cpp \
+ 	Bus/MsixCommon.cpp \
+	EFI/DevSmc.cpp \
+ 	Graphics/DevVGA.cpp \
+ 	Storage/DevATA.cpp \
+ 	PC/DevPit-i8254.cpp \
+ 	PC/DevPIC.cpp \
+ 	PC/DevACPI.cpp \
+ 	PC/ACPI/NemuAcpi.cpp \
+ 	PC/DevRTC.cpp \
+ 	PC/DevPcBios.cpp \
+ 	PC/DevFwCommon.cpp \
+ 	PC/DevPcArch.cpp \
+	GIMDev/GIMDev.cpp \
+ 	VMMDev/VMMDev.cpp \
+ 	$(if $(NEMU_WITH_HGCM),VMMDev/VMMDevHGCM.cpp,) \
+ 	VMMDev/VMMDevTesting.cpp \
+ 	Network/DevPCNet.cpp \
+ 	Audio/DevIchAc97.cpp \
+ 	Audio/DevSB16.cpp \
+ 	Audio/DevIchHda.cpp \
+ 	Audio/DevIchHdaCodec.cpp \
+ 	PC/DevDMA.cpp \
+ 	PC/DevHPET.cpp \
+ 	Storage/DevFdc.cpp \
+ 	Serial/DevSerial.cpp \
+ 	Parallel/DevParallel.cpp \
+	\
+ 	Input/DrvKeyboardQueue.cpp \
+ 	Input/DrvMouseQueue.cpp \
+ 	Network/DrvIntNet.cpp \
+ 	Network/DrvDedicatedNic.cpp \
+ 	PC/DrvACPI.cpp \
+ 	PC/DrvAcpiCpu.cpp \
+ 	Serial/DrvChar.cpp \
+ 	Serial/DrvNamedPipe.cpp \
+ 	Serial/DrvTCP.cpp \
+ 	Serial/DrvRawFile.cpp \
+ 	Storage/DrvBlock.cpp \
+ 	Storage/DrvMediaISO.cpp \
+ 	Storage/DrvRawImage.cpp \
+ 	Storage/Debug.cpp \
+ 	Storage/DrvVD.cpp \
+ 	Storage/ATAPIPassthrough.cpp \
+ 	Network/DrvNetSniffer.cpp \
+ 	Network/Pcap.cpp
+ ifn1of ($(KBUILD_TARGET), os2)
+  NemuDD_SOURCES += Storage/DrvHostBase.cpp
+ endif
+ ifn1of ($(KBUILD_TARGET), os2)
+  NemuDD_SOURCES += Storage/DrvHostDVD.cpp
+ endif
+ ifn1of ($(KBUILD_TARGET), darwin freebsd os2 solaris)
+  NemuDD_SOURCES += Storage/DrvHostFloppy.cpp
+ endif
+
+ ifn1of ($(KBUILD_TARGET), darwin)
+  NemuDD_SOURCES += Storage/HBDMgmt-generic.cpp
+ endif
+
+ NemuDD_SOURCES.darwin += Storage/HBDMgmt-darwin.cpp
+ #NemuDD_SOURCES.win += Storage/HBDMgmt-win.cpp Disabled until remaining issues are sorted out
+
+ NemuDD_LIBS             = # more later.
+ NemuDD_LDFLAGS.darwin   = -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuDD.dylib \
+ 	-framework CoreAudio \
+ 	-framework AudioUnit \
+ 	-framework AudioToolbox \
+ 	-framework IOKit \
+ 	-framework Carbon \
+ 	-framework DiskArbitration \
+ 	-framework SystemConfiguration
+ NemuDD_LDFLAGS.linux    = -Wl,--no-undefined
+
+ # --- Tracing bits. ---
+
+ ifdef NEMU_WITH_DTRACE_R3
+  NemuDD_DEFS           += NEMU_WITH_DTRACE
+  NemuDD_USES           += dtrace
+  NemuDD_SOURCES        += build/NemuDD.d
+ endif
+
+ # --- Graphics bits. ---
+
+ ifdef NEMU_WITH_CRHGSMI
+  NemuDD_DEFS           += NEMU_WITH_CRHGSMI
+ endif
+ ifdef NEMUWDDM_TEST_UHGSMI
+  NemuDD_DEFS           += NEMUWDDM_TEST_UHGSMI
+ endif
+ ifdef NEMUWDDM_WITH_VBVA
+  NemuDD_DEFS           += NEMUWDDM_WITH_VBVA
+ endif
+ ifdef NEMU_WITH_VIDEOHWACCEL
+  NemuDD_DEFS           += NEMU_WITH_VIDEOHWACCEL
+ endif
+
+ ifdef NEMU_WITH_HGSMI
+  NemuDD_DEFS           += NEMU_WITH_HGSMI
+  NemuDD_SOURCES        += \
+ 	Graphics/DevVGA_VBVA.cpp \
+ 	Graphics/HGSMI/HGSMIHost.cpp
+  NemuDD_LIBS           += \
+ 	$(PATH_STAGE_LIB)/HGSMIHostR3Lib$(NEMU_SUFF_LIB)
+ endif
+
+ ifdef NEMU_WITH_WDDM
+  NemuDD_DEFS           += NEMU_WITH_WDDM
+  NemuDD_SOURCES        += \
+ 	Graphics/HGSMI/SHGSMIHost.cpp
+ endif
+
+ ifdef NEMU_WITH_VMSVGA
+  NemuDD_DEFS           += NEMU_WITH_VMSVGA
+  NemuDD_SOURCES        += Graphics/DevVGA-SVGA.cpp
+ endif
+ ifdef NEMU_WITH_VMSVGA3D
+  NemuDD_DEFS           += NEMU_WITH_VMSVGA3D
+  NemuDD_SOURCES        += \
+  	Graphics/DevVGA-SVGA3d.cpp \
+  	Graphics/DevVGA-SVGA3d-info.cpp \
+  	Graphics/DevVGA-SVGA3d-shared.cpp \
+  	Graphics/DevVGA-SVGA3d-savedstate.cpp
+  if  "$(KBUILD_TARGET)" == "win" && !defined(NEMU_WITH_VMSVGA3D_USE_OPENGL)
+   NemuDD_DEFS          += VMSVGA3D_DIRECT3D
+   NemuDD_SOURCES       += Graphics/DevVGA-SVGA3d-win.cpp
+   NemuDD_LIBS.win      += d3d9.lib $(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/delayimp.lib
+   NemuDD_LDFLAGS.win   += /DELAYLOAD:d3d9.dll
+  else
+   NemuDD_DEFS          += VMSVGA3D_OPENGL
+   NemuDD_SOURCES       += \
+   	Graphics/DevVGA-SVGA3d-ogl.cpp \
+   	$(NemuDD_0_OUTDIR)/NemuSVGA3DLazyLoad.asm
+   NemuDD_SOURCES.darwin += \
+   	$(NemuDD_0_OUTDIR)/NemuSVGA3DObjCLazyLoad.asm
+   NemuDD_CLEAN         += $(NemuDD_0_OUTDIR)/NemuSVGA3DLazyLoad.asm
+   $$(NemuDD_0_OUTDIR)/NemuSVGA3DLazyLoad.asm: $(PATH_SUB_CURRENT)/Graphics/NemuSVGA3D.def $(NEMU_DEF_2_LAZY_LOAD) | $$(dir $$@)
+	$(call MSG_TOOL,NemuDef2LazyLoad,NemuDD,$(filter %.def, $^),$@)
+	$(QUIET)$(RM) -f -- "$@"
+	$(NEMU_DEF_2_LAZY_LOAD) --explicit-load-function --library NemuSVGA3D --output "$@" $(filter %.def, $^)
+   $$(NemuDD_0_OUTDIR)/NemuSVGA3DObjCLazyLoad.asm: $(PATH_SUB_CURRENT)/Graphics/NemuSVGA3DObjC.def $(NEMU_DEF_2_LAZY_LOAD) | $$(dir $$@)
+	$(call MSG_TOOL,NemuDef2LazyLoad,NemuDD,$(filter %.def, $^),$@)
+	$(QUIET)$(RM) -f -- "$@"
+	$(NEMU_DEF_2_LAZY_LOAD) --explicit-load-function --library NemuSVGA3DObjC --output "$@" $(filter %.def, $^)
+
+   NemuDD_LIBS.linux    += GL X11
+   NemuDD_LIBS.win      += $(PATH_SDK_$(NEMU_WINPSDK)_LIB)/Opengl32.lib
+   NemuDD_LDFLAGS.darwin += -framework OpenGL
+   NemuDD_DEFS.darwin    += NEMU_VMSVGA3D_DUAL_OPENGL_PROFILE
+   if 0 # Use the OpenGL 3.2 Core profile (see also NemuSVGA3D_DEFS.darwin and NemuSVGA3DObjC_DEFS.darwin).
+    NemuDD_DEFS.darwin   += NEMU_VMSVGA3D_DEFAULT_OGL_PROFILE=3.2 NEMU_VMSVGA3D_OTHER_OGL_PROFILE=2.1
+   else
+    NemuDD_DEFS.darwin   += NEMU_VMSVGA3D_DEFAULT_OGL_PROFILE=2.1 NEMU_VMSVGA3D_OTHER_OGL_PROFILE=3.2
+   endif
+  endif
+  Graphics/DevVGA-SVGA3d.cpp_CXXFLAGS.darwin            = -F$(NEMU_PATH_MACOSX_SDK_10_7)/System/Library/Frameworks/
+  Graphics/DevVGA-SVGA3d-info.cpp_CXXFLAGS.darwin       = -F$(NEMU_PATH_MACOSX_SDK_10_7)/System/Library/Frameworks/
+  Graphics/DevVGA-SVGA3d-shared.cpp_CXXFLAGS.darwin     = -F$(NEMU_PATH_MACOSX_SDK_10_7)/System/Library/Frameworks/
+  Graphics/DevVGA-SVGA3d-savedstate.cpp_CXXFLAGS.darwin = -F$(NEMU_PATH_MACOSX_SDK_10_7)/System/Library/Frameworks/
+  Graphics/DevVGA-SVGA3d-ogl.cpp_CXXFLAGS.darwin        = -F$(NEMU_PATH_MACOSX_SDK_10_7)/System/Library/Frameworks/
+ endif
+
+ ifdef NEMU_WITH_VDMA
+  NemuDD_DEFS           += NEMU_WITH_VDMA
+  NemuDD_SOURCES        += \
+ 	Graphics/DevVGA_VDMA.cpp
+ endif
+
+ ifdef NEMU_VDMA_WITH_WATCHDOG
+  NemuDD_DEFS           += NEMU_VDMA_WITH_WATCHDOG
+ endif
+
+ ifdef NEMU_WITH_PXE_ROM
+  NemuDD_DEFS           += NEMU_WITH_PXE_ROM
+ endif
+
+ # --- USB bits. ---
+
+ ifdef NEMU_WITH_USB
+  NemuDD_DEFS           += NEMU_WITH_USB
+  NemuDD_SOURCES        += \
+  	USB/vrdp/USBProxyDevice-vrdp.cpp
+
+  NemuDD_DEFS.darwin    += VUSB_HAVE_USBPROXY_DEVICE
+  NemuDD_SOURCES.darwin += \
+ 	USB/USBProxyDevice.cpp \
+ 	USB/darwin/USBProxyDevice-darwin.cpp
+
+  NemuDD_DEFS.linux     += \
+ 	VUSB_HAVE_USBPROXY_DEVICE \
+ 	$(if $(NEMU_WITH_LINUX_COMPILER_H),NEMU_WITH_LINUX_COMPILER_H,) \
+ 	$(if $(NEMU_USB_WITH_SYSFS),NEMU_USB_WITH_SYSFS,)
+  NemuDD_SOURCES.linux  += \
+ 	USB/USBProxyDevice.cpp \
+ 	USB/linux/USBProxyDevice-linux.cpp
+
+  NemuDD_DEFS.os2       += VUSB_HAVE_USBPROXY_DEVICE
+  NemuDD_INCS.os2       += $(PATH_ROOT)/src/Nemu/HostDrivers/NemuUSB/os2
+  NemuDD_SOURCES.os2    += \
+ 	USB/USBProxyDevice.cpp \
+ 	USB/os2/USBProxyDevice-os2.cpp
+
+  NemuDD_DEFS.win       += VUSB_HAVE_USBPROXY_DEVICE
+  NemuDD_SOURCES.win    += \
+ 	USB/USBProxyDevice.cpp \
+ 	USB/win/USBProxyDevice-win.cpp
+
+  NemuDD_DEFS.solaris   += VUSB_HAVE_USBPROXY_DEVICE
+  NemuDD_SOURCES.solaris+= \
+ 	USB/USBProxyDevice.cpp \
+ 	USB/solaris/USBProxyDevice-solaris.cpp
+
+  NemuDD_DEFS.freebsd   += VUSB_HAVE_USBPROXY_DEVICE
+  NemuDD_SOURCES.freebsd+= \
+ 	USB/USBProxyDevice.cpp \
+ 	USB/freebsd/USBProxyDevice-freebsd.cpp
+
+  ifdef NEMU_WITH_SCSI
+   NemuDD_SOURCES       += \
+   	Storage/UsbMsd.cpp
+  endif
+
+  if defined(NEMU_WITH_EHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+   NemuDD_DEFS          += NEMU_WITH_EHCI_IMPL
+   NemuDD_SOURCES       += \
+ 	USB/DevEHCI.cpp
+  endif
+
+  if defined(NEMU_WITH_XHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+   NemuDD_DEFS          += NEMU_WITH_XHCI_IMPL
+   NemuDD_SOURCES       += \
+ 	USB/DevXHCI.cpp
+  endif
+
+  if defined(NEMU_WITH_USB_VIDEO_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+   if1of ($(KBUILD_TARGET), linux)
+    NemuDD_DEFS          += NEMU_WITH_USB_VIDEO_IMPL
+    NemuDD_SOURCES       += \
+	$(PATH_ROOT)/src/Nemu/ExtPacks/Puel/UsbWebcam/UsbWebcam.cpp \
+	$(PATH_ROOT)/src/Nemu/ExtPacks/Puel/UsbWebcam/UsbWebcamDesc.cpp \
+	$(PATH_ROOT)/src/Nemu/ExtPacks/Puel/UsbWebcam/jpggen.cpp \
+	$(PATH_ROOT)/src/Nemu/ExtPacks/Puel/UsbWebcam/DrvHostWebcam/DrvHostWebcam.cpp \
+	$(PATH_ROOT)/src/Nemu/ExtPacks/Puel/UsbWebcam/DrvHostWebcam/JPEGEnc.cpp
+    $(PATH_ROOT)/src/Nemu/ExtPacks/Puel/UsbWebcam/DrvHostWebcam/JPEGEnc.cpp_INCS = \
+	$(PATH_ROOT)/src/libs/jpeg-8a
+    NemuDD_SOURCES.linux += \
+	$(PATH_ROOT)/src/Nemu/ExtPacks/Puel/UsbWebcam/DrvHostWebcam/HostWebcam-v4l2.cpp
+    NemuDD_LIBS += \
+	$(PATH_STAGE_LIB)/Nemu-libjpeg$(NEMU_SUFF_LIB)
+   endif
+  endif
+
+ endif # NEMU_WITH_USB
+
+ ifdef NEMU_WITH_VUSB
+  NemuDD_DEFS           += NEMU_WITH_VUSB
+  NemuDD_SOURCES        += \
+ 	USB/DevOHCI.cpp \
+ 	USB/DrvVUSBRootHub.cpp \
+ 	USB/VUSBDevice.cpp \
+ 	USB/VUSBReadAhead.cpp \
+ 	USB/VUSBUrb.cpp \
+ 	USB/VUSBSniffer.cpp
+ endif
+
+ # --- Networking bits. ---
+
+ ifdef NEMU_WITH_INIP
+  NemuDD_DEFS           += NEMU_WITH_INIP
+  NemuDD_SOURCES        += \
+        Network/DevINIP.cpp
+  # XXX: do not depend on order
+  ifndef LWIP_SOURCES
+    include $(PATH_SUB_CURRENT)/Network/lwip-new/Makefile.kmk
+  endif
+  NemuDD_LWIP_INCS += Network # for lwipopts.h
+  $(eval $(call def_nemu_lwip_private, \
+                    NemuDD, Network/lwip-new))
+  $(eval $(call def_nemu_lwip_flags, \
+                    NemuDD, Network/DevINIP.cpp, Network/lwip-new))
+ endif # NEMU_WITH_INIP
+
+ ifdef NEMU_WITH_E1000
+  NemuDD_DEFS           += NEMU_WITH_E1000
+  NemuDD_SOURCES        += \
+ 	Network/DevE1000.cpp \
+ 	Network/DevE1000Phy.cpp \
+ 	Network/DevEEPROM.cpp
+ endif
+
+ ifdef NEMU_WITH_VIRTIO
+  NemuDD_DEFS           += NEMU_WITH_VIRTIO
+  NemuDD_SOURCES        += \
+ 	VirtIO/Virtio.cpp \
+ 	Network/DevVirtioNet.cpp
+ endif
+
+ ifdef NEMU_WITH_UDPTUNNEL
+  NemuDD_DEFS           += NEMU_WITH_UDPTUNNEL
+  NemuDD_SOURCES        += \
+  	Network/DrvUDPTunnel.cpp
+ endif
+
+ ifdef NEMU_WITH_VDE
+  NemuDD_DEFS           += NEMU_WITH_VDE
+  NemuDD_SOURCES        += \
+  	Network/DrvVDE.cpp \
+  	Network/VDEPlug.cpp
+ endif
+
+ ifdef NEMU_WITH_NETSHAPER
+  NemuDD_DEFS           += NEMU_WITH_NETSHAPER
+  NemuDD_SOURCES        += \
+ 	Network/DrvNetShaper.cpp
+ endif
+
+ # --- Storage bits. ---
+
+ ifdef NEMU_WITH_AHCI
+  NemuDD_DEFS           += NEMU_WITH_AHCI IN_AHCI_R3
+  NemuDD_SOURCES        += \
+ 	Storage/DevAHCI.cpp
+ endif
+
+ ifdef NEMU_WITH_BUSLOGIC
+  NemuDD_DEFS           += NEMU_WITH_BUSLOGIC
+  NemuDD_SOURCES        += \
+ 	Storage/DevBusLogic.cpp \
+ 	Storage/NemuSCSI.cpp
+ endif
+
+ ifdef NEMU_WITH_LSILOGIC
+  NemuDD_DEFS           += NEMU_WITH_LSILOGIC
+  NemuDD_SOURCES        += \
+ 	Storage/DevLsiLogicSCSI.cpp
+ endif
+
+ ifdef NEMU_WITH_PDM_ASYNC_COMPLETION
+  NemuDD_DEFS           += NEMU_WITH_PDM_ASYNC_COMPLETION
+ endif
+
+ ifdef NEMU_WITH_SCSI
+  NemuDD_DEFS           += NEMU_WITH_SCSI
+  NemuDD_SOURCES        += \
+  	Storage/DrvSCSI.cpp
+  NemuDD_SOURCES.linux  += \
+  	Storage/DrvSCSIHost.cpp
+ endif
+
+ ifdef NEMU_WITH_ISCSI
+  $(eval $(call def_nemu_lwip_flags, \
+                    NemuDD, Storage/DrvVD.cpp, Network/lwip-new))
+ endif
+
+ ifdef NEMU_WITH_DRV_DISK_INTEGRITY
+  NemuDD_DEFS           += NEMU_WITH_DRV_DISK_INTEGRITY
+  NemuDD_SOURCES        += \
+  	Storage/DrvDiskIntegrity.cpp
+  NemuDD_LIBS           += \
+ 	$(PATH_STAGE_LIB)/StorageDbgLib$(NEMU_SUFF_LIB)
+ endif
+
+ ifdef NEMU_WITH_EFI
+  NemuDD_DEFS           += NEMU_WITH_EFI
+  NemuDD_SOURCES        += EFI/DevEFI.cpp
+  EFI/DevEFI.cpp_INCS       += EFI/Firmware/BaseTools/Source/C/Include
+  EFI/DevEFI.cpp_INCS.x86   += EFI/Firmware/BaseTools/Source/C/Include/Ia32
+  EFI/DevEFI.cpp_INCS.amd64 += EFI/Firmware/BaseTools/Source/C/Include/X64
+ endif
+
+ if defined(NEMU_WITH_PCI_PASSTHROUGH_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+  NemuDD_DEFS           += NEMU_WITH_PCI_PASSTHROUGH_IMPL
+  NemuDD_SOURCES        += \
+	Bus/DevPciRaw.cpp \
+	Bus/DrvPciRaw.cpp
+ endif
+
+ ifdef NEMU_WITH_MSI_DEVICES
+  NemuDD_DEFS           += NEMU_WITH_MSI_DEVICES
+ endif
+
+ ifdef NEMU_WITH_DYNAMIC_DSDT
+  NemuDD_DEFS           += NEMU_WITH_DYNAMIC_DSDT
+ endif
+
+
+ # --- Input bits. ---
+
+ ifdef NEMU_WITH_NEW_PS2M
+  NemuDD_DEFS           += NEMU_WITH_NEW_PS2M
+ endif
+
+
+ # --- Audio bits. ---
+
+ NemuDD_SOURCES         += \
+   Audio/AudioMixBuffer.cpp \
+   Audio/AudioMixer.cpp \
+   Audio/DrvAudio.cpp \
+   Audio/DrvAudioCommon.cpp \
+   Audio/DrvHostNullAudio.cpp
+
+ ifeq ($(KBUILD_TARGET),darwin)
+  NemuDD_SOURCES += \
+   Audio/DrvHostCoreAudio.cpp
+ endif
+
+ ifeq ($(KBUILD_TARGET),win)
+  NemuDD_SOURCES += \
+   Audio/DrvHostDSound.cpp
+ endif
+
+ ifeq ($(KBUILD_TARGET),linux)
+  NemuDD_SOURCES += \
+   	Audio/DrvHostOSSAudio.cpp
+
+  ifdef NEMU_WITH_PULSE
+   NemuDD_DEFS    += NEMU_WITH_PULSE
+   NemuDD_SOURCES += \
+   Audio/DrvHostPulseAudio.cpp \
+   Audio/pulse_stubs.c
+  endif
+
+  ifdef NEMU_WITH_ALSA
+   NemuDD_DEFS    += NEMU_WITH_ALSA
+   NemuDD_SOURCES += \
+   	Audio/DrvHostALSAAudio.cpp \
+   	Audio/alsa_stubs.c
+  endif
+ endif
+
+ ifeq ($(KBUILD_TARGET),freebsd)
+  NemuDD_SOURCES  += \
+   	Audio/DrvHostOSSAudio.cpp
+  ifdef NEMU_WITH_PULSE
+   NemuDD_DEFS    += NEMU_WITH_PULSE
+   NemuDD_SOURCES += \
+   Audio/DrvHostPulseAudio.cpp \
+   Audio/pulse_stubs.c
+  endif
+ endif
+
+ ifeq ($(KBUILD_TARGET),solaris)
+  ifdef NEMU_WITH_SOLARIS_OSS
+   NemuDD_SOURCES += Audio/DrvHostOSSAudio.cpp
+   NemuDD_DEFS    += NEMU_WITH_SOLARIS_OSS
+  endif
+ endif
+
+ # --- WARNING! SLIRP MESS AHEAD! ;-) ---
+ NEMU_SLIRP_SOURCES = \
+ 	Network/DrvNAT.cpp \
+ 	Network/slirp/bootp.c \
+  	Network/slirp/debug.c \
+ 	Network/slirp/ip_icmp.c \
+ 	Network/slirp/ip_input.c \
+ 	Network/slirp/ip_output.c \
+ 	Network/slirp/misc.c \
+ 	Network/slirp/sbuf.c \
+ 	Network/slirp/slirp.c \
+ 	Network/slirp/slirp_dns.c \
+ 	Network/slirp/socket.c \
+ 	Network/slirp/tcp_input.c \
+ 	Network/slirp/tcp_output.c \
+ 	Network/slirp/tcp_subr.c \
+ 	Network/slirp/tcp_timer.c \
+ 	Network/slirp/udp.c \
+ 	Network/slirp/dnsproxy/hash.c \
+ 	Network/slirp/tftp.c \
+ 	Network/slirp/dnsproxy/dnsproxy.c
+
+ ifeq ($(KBUILD_TARGET), win)
+  NEMU_SLIRP_SOURCES += Network/slirp/ip_icmpwin.c
+ else ifneq ($(KBUILD_TARGET),darwin)
+  # helper for debugging unprivileged
+#  Network/slirp/ip_icmp.c_DEFS += NEMU_RAWSOCK_DEBUG_HELPER
+#  NEMU_SLIRP_SOURCES += ../NetworkServices/NAT/getrawsock.c
+ endif
+
+ ifneq ($(KBUILD_TARGET), win)
+  NEMU_SLIRP_SOURCES +=  	Network/slirp/resolv_conf_parser.c
+ endif
+
+ NEMU_SLIRP_BSD_ARCH = $(subst x86,i386,$(KBUILD_TARGET_ARCH))
+ NEMU_SLIRP_BSD_SOURCES += \
+ 	Network/slirp/bsd/kern/kern_mbuf.c \
+ 	Network/slirp/bsd/kern/uipc_mbuf.c \
+ 	Network/slirp/bsd/kern/uipc_mbuf2.c \
+ 	Network/slirp/bsd/$(NEMU_SLIRP_BSD_ARCH)/in_cksum.c
+ NEMU_SLIRP_ALIAS_SOURCES = \
+ 	Network/slirp/libalias/alias.c \
+ 	Network/slirp/libalias/alias_db.c \
+ 	Network/slirp/libalias/alias_mod.c \
+ 	Network/slirp/libalias/alias_proxy.c \
+ 	Network/slirp/libalias/alias_ftp.c \
+ 	Network/slirp/libalias/alias_dns.c \
+ 	Network/slirp/libalias/alias_nbt.c \
+ 	Network/slirp/libalias/alias_util.c
+
+ # Enable NEMU_WITH_DNSMAPPING_IN_HOSTRESOLVER here for a while, then move to
+ # $(file)_DEFS or clean the code disabled with this definition.
+ NEMU_WITH_DNSMAPPING_IN_HOSTRESOLVER=1
+
+ # dump memory related operations.
+ Network/slirp/misc.c_DEFS += $(if $(NEMU_NAT_MEM_DEBUG),NEMU_NAT_MEM_DEBUG,)
+
+ NemuDD_SOURCES += $(NEMU_SLIRP_SOURCES)
+ define def_nemu_slirp_cflags
+   $(file)_DEFS += \
+       $(if $(NEMU_WITH_SLIRP_MEMORY_CHECK),RTMEM_WRAP_TO_EF_APIS,) \
+       $(if $(NEMU_WITH_DEBUG_NAT_SOCKETS),NEMU_WITH_DEBUG_NAT_SOCKETS,)	\
+       $(if $(NEMU_WITH_DNSMAPPING_IN_HOSTRESOLVER),NEMU_WITH_DNSMAPPING_IN_HOSTRESOLVER,)	\
+       $(if $(NEMU_WITH_NAT_UDP_SOCKET_CLONE),NEMU_WITH_NAT_UDP_SOCKET_CLONE,)	\
+       $(if $(NEMU_WITH_NAT_SEND2HOME),NEMU_WITH_NAT_SEND2HOME,)	\
+       $(if $(NEMU_WITH_HIDDEN_TCPTEMPLATE),NEMU_WITH_HIDDEN_TCPTEMPLATE,)	\
+       $(if $(NEMU_WITH_SLIRP_MT),NEMU_WITH_SLIRP_MT,)
+  $(file)_INCS += \
+	$(1)/slirp/bsd/sys \
+	$(1)/slirp/bsd/sys/sys \
+	$(1)/slirp/bsd/$(NEMU_SLIRP_BSD_ARCH)/include \
+	$(1)/slirp/bsd/netinet \
+	$(1)/slirp \
+	$(1)/slirp/libalias
+  ifeq ($(KBUILD_TARGET),win)
+   $(file)_CFLAGS = -wd4018
+  else
+   $(file)_CFLAGS += -Wno-sign-compare -Wno-format -Wno-bad-function-cast
+  endif
+ endef
+
+ $(foreach file,$(NEMU_SLIRP_SOURCES),$(eval $(call def_nemu_slirp_cflags, Network)))
+
+ NemuDD_SOURCES += $(NEMU_SLIRP_ALIAS_SOURCES)
+ define def_nemu_slirp_alias_cflags
+   $(file)_DEFS += NEMU_SLIRP_ALIAS \
+       $(if $(NEMU_WITH_DEBUG_LIBALIAS),NEMU_WITH_DEBUG_LIBALIAS,)
+   $(file)_INCS += \
+	$(1)/slirp/libalias \
+	$(1)/slirp \
+	$(1)/slirp/dnsproxy
+   ifneq ($(KBUILD_TARGET),win)
+    $(file)_CFLAGS += -Wno-shadow
+   endif
+ endef
+ $(foreach file,$(NEMU_SLIRP_ALIAS_SOURCES),$(eval $(call def_nemu_slirp_cflags, Network)))
+ $(foreach file,$(NEMU_SLIRP_ALIAS_SOURCES),$(eval $(call def_nemu_slirp_alias_cflags, Network)))
+
+ NEMU_SLIRP_BSD_SOURCES += $(NEMU_SLIRP_BSD_SOURCES.${KBUILD_TARGET_ARCH})
+ NemuDD_SOURCES += $(NEMU_SLIRP_BSD_SOURCES)
+ define def_nemu_slirp_bsd_cflags
+  $(file)_DEFS += NEMU_SLIRP_BSD
+  $(file)_INCS += $(1)/slirp/dnsproxy
+ endef
+ $(foreach file,$(NEMU_SLIRP_BSD_SOURCES),$(eval $(call def_nemu_slirp_cflags, Network)))
+ $(foreach file,$(NEMU_SLIRP_BSD_SOURCES),$(eval $(call def_nemu_slirp_bsd_cflags, Network)))
+
+
+ # --- OS specific driver hacks. ---
+
+ ifeq ($(KBUILD_TARGET),darwin)
+  NemuDD_SOURCES.darwin += Serial/DrvHostSerial.cpp
+ endif # darwin
+
+ ifeq ($(KBUILD_TARGET),freebsd)
+  NemuDD_SOURCES += Serial/DrvHostSerial.cpp
+  NemuDD_SOURCES.freebsd += Network/DrvTAP.cpp
+ endif # freebsd
+
+ NemuDD_SOURCES.linux += \
+ 	Network/DrvTAP.cpp \
+ 	Parallel/DrvHostParallel.cpp \
+ 	Serial/DrvHostSerial.cpp
+
+ ifeq ($(KBUILD_TARGET),solaris)
+  NemuDD_SOURCES.solaris += Serial/DrvHostSerial.cpp
+  ifdef NEMU_WITH_SUID_WRAPPER
+   NemuDD_DEFS += NEMU_WITH_SUID_WRAPPER
+  endif
+ endif
+
+ NemuDD_DEFS.win += NEMU_WITH_WIN_PARPORT_SUP
+ NemuDD_SOURCES.win += \
+	Serial/DrvHostSerial.cpp \
+	Parallel/DrvHostParallel.cpp
+
+ ifdef NEMU_WITH_VIRTUALKD
+  NemuDD_DEFS.win     += NEMU_WITH_VIRTUALKD
+  NemuDD_SOURCES.win  += \
+	Misc/VirtualKD.cpp
+ endif
+
+ if defined(NEMU_WITH_NETFLT)
+  NemuDD_DEFS += NEMU_WITH_NETFLT
+  if defined(NEMU_NETFLT_ONDEMAND_BIND)
+   NemuDD_DEFS.win += NEMU_NETFLT_ONDEMAND_BIND
+  endif
+ endif
+
+
+ # --- Final bits, mostly libraries for order dependant linkers. ---
+
+ NemuDD_LIBS            += \
+ 	$(PATH_STAGE_LIB)/VgaDefBiosLogo$(NEMU_SUFF_LIB) \
+ 	$(LIB_VMM) \
+ 	$(LIB_RUNTIME)
+ ifeq ($(KBUILD_TARGET),win)
+  NemuDD_LIBS           += \
+ 	$(LIB_DDU) \
+ 	$(PATH_STAGE_LIB)/NemuDD2.lib \
+ 	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/dxguid.lib
+ else
+  NemuDD_LIBS           += \
+ 	$(NemuDDU_1_STAGE_TARGET) \
+ 	$(NemuDD2_1_STAGE_TARGET)
+ endif
+
+ ifdef NEMU_WITH_NETFLT
+  NemuDD_LIBS.win       += $(PATH_STAGE_LIB)/WinNetConfig.lib
+ endif
+
+ ifeq ($(KBUILD_TARGET),solaris)
+  NemuDD_LIBS           += adm
+  ifdef NEMU_WITH_SUID_WRAPPER
+   NemuDD_LIBS          += secdb
+  endif
+  ifdef NEMU_WITH_USB
+   NemuDD_LIBS          += aio
+  endif
+ endif
+
+ NemuDD_LIBS.darwin     += \
+ 	$(LIB_REM)
+
+
+ ifdef NEMU_WITH_DYNAMIC_DSDT
+  NemuDD_CLEAN          += $(NemuDD_0_OUTDIR)/nemudsl.hex
+  PC/ACPI/NemuAcpi.cpp_DEPS = $(NemuDD_0_OUTDIR)/nemudsl.hex
+
+  $$(NemuDD_0_OUTDIR)/nemudsl.hex: $(PATH_SUB_CURRENT)/PC/nemu.dsl | $$(dir $$@)
+	$(call MSG_TOOL,bin2c,NemuDD,$<,$@)
+	$(QUIET)$(NEMU_BIN2C) -export VboxDslSource $< $@
+
+  nemudsl.hex:: $$(NemuDD_0_OUTDIR)/nemudsl.hex
+
+ else  # !NEMU_WITH_DYNAMIC_DSDT
+  # NemuAcpi.cpp needs nemuaml.hex which we generate from PC/nemu.dsl
+  NemuDD_CLEAN       += \
+ 	$(NemuDD_0_OUTDIR)/nemuaml.hex \
+ 	$(NemuDD_0_OUTDIR)/nemuaml.aml \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-standard.hex \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-standard.aml \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-standard.aml.tmp \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-cpuhotplug.hex \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-cpuhotplug.aml \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-cpuhotplug.aml.tmp \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-cpuhotplug.aml.pre
+  PC/ACPI/NemuAcpi.cpp_DEPS = \
+ 	$(NemuDD_0_OUTDIR)/nemuaml.hex \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-standard.hex \
+ 	$(NemuDD_0_OUTDIR)/nemussdt-cpuhotplug.hex
+
+  $$(NemuDD_0_OUTDIR)/nemuaml.hex: $(PATH_SUB_CURRENT)/PC/nemu.dsl | $$(dir $$@)
+	$(call MSG_TOOL,iasl,NemuDD,$<,$@)
+	$(QUIET)$(NEMU_IASLCMD) -tc -vs -p $@ $<
+
+  nemuaml.hex:: $$(NemuDD_0_OUTDIR)/nemuaml.hex
+
+  $$(NemuDD_0_OUTDIR)/nemussdt-standard.hex: $(PATH_SUB_CURRENT)/PC/nemu-standard.dsl | $$(dir $$@)
+	$(call MSG_TOOL,iasl,NemuDD,$<,$@)
+	$(QUIET)$(RM) -f $@ $@.tmp
+	$(QUIET)$(NEMU_IASLCMD) -tc -vs -p $@ $<
+	$(QUIET)$(MV) -f $@ $@.tmp
+	$(QUIET)$(SED) "s/AmlCode/AmlCodeSsdtStandard/g" \
+		--output $@ $@.tmp
+	$(QUIET)$(RM) -f $@.tmp
+
+
+  nemussdt-standard.hex:: $$(NemuDD_0_OUTDIR)/nemussdt-standard.hex
+
+  $$(NemuDD_0_OUTDIR)/nemussdt-cpuhotplug.hex: $(PATH_SUB_CURRENT)/PC/nemu-cpuhotplug.dsl | $$(dir $$@)
+	$(call MSG_TOOL,iasl,NemuDD,$<,$@)
+	$(QUIET)$(RM) -f $@ $@.tmp $@.pre
+	$(QUIET)$(TOOL_$(NEMU_GCC_TOOL)_CC) -E -P -x c -o $@.pre $<
+	$(QUIET)$(NEMU_IASLCMD) -tc -vs -p $@ $@.pre
+	$(QUIET)$(MV) -f $@ $@.tmp
+	$(QUIET)$(SED) "s/AmlCode/AmlCodeSsdtCpuHotPlug/g" \
+		--output $@ $@.tmp
+	$(QUIET)$(RM) -f $@.tmp $@.pre
+
+
+  nemussdt-cpuhotplug.hex:: $$(NemuDD_0_OUTDIR)/nemussdt-cpuhotplug.hex
+
+ endif # !NEMU_WITH_DYNAMIC_DSDT
+ PC/ACPI/NemuAcpi.cpp_INCS = $(NemuDD_0_OUTDIR)
+
+ # For finding PCIInternal.h from Nemu/pci.h.
+ Bus/DevPCI.cpp_INCS      = Bus
+ Bus/DevPciIch9.cpp_INCS  = Bus
+ Bus/MsiCommon.cpp_INCS   = Bus
+ Bus/MsixCommon.cpp_INCS  = Bus
+ Bus/DevPciRaw.cpp_INCS   = Bus
+
+ # For finding and generating vbetables.h (see Graphics/BIOS/Makefile.kmk).
+ Graphics/DevVGA.cpp_INCS = $(VgaBiosBin_0_OUTDIR)
+ Graphics/DevVGA.cpp_DEPS = $(VgaBiosBin_0_OUTDIR)/vbetables.h
+
+ $(call NEMU_SET_VER_INFO_DLL,NemuDD,VirtualBox VMM Devices and Drivers) # (last!)
+
+
+ ifdef NEMU_WITH_RAW_MODE
+  #
+  # NemuDDRC (sysmod)
+  #
+  NemuDDRC_TEMPLATE       = NemuRc
+  ifeq ($(KBUILD_TARGET_ARCH),x86)
+   NemuDDRC_DEFS.darwin   = NEMU_WITH_2X_4GB_ADDR_SPACE
+  endif
+  NemuDDRC_DEFS           = $(if $(NEMU_WITH_HGCM),NEMU_WITH_HGCM,)
+  NemuDDRC_INCS           = build
+  NemuDDRC_SOURCES        = \
+ 	Audio/DevIchHda.cpp \
+  	Bus/DevPCI.cpp \
+ 	Bus/DevPciIch9.cpp \
+ 	Bus/MsiCommon.cpp \
+ 	Bus/MsixCommon.cpp \
+	EFI/DevSmc.cpp \
+  	Graphics/DevVGA.cpp \
+  	Input/DevPS2.cpp \
+ 	Input/PS2K.cpp \
+ 	Input/PS2M.cpp \
+  	PC/DevACPI.cpp \
+  	PC/DevPit-i8254.cpp \
+  	PC/DevPIC.cpp \
+  	PC/DevRTC.cpp \
+ 	PC/DevHPET.cpp \
+  	Storage/DevATA.cpp \
+  	Network/DevPCNet.cpp \
+  	Serial/DevSerial.cpp \
+  	Parallel/DevParallel.cpp \
+ 	VMMDev/VMMDevTesting.cpp
+
+  ifdef NEMU_WITH_E1000
+   NemuDDRC_DEFS        += NEMU_WITH_E1000
+   NemuDDRC_SOURCES     += \
+  	Network/DevE1000.cpp \
+  	Network/DevE1000Phy.cpp
+  endif
+
+  ifdef NEMU_WITH_VIRTIO
+   NemuDDRC_DEFS        += NEMU_WITH_VIRTIO
+   NemuDDRC_SOURCES     += \
+  	VirtIO/Virtio.cpp \
+  	Network/DevVirtioNet.cpp
+  endif
+
+  ifdef NEMU_WITH_HGSMI
+   NemuDDRC_DEFS        += NEMU_WITH_HGSMI
+  endif
+  ifdef NEMU_WITH_WDDM
+   NemuDDRC_DEFS        += NEMU_WITH_WDDM
+  endif
+  ifdef NEMU_WITH_VDMA
+   NemuDDRC_DEFS        += NEMU_WITH_VDMA
+  endif
+  ifdef NEMU_WITH_CRHGSMI
+   NemuDDRC_DEFS        += NEMU_WITH_CRHGSMI
+  endif
+  ifdef NEMUWDDM_WITH_VBVA
+   NemuDDRC_DEFS        += NEMUWDDM_WITH_VBVA
+  endif
+  ifdef NEMU_WITH_VMSVGA
+   NemuDDRC_DEFS         += NEMU_WITH_VMSVGA
+   NemuDDRC_SOURCES      += \
+ 	Graphics/DevVGA-SVGA.cpp
+  endif
+  ifdef NEMU_WITH_VMSVGA3D
+   NemuDDRC_DEFS         += NEMU_WITH_VMSVGA3D
+  endif
+  ifdef NEMU_VDMA_WITH_WATCHDOG
+   NemuDDRC_DEFS        += NEMU_VDMA_WITH_WATCHDOG
+  endif
+
+  ifdef NEMU_WITH_VUSB
+   NemuDDRC_DEFS        += NEMU_WITH_VUSB
+   NemuDDRC_SOURCES     += \
+ 	USB/DevOHCI.cpp
+  endif
+
+  ifdef NEMU_WITH_USB
+   NemuDDRC_DEFS        += NEMU_WITH_USB
+   if defined(NEMU_WITH_EHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+    NemuDDRC_DEFS       += NEMU_WITH_EHCI_IMPL
+    NemuDDRC_SOURCES    += \
+  	USB/DevEHCI.cpp
+   endif
+   if defined(NEMU_WITH_XHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+    NemuDDRC_DEFS       += NEMU_WITH_XHCI_IMPL
+    NemuDDRC_SOURCES    += \
+  	USB/DevXHCI.cpp
+   endif
+  endif
+
+  ifdef NEMU_WITH_VIDEOHWACCEL
+   NemuDDRC_DEFS        += NEMU_WITH_VIDEOHWACCEL
+  endif
+
+  ifdef NEMU_WITH_AHCI
+  NemuDDRC_DEFS         += NEMU_WITH_AHCI IN_AHCI_GC
+  NemuDDRC_SOURCES      += \
+  	Storage/DevAHCI.cpp
+  endif
+
+  ifdef NEMU_WITH_BUSLOGIC
+  NemuDDRC_DEFS         += NEMU_WITH_BUSLOGIC
+  NemuDDRC_SOURCES      += \
+  	Storage/DevBusLogic.cpp
+  endif
+
+  ifdef NEMU_WITH_LSILOGIC
+  NemuDDRC_DEFS         += NEMU_WITH_LSILOGIC
+  NemuDDRC_SOURCES      += \
+  	Storage/DevLsiLogicSCSI.cpp
+  endif
+
+  ifdef NEMU_WITH_NEW_PS2M
+  NemuDDRC_DEFS         += NEMU_WITH_NEW_PS2M
+  endif
+
+  if1of ($(NEMU_LDR_FMT32), pe lx)
+  NemuDDRC_LIBS           = \
+  	$(PATH_STAGE_LIB)/VMMRCBuiltin$(NEMU_SUFF_LIB) \
+  	$(PATH_STAGE_LIB)/VMMRCImp$(NEMU_SUFF_LIB)
+  endif
+ endif # NEMU_WITH_RAW_MODE
+
+ $(call NEMU_SET_VER_INFO_RC,NemuDDRC,VirtualBox VMM Devices and Drivers$(COMMA) raw-mode) # last!
+
+
+ #
+ # NemuDD2 (shared object)
+ #
+ NemuDD2_TEMPLATE        = NemuR3DllWarnNoPic
+ NemuDD2_DEFS            = IN_NEMUDD2
+ NemuDD2_INCS           := \
+	build \
+ 	$(PATH_SUB_CURRENT)
+ NemuDD2_SOURCES         = \
+ 	build/NemuDD2.cpp  \
+ 	PC/DevAPIC.cpp \
+ 	PC/DevIoApic.cpp \
+ 	PC/DevLPC.cpp
+ NemuDD2_LIBS            = \
+ 	$(PATH_STAGE_LIB)/PcBiosBin$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/VgaBiosBin$(NEMU_SUFF_LIB) \
+ 	$(if $(NEMU_WITH_PXE_ROM),\
+	  $(if $(NEMU_WITH_INTEL_PXE),\
+	    $(PATH_STAGE_LIB)/NetBiosBin$(NEMU_SUFF_LIB),\
+	    $(PATH_STAGE_LIB)/iPxeBiosBin$(NEMU_SUFF_LIB)),) \
+ 	$(LIB_VMM) \
+ 	$(LIB_RUNTIME)
+ NemuDD2_LIBS.darwin    += $(LIB_REM)
+ NemuDD2_LDFLAGS.darwin  = -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuDD2.dylib
+ NemuDD2_LDFLAGS.linux   = -Wl,--no-undefined
+
+ ifdef NEMU_WITH_PXE_ROM
+  NemuDD2_DEFS          += NEMU_WITH_PXE_ROM
+ endif
+
+ $(call NEMU_SET_VER_INFO_DLL,NemuDD2,VirtualBox VMM Devices and Drivers 2) # (last!)
+
+ #
+ # NemuDDR0 (sysmod)
+ #
+ NemuDDR0_TEMPLATE       = NemuR0
+ NemuDDR0_DEFS           = IN_RT_R0 $(if $(NEMU_WITH_HGCM),NEMU_WITH_HGCM,) # - WTF is IN_RT_R0 doing here?
+ NemuDDR0_DEFS.win      += NEMU_WITH_WIN_PARPORT_SUP
+ NemuDDR0_INCS           = build
+ NemuDDR0_SDKS.win 	  = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK)
+ NemuDDR0_SOURCES        = \
+ 	build/NemuDDR0.cpp \
+ 	Audio/DevIchHda.cpp \
+ 	Bus/DevPCI.cpp \
+ 	Bus/DevPciIch9.cpp \
+ 	Bus/MsiCommon.cpp \
+ 	Bus/MsixCommon.cpp \
+	EFI/DevSmc.cpp \
+ 	Graphics/DevVGA.cpp \
+ 	Input/DevPS2.cpp \
+ 	Input/PS2K.cpp \
+ 	Input/PS2M.cpp \
+ 	PC/DevACPI.cpp \
+ 	PC/DevPit-i8254.cpp \
+ 	PC/DevPIC.cpp \
+ 	PC/DevRTC.cpp \
+ 	PC/DevHPET.cpp \
+ 	Storage/DevATA.cpp \
+ 	Network/DevPCNet.cpp \
+ 	Serial/DevSerial.cpp \
+ 	Parallel/DevParallel.cpp \
+ 	VMMDev/VMMDevTesting.cpp \
+ 	\
+ 	Network/DrvIntNet.cpp \
+ 	Network/DrvDedicatedNic.cpp
+
+ NemuDDR0_SOURCES.win += Parallel/DrvHostParallel.cpp
+
+ ifdef NEMU_WITH_E1000
+  NemuDDR0_DEFS         += NEMU_WITH_E1000
+  NemuDDR0_SOURCES      += \
+ 	Network/DevE1000.cpp \
+ 	Network/DevE1000Phy.cpp
+ endif
+
+ ifdef NEMU_WITH_VIRTIO
+  NemuDDR0_DEFS         += NEMU_WITH_VIRTIO
+  NemuDDR0_SOURCES      += \
+	VirtIO/Virtio.cpp \
+  	Network/DevVirtioNet.cpp
+ endif
+
+ ifdef NEMU_WITH_NETSHAPER
+  NemuDDR0_DEFS         += NEMU_WITH_NETSHAPER
+  NemuDDR0_SOURCES      += \
+ 	Network/DrvNetShaper.cpp
+ endif
+
+ ifdef NEMU_WITH_VMSVGA
+  NemuDDR0_DEFS         += NEMU_WITH_VMSVGA
+  NemuDDR0_SOURCES      += \
+	Graphics/DevVGA-SVGA.cpp
+ endif
+ ifdef NEMU_WITH_VMSVGA3D
+  NemuDDR0_DEFS         += NEMU_WITH_VMSVGA3D
+ endif
+
+ ifdef NEMU_WITH_HGSMI
+  NemuDDR0_DEFS         += NEMU_WITH_HGSMI
+ endif
+ ifdef NEMU_WITH_WDDM
+  NemuDDR0_DEFS         += NEMU_WITH_WDDM
+ endif
+ ifdef NEMU_WITH_VDMA
+  NemuDDR0_DEFS         += NEMU_WITH_VDMA
+ endif
+ ifdef NEMU_WITH_CRHGSMI
+  NemuDDR0_DEFS         += NEMU_WITH_CRHGSMI
+ endif
+ ifdef NEMUWDDM_WITH_VBVA
+  NemuDDR0_DEFS         += NEMUWDDM_WITH_VBVA
+ endif
+ ifdef NEMU_VDMA_WITH_WATCHDOG
+  NemuDDR0_DEFS        += NEMU_VDMA_WITH_WATCHDOG
+ endif
+
+ ifdef NEMU_WITH_VUSB
+  NemuDDR0_DEFS         += NEMU_WITH_VUSB
+  NemuDDR0_SOURCES      += \
+ 	USB/DevOHCI.cpp
+ endif
+ ifdef NEMU_WITH_USB
+ NemuDDR0_DEFS          += NEMU_WITH_USB
+  if defined(NEMU_WITH_EHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+   NemuDDR0_DEFS        += NEMU_WITH_EHCI_IMPL
+   NemuDDR0_SOURCES     += \
+ 	USB/DevEHCI.cpp
+  endif
+  if defined(NEMU_WITH_XHCI_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+   NemuDDR0_DEFS        += NEMU_WITH_XHCI_IMPL
+   NemuDDR0_SOURCES     += \
+ 	USB/DevXHCI.cpp
+  endif
+ endif
+
+ if defined(NEMU_WITH_PCI_PASSTHROUGH_IMPL) && !defined(NEMU_WITH_EXTPACK_PUEL)
+  NemuDDR0_SOURCES      += \
+	Bus/DevPciRaw.cpp
+ endif
+
+ ifdef NEMU_WITH_AHCI
+ NemuDDR0_DEFS          += NEMU_WITH_AHCI IN_AHCI_R0
+ NemuDDR0_SOURCES       += \
+ 	Storage/DevAHCI.cpp
+ endif
+
+ ifdef NEMU_WITH_BUSLOGIC
+ NemuDDR0_DEFS          += NEMU_WITH_BUSLOGIC
+ NemuDDR0_SOURCES       += \
+ 	Storage/DevBusLogic.cpp
+ endif
+
+ ifdef NEMU_WITH_LSILOGIC
+ NemuDDR0_DEFS          += NEMU_WITH_LSILOGIC
+ NemuDDR0_SOURCES       += \
+ 	Storage/DevLsiLogicSCSI.cpp
+ endif
+
+ ifdef NEMU_WITH_NEW_PS2M
+  NemuDDR0_DEFS         += NEMU_WITH_NEW_PS2M
+ endif
+
+ ifdef NEMU_WITH_HGSMI
+  NemuDDR0_DEFS         += NEMU_WITH_HGSMI
+ endif
+ ifdef NEMU_WITH_VIDEOHWACCEL
+  NemuDDR0_DEFS         += NEMU_WITH_VIDEOHWACCEL
+ endif
+
+ if1of ($(NEMU_LDR_FMT), pe lx)
+ NemuDDR0_LIBS           = \
+ 	$(PATH_STAGE_LIB)/VMMR0Imp$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/SUPR0$(NEMU_SUFF_LIB)
+ endif
+
+ $(call NEMU_SET_VER_INFO_R0,NemuDDR0,VirtualBox VMM Devices and Drivers$(COMMA) ring-0) # (last!)
+
+
+ ifdef NEMU_WITH_RAW_MODE
+  #
+  # NemuDD2RC (LGPL sysmod)
+  #
+  NemuDD2RC_TEMPLATE       = NemuRc
+  NemuDD2RC_INCS           = build
+  NemuDD2RC_SOURCES        = \
+  	PC/DevAPIC.cpp \
+  	PC/DevIoApic.cpp
+  if1of ($(NEMU_LDR_FMT32), pe lx)
+   NemuDD2RC_LIBS          = \
+   	$(PATH_STAGE_LIB)/VMMRCBuiltin$(NEMU_SUFF_LIB) \
+   	$(PATH_STAGE_LIB)/VMMRCImp$(NEMU_SUFF_LIB)
+  endif
+  $(call NEMU_SET_VER_INFO_RC,NemuDD2RC,VirtualBox VMM Devices and Drivers 2$(COMMA) raw-mode)
+ endif
+
+
+ #
+ # NemuDD2R0 (LGPL sysmod)
+ #
+ NemuDD2R0_TEMPLATE       = NemuR0
+ NemuDD2R0_DEFS           = IN_RT_R0
+ NemuDD2R0_INCS           = build
+ NemuDD2R0_SOURCES        = \
+ 	build/NemuDD2R0.cpp \
+ 	PC/DevAPIC.cpp \
+ 	PC/DevIoApic.cpp \
+
+ if1of ($(NEMU_LDR_FMT), pe lx)
+  NemuDD2R0_LIBS          = \
+  	$(PATH_STAGE_LIB)/VMMR0Imp$(NEMU_SUFF_LIB) \
+  	$(PATH_STAGE_LIB)/SUPR0$(NEMU_SUFF_LIB)
+ endif
+ $(call NEMU_SET_VER_INFO_R0,NemuDD2R0,VirtualBox VMM Devices and Drivers 2$(COMMA) ring-0) # (last!)
+
+
+ #
+ # Ring-0 Services (library, linked into NemuVMMR0.r0)
+ #
+ ServicesR0_TEMPLATE  = NemuR0
+ ServicesR0_DEFS      = IN_INTNET_R0 IN_RT_R0 \
+	$(if $(NEMU_WITH_PCI_PASSTHROUGH),IN_PCIRAW_R0,) \
+	$(if $(NEMU_WITH_NAT_SERVICE),NEMU_WITH_NAT_SERVICE,)
+ ServicesR0_SOURCES   = \
+ 	Network/SrvIntNetR0.cpp \
+        $(if $(NEMU_WITH_PCI_PASSTHROUGH),Bus/SrvPciRawR0.cpp,)
+ Network/SrvIntNetR0.cpp_CXXFLAGS := $(if-expr $(KBUILD_TARGET) == "win",,$(NEMU_GCC_Wno-array_bounds))
+
+
+ #
+ # Internal Networking - Ring-3 Testcase for the Ring-0 code (a bit hackish).
+ #
+ ifdef NEMU_WITH_TESTCASES
+  PROGRAMS += tstIntNetR0
+  tstIntNetR0_TEMPLATE    = NEMUR3TSTEXE
+  tstIntNetR0_DEFS        = IN_INTNET_R0
+  tstIntNetR0_SOURCES     = \
+ 	Network/testcase/tstIntNetR0.cpp
+  ifneq ($(KBUILD_TARGET),win)
+   Network/testcase/tstIntNetR0.cpp_CXXFLAGS = $(NEMU_GCC_Wno-array_bounds)
+  endif
+ endif
+
+
+ #
+ # Internal Networking - Ring-3 Testcase for the Ring-0 code (a bit hackish).
+ #
+ ifdef NEMU_WITH_TESTCASES
+  if defined(NEMU_WITH_HARDENING) && "$(KBUILD_TARGET)" == "win"
+   PROGRAMS += tstIntNetHardened-1
+   tstIntNetHardened-1_TEMPLATE = NemuR3HardenedTstExe
+   tstIntNetHardened-1_NAME     = tstIntNet-1
+   tstIntNetHardened-1_DEFS     = PROGRAM_NAME_STR=\"tstIntNet-1\"
+   tstIntNetHardened-1_SOURCES  = ../HostDrivers/Support/SUPR3HardenedMainTemplateTestcase.cpp
+
+   DLLS += tstIntNet-1
+   tstIntNet-1_TEMPLATE   = NemuR3HardenedTstDll
+  else
+   PROGRAMS += tstIntNet-1
+   tstIntNet-1_TEMPLATE   = NEMUR3TSTEXE
+  endif
+  tstIntNet-1_SOURCES     = \
+ 	Network/testcase/tstIntNet-1.cpp \
+ 	Network/Pcap.cpp
+ endif
+
+
+ #
+ # EEPROM device unit test requires cppunit
+ #
+ ifdef NEMU_WITH_CPPUNIT_TESTCASES
+  ifdef NEMU_WITH_E1000
+   PROGRAMS += tstDevEEPROM
+   tstDevEEPROM_TEMPLATE    = NEMUCPPUNITEXE
+   tstDevEEPROM_SOURCES     = \
+  	Network/testcase/tstDevEEPROM.cpp
+   tstDevEEPROM_LIBS        = \
+  	$(TARGET_NemuDD)
+   PROGRAMS += tstDevPhy
+   tstDevPhy_TEMPLATE    = NEMUCPPUNITEXE
+   tstDevPhy_SOURCES     = \
+  	Network/testcase/tstDevPhy.cpp \
+  	Network/DevE1000Phy.cpp
+   tstDevPhy_DEFS        = PHY_UNIT_TEST
+  endif
+ endif
+
+ #
+ # Apple SMC Utility.
+ #
+ ifdef NEMU_WITH_TESTCASES
+  PROGRAMS.darwin += NemuSmcUtil-darwin
+  NemuSmcUtil-darwin_TEMPLATE = NEMUR3TSTEXE
+  NemuSmcUtil-darwin_SOURCES = EFI/NemuSmcUtil-darwin.cpp
+  NemuSmcUtil-darwin_LDFLAGS = -framework IOKit
+ endif
+
+endif # !NEMU_ONLY_EXTPACKS
+
+
+if defined(NEMU_WITH_EXTPACK_PUEL) && defined(NEMU_WITH_EXTPACK_PUEL_BUILD)
+ #
+ # The EHCI (USB 2.0) Extension Pack Modules.
+ #
+ if defined(NEMU_WITH_USB)
+  DLLS += NemuEhciR3
+  NemuEhciR3_TEMPLATE = NemuR3ExtPackPuel
+  NemuEhciR3_SOURCES  = \
+	USB/DevEHCI.cpp \
+	USB/DevXHCI.cpp
+  $(call NEMU_SET_VER_INFO_DLL,NemuEhciR3,PUEL Extension Pack - EHCI Device)
+
+  SYSMODS += NemuEhciR0
+  NemuEhciR0_TEMPLATE = NemuR0ExtPackPuel
+  NemuEhciR0_SOURCES  = \
+	USB/DevEHCI.cpp \
+	USB/DevXHCI.cpp
+  $(call NEMU_SET_VER_INFO_R0,NemuEhciR0,PUEL Extension Pack - EHCI Device$(COMMA) ring-0)
+
+  ifdef NEMU_WITH_RAW_MODE
+   SYSMODS += NemuEhciRC
+   NemuEhciRC_TEMPLATE = NemuRcExtPackPuel
+   NemuEhciRC_SOURCES  = \
+	USB/DevEHCI.cpp \
+	USB/DevXHCI.cpp
+   $(call NEMU_SET_VER_INFO_RC,NemuEhciRC,PUEL Extension Pack - EHCI Device$(COMMA) raw-mode)
+  endif
+
+  # Hacky but MSI support *must* be enabled
+  ifdef NEMU_WITH_MSI_DEVICES
+   NemuEhciR3_DEFS += NEMU_WITH_MSI_DEVICES
+   NemuEhciR0_DEFS += NEMU_WITH_MSI_DEVICES
+   NemuEhciRC_DEFS += NEMU_WITH_MSI_DEVICES
+  endif
+
+ endif
+
+ if defined(NEMU_WITH_PCI_PASSTHROUGH)
+  DLLS += NemuPciRawR3
+  NemuPciRawR3_TEMPLATE     = NemuR3ExtPackPuel
+  NemuPciRawR3_SOURCES      = Bus/DevPciRaw.cpp
+  $(call NEMU_SET_VER_INFO_DLL,NemuPciRawR3,PUEL Extension Pack - PCI Passthrough Device)
+
+  DLLS += NemuPciRawDrv
+  NemuPciRawDrv_TEMPLATE    = NemuR3ExtPackPuel
+  NemuPciRawDrv_SOURCES     = Bus/DrvPciRaw.cpp
+  $(call NEMU_SET_VER_INFO_DLL,NemuPciRawDrv,PUEL Extension Pack - PCI Passthrough Driver)
+
+  SYSMODS += NemuPciRawR0
+  NemuPciRawR0_TEMPLATE     = NemuR0ExtPackPuel
+  NemuPciRawR0_SOURCES      = Bus/DevPciRaw.cpp
+  $(call NEMU_SET_VER_INFO_R0,NemuPciRawR0,PUEL Extension Pack - PCI Passthrough Driver$(COMMA) ring-0)
+
+  Bus/DevPciRaw.cpp_INCS    = Bus
+ endif
+
+
+ #
+ # The Intel PXE ROM.
+ #
+ INSTALLS += NemuExtPackPuelInsRoms
+ NemuExtPackPuelInsRoms_TEMPLATE = NemuInsExtPackPuel
+ NemuExtPackPuelInsRoms_SOURCES = PC/PXE/PXE-Intel.rom=>PXE-Intel.rom
+endif # NEMU_WITH_EXTPACK_PUEL
+
+
+if defined(NEMU_WITH_VMSVGA3D) && !defined(NEMU_ONLY_EXTPACKS)
+ #
+ # Template used for NemuSVGA3D.  (Stips away compiler options.)
+ #
+ TEMPLATE_NemuSVGA3D         := NemuSVGA3D
+ TEMPLATE_NemuSVGA3D_EXTENDS := $(if-expr "$(KBUILD_TARGET)" == "darwin",NemuR3DllOsX107,NEMUR3)
+ TEMPLATE_NemuSVGA3D_CFLAGS      = $(filter-out -pedantic -Wstrict-prototypes,$(TEMPLATE_$(TEMPLATE_NemuSVGA3D_EXTENDS)_CFLAGS))
+ TEMPLATE_NemuSVGA3D_CXXFLAGS    = $(filter-out -pedantic,$(TEMPLATE_$(TEMPLATE_NemuSVGA3D_EXTENDS)_CXXFLAGS))
+ TEMPLATE_NemuSVGA3D_OBJCFLAGS   = $(filter-out -pedantic,$(TEMPLATE_$(TEMPLATE_NemuSVGA3D_EXTENDS)_OBJCFLAGS))
+ TEMPLATE_NemuSVGA3D_OBJCXXFLAGS = $(filter-out -pedantic,$(TEMPLATE_$(TEMPLATE_NemuSVGA3D_EXTENDS)_OBJCXXFLAGS))
+ TEMPLATE_NemuSVGA3D_LDFLAGS.darwin  = $(TEMPLATE_NemuR3DllOsX107_LDFLAGS.darwin) \
+  	-framework AppKit -framework OpenGL -framework IOKit
+
+ #
+ # The shader library used by the SVGA3D implementation.
+ #
+ DLLS += NemuSVGA3D
+ NemuSVGA3D_TEMPLATE = NemuSVGA3D
+ NemuSVGA3D_SDKS         = ReorderCompilerIncs
+ NemuSVGA3D_DEFS         = \
+ 	__WINESRC__ \
+ 	WINE_UNICODE_API="" \
+ 	_REENTRANT \
+ 	WINE_NOWINSOCK \
+ 	NEMU_WITH_VMSVGA \
+ 	NEMU_WITH_VMSVGA3D \
+ 	DLLDIR=\"\" \
+ 	BINDIR=\"\" \
+ 	LIB_TO_BINDIR=\"\" \
+ 	LIB_TO_DLLDIR=\"\" \
+ 	BIN_TO_DLLDIR=\"\" \
+ 	LIB_TO_DATADIR=\"\" \
+ 	BIN_TO_DATADIR=\"\" \
+ 	_USE_MATH_DEFINES \
+ 	NEMU_USING_WINDDK_W7_OR_LATER \
+ 	NEMU_WINE_WITH_SINGLE_SWAPCHAIN_CONTEXT \
+ 	IN_vmsvgashader_STATIC \
+ 	IN_VMSVGA3D \
+ 	NEMU_WINE_WITH_IPRT
+ if "$(KBUILD_TYPE)" != "debug" || defined(NEMU_WINE_NO_DEBUG_MSGS)
+  NemuSVGA3D_DEFS       += WINE_NO_DEBUG_MSGS
+ endif
+ NemuSVGA3D_DEFS.x86    += __i386__
+ NemuSVGA3D_DEFS.amd64  += __x86_64__
+ NemuSVGA3D_DEFS.win    += \
+ 	USE_WIN32_OPENGL \
+ 	NEMU_WINE_WITHOUT_LIBWINE
+ NemuSVGA3D_DEFS.darwin  += NEMU_VMSVGA3D_DUAL_OPENGL_PROFILE
+ if 0 # Use the OpenGL 3.2 Core profile (NemuSVGA3D_DEFS.darwin).
+  NemuSVGA3D_DEFS.darwin += NEMU_VMSVGA3D_DEFAULT_OGL_PROFILE=3.2 NEMU_VMSVGA3D_OTHER_OGL_PROFILE=2.1
+ else
+  NemuSVGA3D_DEFS.darwin += NEMU_VMSVGA3D_DEFAULT_OGL_PROFILE=2.1 NEMU_VMSVGA3D_OTHER_OGL_PROFILE=3.2
+ endif
+
+ # WINE relies on a gcc 4.4 feature but we have 4.2 on Darwin
+ NemuSVGA3D_DEFS.darwin += \
+ 	__builtin_ms_va_list=va_list \
+ 	__stdcall= \
+ 	ms_abi=
+ NemuSVGA3D_INCS.win    := \
+ 	Graphics/shaderlib/libWineStub/include
+ NemuSVGA3D_INCS.linux  := \
+ 	Graphics/shaderlib/wine/include
+ NemuSVGA3D_INCS.darwin := \
+ 	Graphics/ \
+ 	Graphics/shaderlib/wine/include
+ NemuSVGA3D_SOURCES     := \
+ 	Graphics/shaderlib/glsl_shader.c \
+ 	Graphics/shaderlib/shader.c \
+ 	Graphics/shaderlib/shader_sm1.c \
+ 	Graphics/shaderlib/shader_sm4.c \
+ 	Graphics/shaderlib/shaderapi.c \
+ 	Graphics/shaderlib/utils.c \
+ 	Graphics/shaderlib/stateblock.c \
+ 	Graphics/shaderlib/directx.c \
+ 	Graphics/shaderlib/libWineStub/debug.c
+ NemuSVGA3D_LIBS        = $(LIB_RUNTIME)
+ NemuSVGA3D_LIBS.win   += $(PATH_SDK_$(NEMU_WINPSDK)_LIB)/Opengl32.lib
+ if1of ($(KBUILD_TARGET), solaris linux freebsd)
+  NemuSVGA3D_LIBS      += GL
+ endif
+ NemuSVGA3D_LDFLAGS.darwin += \
+ 	-install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuSVGA3D.dylib
+ $(call NEMU_SET_VER_INFO_DLL,NemuSVGA3D,VirtualBox VMSVGA 3D)
+
+ #
+ # The Objective C code needs to be separate since the shaderlib redefines most
+ # GL functions as pointers, making it impossible to mix with code calling OpenGL
+ # functions directly.  This module must be compiled for 10.7 or later, thus it
+ # needs to be separate from NemuDD.dylib, or at least that's our belief...
+ #
+ DLLS.darwin += NemuSVGA3DObjC
+ NemuSVGA3DObjC_TEMPLATE    = NemuSVGA3D
+ NemuSVGA3DObjC_DEFS        = $(NemuSVGA3D_DEFS) IN_VMSVGA3DCOCOA
+ NemuSVGA3DObjC_DEFS.x86    = __i386__
+ NemuSVGA3DObjC_DEFS.amd64  = __x86_64__
+ NemuSVGA3DObjC_DEFS.darwin = $(NemuSVGA3D_DEFS.darwin)
+ NemuSVGA3DObjC_INCS        = $(NemuSVGA3D_INCS)
+ NemuSVGA3DObjC_INCS.darwin = $(NemuSVGA3D_INCS.darwin)
+ NemuSVGA3DObjC_LIBS        = $(LIB_RUNTIME)
+ NemuSVGA3DObjC_LDFLAGS.darwin = \
+ 	-install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuSVGA3DObjC.dylib \
+ 	-framework OpenGL
+ if 1
+ NemuSVGA3DObjC_SOURCES.darwin += \
+ 	Graphics/DevVGA-SVGA3d-cocoa.m
+ else
+ NemuSVGA3DObjC_SOURCES.darwin += \
+ 	../HostServices/SharedOpenGL/render/renderspu_cocoa_helper.m \
+ 	../HostServices/SharedOpenGL/OpenGLTest/OpenGLTestDarwin.cpp
+ endif
+
+
+
+endif # defined(NEMU_WITH_VMSVGA3D) && !defined(NEMU_ONLY_EXTPACKS)
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

@@ -1,0 +1,10 @@
+'VirtualBox_title' = '@NEMU_PRODUCT@';
+
+'choiceNemuKEXTs_title' = 'Kernel Extensions';
+'choiceNemuKEXTs_msg' = 'Installs the @NEMU_PRODUCT@ Guest Additions Kernel Extensions into /Library/Extensions.';
+
+'choiceNemuToolsAndServices_title' = 'Tools and Services';
+'choiceNemuToolsAndServices_msg' = 'Installs the @NEMU_PRODUCT@ Guest Additions Tools and Services to /Library/Application Support/VirtualBox Guest Additions.';
+
+'UNSUPPORTED_OS_TLE' = "Unsupported OS version detected!";
+'UNSUPPORTED_OS_MSG' = "The installer has detected an unsupported operation system. VirtualBox Guest Additions require Mac OS X 10.6 or later.";

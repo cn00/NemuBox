@@ -1,0 +1,84 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the nemusf (linux shared folders module).
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+#
+# Populate FILES_NEMUSF_NOBIN
+#
+INSTALLS += nemusf-mod
+include $(PATH_SUB_CURRENT)/files_nemusf
+nemusf-mod_INST         = $(INST_ADDITIONS)src/nemusf/
+nemusf-mod_SOURCES      = \
+	$(subst $(DQUOTE),,$(FILES_NEMUSF_NOBIN))
+nemusf-mod_EXEC_SOURCES = \
+	$(subst $(DQUOTE),,$(FILES_NEMUSF_BIN)) \
+	$(PATH_ROOT)/src/Nemu/HostDrivers/linux/do_Module.symvers
+
+
+#
+# The module (for syntax checking).
+# The DEBUG_HASH* stuff is for CONFIG_DYNAMIC_DEBUG-enabled kernels
+#
+ifdef NEMU_WITH_ADDITION_DRIVERS
+ SYSMODS += nemusf
+ nemusf_TEMPLATE        = NEMUGUESTR0
+ nemusf_CFLAGS          = -fshort-wchar
+ nemusf_DEFS            = \
+ 	MODULE IN_RT_R0 NEMUGUEST NEMU_WITH_HGCM \
+ 	KBUILD_MODNAME=KBUILD_STR\(nemusf\) \
+ 	KBUILD_BASENAME=KBUILD_STR\(nemusf\) \
+ 	DEBUG_HASH=2 DEBUG_HASH2=3
+ # detect fc6 2.6.18
+ nemusf_DEFS           += \
+ 	$(foreach inc, $(NEMU_LINUX_INCS),\
+ 		$(if $(wildcard $(inc)/linux/utsrelease.h),\
+ 		  $(if $(shell if grep -q '"2.6.18.*fc6.*"' $(inc)/linux/utsrelease.h;\
+ 		               then echo yes; fi),KERNEL_FC6,),))
+ # detect rhel5 2.6.18
+ nemusf_DEFS           += \
+ 	$(foreach inc, $(NEMU_LINUX_INCS),\
+ 		$(if $(wildcard $(inc)/linux/utsrelease.h),\
+ 		  $(if $(shell if grep -q '"2.6.18.*el5.*"' $(inc)/linux/utsrelease.h;\
+ 		               then echo yes; fi),KERNEL_FC6,),))
+
+ nemusf_INCS            = \
+ 	$(PATH_ROOT)/src/Nemu/Runtime/r0drv/linux
+ nemusf_SOURCES         = \
+ 	vfsmod.c \
+ 	utils.c \
+ 	dirops.c \
+ 	lnkops.c \
+ 	regops.c
+ nemusf_LIBS            = \
+ 	$(NEMU_LIB_VBGL_R0)
+endif
+
+#
+# The mount util.
+#
+PROGRAMS += mount.nemusf
+mount.nemusf_TEMPLATE    = NewNemuGuestR3Exe
+mount.nemusf_DEFS        = _GNU_SOURCE
+mount.nemusf_SOURCES     = \
+	mount.nemusf.c \
+	vbsfmount.c
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

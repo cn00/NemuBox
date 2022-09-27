@@ -1,0 +1,53 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the shared DnD code for both, host and guest.
+#
+
+#
+# Copyright (C) 2014-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+NEMU_DND_GUESTHOST_FILES := \
+	DnDDir.cpp \
+	DnDMIME.cpp \
+	DnDPath.cpp \
+	DnDURIList.cpp \
+	DnDURIObject.cpp
+
+#
+# DnDGuestR3Lib - For tools on the guest side,
+# e.g. NemuClient/NemuTray.
+#
+ifdef NEMU_WITH_ADDITIONS
+ LIBRARIES += NemuDnDGuestR3Lib
+ NemuDnDGuestR3Lib_TEMPLATE = NEMUGUESTR3LIB
+ NemuDnDGuestR3Lib_DEFS     =
+ NemuDnDGuestR3Lib_SOURCES  = $(NEMU_DND_GUESTHOST_FILES)
+
+# LIBRARIES.win.amd64 += NemuDnDGuestR3Lib-x86
+# NemuDnDGuestR3Lib-x86_EXTENDS      := NemuDnDGuestR3Lib
+# NemuDnDGuestR3Lib-x86_BLD_TRG_ARCH := x86
+endif
+
+#
+# DnDHostR3Lib - For the host side, e.g. Main
+# and frontends.
+#
+LIBRARIES += NemuDnDHostR3Lib
+NemuDnDHostR3Lib_TEMPLATE   = NEMUR3
+NemuDnDHostR3Lib_DEFS       =
+NemuDnDHostR3Lib_SOURCES    = $(NEMU_DND_GUESTHOST_FILES)
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

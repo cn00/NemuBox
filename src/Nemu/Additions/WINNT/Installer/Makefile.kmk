@@ -1,0 +1,268 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Windows Guest Additions Installer.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include Sub-Makefiles.
+include $(PATH_SUB_CURRENT)/Loader/Makefile.kmk
+include $(PATH_SUB_CURRENT)/InstallHelper/Makefile.kmk
+
+# Globals
+NEMU_PATH_WIN_ADD_INS_SRC := $(PATH_SUB_CURRENT)
+NEMU_PATH_ADDITIONS.win.x86 := $(PATH_OUT_BASE)/win.x86/$(KBUILD_TYPE)/bin/additions
+NEMU_WITH_GUEST_INSTALL_HELPER := 1 # Use our guest install helper DLL.
+
+## @todo NEMU_WIN_ADD_INS_OUT_DIR := $(PATH_TARGET)/Additions/Installer/win
+
+PROGRAMS += NemuDrvInst
+NemuDrvInst_TEMPLATE= NewNemuGuestR3Exe
+NemuDrvInst_DEFS    = _WIN32_WINNT=0x0400 _UNICODE UNICODE
+NemuDrvInst_DEFS   += NEMU_SVN_REV=$(NEMU_SVN_REV)
+ifdef NEMU_WITH_WDDM
+ NemuDrvInst_DEFS  += NEMU_WITH_WDDM
+endif
+NemuDrvInst_DEPS    = $(NEMU_SVN_REV_KMK)
+NemuDrvInst_SDKS    = ReorderCompilerIncs $(NEMU_WINPSDK_GST) $(NEMU_WINDDK_GST)
+NemuDrvInst_LIBS    = \
+	$(PATH_SDK_$(NEMU_WINDDK_GST)_LIB)/setupapi.lib \
+	$(PATH_SDK_$(NEMU_WINDDK_GST)_LIB)/newdev.lib
+NemuDrvInst_SOURCES = \
+	NemuDrvInst.cpp \
+	NemuDrvInst.rc
+
+PROGRAMS += NemuGuestDrvInst
+NemuGuestDrvInst_TEMPLATE= NewNemuGuestR3Exe
+NemuGuestDrvInst_DEFS    =  _WIN32_WINNT=0x0400 UNICODE
+NemuGuestDrvInst_SOURCES = \
+	NemuGuestDrvInst.cpp \
+	NemuGuestDrvInst.rc
+
+PROGRAMS += RegCleanup
+RegCleanup_TEMPLATE = NewNemuGuestR3Exe
+RegCleanup_DEFS     = _WIN32_WINNT=0x0400 UNICODE
+RegCleanup_SOURCES  = \
+	RegCleanup.cpp \
+	RegCleanup.rc
+
+
+#
+# The installer.
+#
+PACKING     += $(PATH_STAGE_BIN)/additions/NemuWindowsAdditions-$(KBUILD_TARGET_ARCH).exe
+OTHER_CLEAN += \
+	$(PATH_STAGE_BIN)/additions/NemuWindowsAdditions-$(KBUILD_TARGET_ARCH).exe \
+	$(PATH_STAGE_BIN)/additions/NemuWHQLFake.exe
+
+DRIVER_FILES := \
+	$(PATH_STAGE_BIN)/additions/NemuGuestDrvInst.exe \
+	$(PATH_STAGE_BIN)/additions/RegCleanup.exe \
+	$(PATH_STAGE_BIN)/additions/NemuMouse.sys \
+	$(PATH_STAGE_BIN)/additions/NemuGuest.sys \
+	$(PATH_STAGE_BIN)/additions/NemuVideo.sys \
+	$(PATH_STAGE_BIN)/additions/NemuDisp.dll \
+	$(PATH_STAGE_BIN)/additions/NemuSF.sys \
+	$(PATH_STAGE_BIN)/additions/NemuMRXNP.dll \
+	$(PATH_STAGE_BIN)/additions/NemuTray.exe \
+	$(PATH_STAGE_BIN)/additions/NemuControl.exe \
+	$(PATH_STAGE_BIN)/additions/NemuWHQLFake.exe \
+	$(PATH_STAGE_BIN)/additions/NemuService.exe
+ifeq ($(KBUILD_TARGET_ARCH),amd64)
+      # Also include 32-bit network provider DLLs on 64-bit guests to enable
+      # running 32-bit apps which use that.
+      DRIVER_FILES += \
+		$(PATH_STAGE_BIN)/additions/NemuMRXNP-x86.dll
+endif
+ifeq ($(KBUILD_TARGET_ARCH),x86)
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuMouseNT.sys \
+	$(PATH_STAGE_BIN)/additions/NemuGuestNT.sys
+endif
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuVideo.inf \
+	$(PATH_STAGE_BIN)/additions/NemuGuest.inf
+ifdef NEMU_SIGN_ADDITIONS
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuVideo.cat \
+	$(PATH_STAGE_BIN)/additions/NemuGuest.cat
+endif
+ifdef NEMU_WITH_CROGL
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuOGLarrayspu.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLcrutil.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLerrorspu.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLpackspu.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLpassthroughspu.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLfeedbackspu.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGL.dll \
+	$(PATH_STAGE_BIN)/additions/wined3d.dll \
+	$(PATH_STAGE_BIN)/additions/NemuD3D9.dll \
+	$(PATH_STAGE_BIN)/additions/NemuD3D8.dll
+ ifeq ($(KBUILD_TARGET_ARCH),amd64)
+	# Also include 32-bit DLLs on 64-bit guests to enable
+	# running 32-bit OpenGL apps on that.
+	DRIVER_FILES += \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuOGLarrayspu.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuOGLcrutil.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuOGLerrorspu.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuOGLpackspu.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuOGLpassthroughspu.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuOGLfeedbackspu.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuOGL.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/wined3d.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuD3D9.dll \
+		$(NEMU_PATH_ADDITIONS.win.x86)/NemuD3D8.dll
+
+ endif
+endif
+ifdef NEMU_WITH_WDDM
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuVideoWddm.sys \
+	$(PATH_STAGE_BIN)/additions/NemuVideoWddm.inf \
+	$(PATH_STAGE_BIN)/additions/NemuDispD3D.dll
+ ifdef NEMU_WITH_WDDM_W8
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuVideoW8.sys \
+	$(PATH_STAGE_BIN)/additions/NemuVideoW8.inf
+ endif
+ ifdef NEMU_WITH_CROGL
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/wined3dwddm.dll \
+	$(PATH_STAGE_BIN)/additions/NemuD3D9wddm.dll
+ endif
+ ifdef NEMU_SIGN_ADDITIONS
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuVideoWddm.cat
+  ifdef NEMU_WITH_WDDM_W8
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuVideoW8.cat
+  endif
+ endif
+ ifeq ($(KBUILD_TARGET_ARCH),amd64)
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/NemuDispD3D-x86.dll
+  ifdef NEMU_WITH_CROGL
+DRIVER_FILES += \
+	$(PATH_STAGE_BIN)/additions/wined3dwddm-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuD3D9wddm-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGL-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLarrayspu-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLcrutil-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLerrorspu-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLfeedbackspu-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLpackspu-x86.dll \
+	$(PATH_STAGE_BIN)/additions/NemuOGLpassthroughspu-x86.dll
+  endif
+ endif
+endif
+
+
+VB_WIN_ADD_NSIS_ENV := \
+	-E 'PATH_OUT=$(subst /,\,$(PATH_OUT))' \
+	-E 'PATH_TARGET=$(subst /,\,$(PATH_TARGET))' \
+	-E 'PATH_TARGET_X86=$(subst /,\,$(PATH_OUT_BASE)/win.x86/$(KBUILD_TYPE)/obj)' \
+	-E 'NEMU_PATH_ADDITIONS_WIN_X86=$(subst /,\,$(NEMU_PATH_ADDITIONS.win.x86))' \
+	-E 'NEMU_PATH_DIFX=$(subst /,\,$(NEMU_PATH_DIFX))' \
+	-E 'NEMU_VENDOR=$(NEMU_VENDOR)' \
+	-E 'NEMU_VENDOR_SHORT=$(NEMU_VENDOR_SHORT)' \
+	-E 'NEMU_PRODUCT=$(NEMU_PRODUCT)' \
+	-E 'NEMU_C_YEAR=$(NEMU_C_YEAR)' \
+	-E 'NEMU_VERSION_STRING=$(NEMU_VERSION_STRING)' \
+	-E 'NEMU_VERSION_STRING_RAW=$(NEMU_VERSION_STRING_RAW)' \
+	-E 'NEMU_VERSION_MAJOR=$(NEMU_VERSION_MAJOR)' \
+	-E 'NEMU_VERSION_MINOR=$(NEMU_VERSION_MINOR)' \
+	-E 'NEMU_VERSION_BUILD=$(NEMU_VERSION_BUILD)' \
+	-E 'NEMU_SVN_REV=$(NEMU_SVN_REV)' \
+	-E 'NEMU_WINDOWS_ADDITIONS_ICON_FILE=$(subst /,\,$(NEMU_WINDOWS_ADDITIONS_ICON_FILE))' \
+	-E 'NEMU_NSIS_ICON_FILE=$(subst /,\,$(NEMU_NSIS_ICON_FILE))' \
+	-E 'NEMU_WITH_CROGL=$(if $(NEMU_WITH_CROGL),1,0)' \
+	-E 'NEMU_WITH_GUEST_INSTALL_HELPER=$(if $(NEMU_WITH_GUEST_INSTALL_HELPER),1,0)' \
+	-E 'NEMU_WITH_LICENSE_INSTALL_RTF=$(if $(NEMU_BRAND_LICENSE_RTF),1,0)' \
+	-E 'NEMU_WITH_WDDM=$(if $(NEMU_WITH_WDDM),1,0)' \
+	-E 'NEMU_WITH_WDDM_W8=$(if $(NEMU_WITH_WDDM_W8),1,0)' \
+	-E 'NEMU_BRAND_WIN_ADD_INST_DLGBMP=$(subst /,\,$(NEMU_BRAND_WIN_ADD_INST_DLGBMP))' \
+	-E 'NEMU_BRAND_LICENSE_RTF=$(subst /,\,$(NEMU_BRAND_LICENSE_RTF))' \
+	$(foreach lang,$(NEMU_INSTALLER_ADD_LANGUAGES),-E 'NEMU_BRAND_$(lang)_LICENSE_RTF=$(NEMU_BRAND_$(lang)_LICENSE_RTF)') \
+	-E 'BUILD_TYPE=$(KBUILD_TYPE)' \
+	-E 'BUILD_TARGET_ARCH=$(KBUILD_TARGET_ARCH)'
+
+ifdef NEMU_SIGNING_MODE
+#
+# This is a hack to sign the uninstaller.
+# See http://nsis.sourceforge.net/Signing_an_Uninstaller for more details.
+#
+OTHER_CLEAN += $(PATH_TARGET)/NemuWindowsAdditions-$(KBUILD_TARGET_ARCH)-uninst.exe
+
+$(PATH_TARGET)/NemuWindowsAdditions-$(KBUILD_TARGET_ARCH)-uninst.exe: \
+		$(PATH_SUB_CURRENT)/NemuGuestAdditions.nsi \
+		$(DRIVER_FILES) \
+		$(NEMU_WINDOWS_ADDITIONS_ICON_FILE) \
+		$(NEMU_NSIS_ICON_FILE) \
+		$(NEMU_VERSION_STAMP) \
+               $$(NemuDrvInst_1_STAGE_TARGET) \
+		| $$(dir $$@)
+	$(call MSG_L1,Creating $@, from $<)
+	$(QUIET)$(REDIRECT) -C $(NEMU_PATH_WIN_ADD_INS_SRC) \
+		$(VB_WIN_ADD_NSIS_ENV) \
+		-- $(EXEC_X86_WIN32) $(NEMU_PATH_NSIS)/makensis.exe /NOCD /V2 \
+			$(if $(NEMU_SIGN_ADDITIONS),'/DNEMU_SIGN_ADDITIONS=1') \
+			$(if $(NEMU_INSTALLER_ADD_LANGUAGES),'/DNEMU_INSTALLER_ADD_LANGUAGES=1') \
+			$(foreach lang,$(NEMU_INSTALLER_ADD_LANGUAGES),'/DNEMU_BRAND_$(lang)_LICENSE_RTF=1') \
+			'/DUNINSTALLER_ONLY=1' \
+			'$(subst /,\,$<)'
+
+OTHER_CLEAN += $(PATH_TARGET)/uninst.exe
+$(PATH_TARGET)/uninst.exe: $(PATH_TARGET)/NemuWindowsAdditions-$(KBUILD_TARGET_ARCH)-uninst.exe | $$(dir $$@)
+	$(call MSG_L1,Creating $@, from $<)
+	$(QUIET)$(RM) -f $@
+	- $<
+	$(TEST) -f $@
+	$(call NEMU_SIGN_FILE_FN,$@)
+endif
+
+WHQLFAKE := $(PATH_SUB_CURRENT)/NemuWHQLFake.au3
+
+$(PATH_STAGE_BIN)/additions/NemuWHQLFake.exe:
+	$(call MSG_L1,Creating $@, from $<)
+	$(QUIET)$(EXEC_X86_WIN32) $(NEMU_PATH_AUTOIT3)/Aut2Exe/Aut2exe.exe \
+		/in $(WHQLFAKE) \
+		/out $(PATH_STAGE_BIN)/additions/NemuWHQLFake.exe \
+		/icon $(NEMU_WINDOWS_ADDITIONS_ICON_FILE) \
+		/comp 4 \
+		/unicode
+
+$(PATH_STAGE_BIN)/additions/NemuWindowsAdditions-$(KBUILD_TARGET_ARCH).exe: \
+		$(PATH_SUB_CURRENT)/NemuGuestAdditions.nsi \
+		$(DRIVER_FILES) \
+		$(NEMU_WINDOWS_ADDITIONS_ICON_FILE) \
+		$(NEMU_NSIS_ICON_FILE) \
+		$(if $(NEMU_SIGNING_MODE),$(PATH_TARGET)/uninst.exe) \
+		$(NEMU_VERSION_STAMP) \
+               $$(NemuDrvInst_1_STAGE_TARGET)
+	$(call MSG_L1,Creating $@, from $<)
+	$(QUIET)$(REDIRECT) -C $(NEMU_PATH_WIN_ADD_INS_SRC) \
+		$(VB_WIN_ADD_NSIS_ENV) \
+		-- $(EXEC_X86_WIN32) $(NEMU_PATH_NSIS)/makensis.exe /NOCD /V2 \
+			$(if $(NEMU_SIGN_ADDITIONS),'/DNEMU_SIGN_ADDITIONS=1') \
+			$(if $(NEMU_SIGNING_MODE),'/DEXTERNAL_UNINSTALLER=1') \
+			$(if $(NEMU_INSTALLER_ADD_LANGUAGES),'/DNEMU_INSTALLER_ADD_LANGUAGES=1') \
+			$(foreach lang,$(NEMU_INSTALLER_ADD_LANGUAGES),'/DNEMU_BRAND_$(lang)_LICENSE_RTF=1') \
+			'$(subst /,\,$<)'
+	$(call NEMU_SIGN_FILE_FN,$@)
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

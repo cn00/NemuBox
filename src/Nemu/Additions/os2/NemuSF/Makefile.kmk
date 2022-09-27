@@ -1,0 +1,36 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the OS/2 Guest Additions Shared Folder FSD.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#?DLLS += NemuSF
+SYSMODS += NemuSF
+NemuSF_TEMPLATE      = NEMUGUESTR0
+NemuSF_SYSSUFF       = .ifs
+NemuSF_DLLSUFF       = .ifs
+NemuSF_DEFS          = NEMU_WITH_HGCM
+NemuSF_INCS         := \
+	. \
+	$(PATH_ROOT)/src/Nemu/Runtime/include
+NemuSF_LDFLAGS      := $(addprefix -Zlinker , \
+	SEG TYPE CODE PRELOAD DYNAMIC SHARED NONPERMANENT, \
+	    TYPE DATA PRELOAD DYNAMIC)
+#NemuSF_LDFLAGS      += -s -t -v
+NemuSF_SOURCES       = \
+	NemuSFA.asm \
+	NemuSF.cpp \
+	NemuSFFile.cpp \
+	NemuSFFind.cpp \
+	NemuSFInit.cpp \
+	NemuSF.def
+NemuSF_LIBS          = \
+	$(NEMU_LIB_VBGL_R0) \
+	$(NEMU_LIB_IPRT_GUEST_R0) \
+	$(NEMU_GCC_LIBGCC) \
+	end
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

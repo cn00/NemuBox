@@ -1,0 +1,90 @@
+; $Id: NemuNetAdp6.inf $
+; @file
+; NemuNetAdp6.inf - VirtualBox NDIS6 Miniport Driver inf file
+;
+; Note: We use the same component id as the old NetAdp implementation ?
+;
+;
+; Copyright (C) 2014-2015 Oracle Corporation
+;
+; This file is part of VirtualBox Open Source Edition (OSE), as
+; available from http://www.virtualbox.org. This file is free software;
+; you can redistribute it and/or modify it under the terms of the GNU
+; General Public License (GPL) as published by the Free Software
+; Foundation, in version 2 as it comes in the "COPYING" file of the
+; VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+; hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+;
+
+[Version]
+Signature   = "$Windows NT$"
+;cat  CatalogFile = NemuNetAdp6.cat
+Class       = Net
+ClassGUID   = {4D36E972-E325-11CE-BFC1-08002BE10318}
+Provider    = %Provider%
+;edit-DriverVer=10/23/2014,1.0.1.0
+
+
+[Manufacturer]
+%Provider% = Nemu,NTx86,NTamd64
+
+[ControlFlags]
+
+[Nemu]
+%NemuNetAdp6_Desc% = NemuNetAdp6.ndi, sun_NemuNetAdp
+
+[Nemu.NTx86]
+%NemuNetAdp6_Desc% = NemuNetAdp6.ndi, sun_NemuNetAdp
+
+[Nemu.NTamd64]
+%NemuNetAdp6_Desc% = NemuNetAdp6.ndi, sun_NemuNetAdp
+
+[NemuNetAdp6.ndi]
+AddReg             = NemuNetAdp6.ndi.AddReg
+Characteristics    = 0x1 ; NCF_VIRTUAL
+*IfType            = 0x6 ; IF_TYPE_ETHERNET_CSMACD
+*MediaType         = 0x0 ; NdisMedium802_3
+*PhysicalMediaType = 14  ; NdisPhysicalMedium802_3
+CopyFiles          = NemuNetAdp6.Files.Sys
+
+[NemuNetAdp6.ndi.Remove.Services]
+DelService       = NemuNetAdp,0x200 ; Stop the service before uninstalling
+
+[NemuNetAdp6.ndi.Services]
+AddService = NemuNetAdp, 2, NemuNetAdp6.AddService
+
+[NemuNetAdp6.AddService]
+DisplayName    = %NemuNetAdp6Service_Desc%
+ServiceType    = 1 ;SERVICE_KERNEL_DRIVER
+StartType      = 1 ;SERVICE_SYSTEM_START
+ErrorControl   = 1 ;SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\NemuNetAdp6.sys
+LoadOrderGroup = NDIS
+
+[SourceDisksNames]
+1=%DiskDescription%,"",,
+
+[SourceDisksFiles]
+NemuNetAdp6.sys=1
+
+[DestinationDirs]
+DefaultDestDir = 12
+NemuNetAdp6.Files.Sys   = 12   ; %windir%\System32\drivers
+
+[NemuNetAdp6.Files.Sys]
+NemuNetAdp6.sys,,,2
+
+[NemuNetAdp6.ndi.AddReg]
+HKR,    ,            *NdisDeviceType, 0x00010001, 1   ; NDIS_DEVICE_TYPE_ENDPOINT
+HKR,    ,            BusNumber,  0, "0"
+HKR, Ndi,            Service,    0, NemuNetAdp
+HKR, Ndi,            HelpText,    , %NemuNetAdp6_HELP%
+HKR, Ndi\Interfaces, UpperRange, 0, ndis5
+HKR, Ndi\Interfaces, LowerRange, 0, ethernet
+
+[Strings]
+Provider = "Oracle Corporation"
+DiskDescription = "VirtualBox NDIS 6.0 Miniport Driver"
+NemuNetAdp6_Desc = "VirtualBox Host-Only Ethernet Adapter"
+NemuNetAdp6_HELP = "VirtualBox NDIS 6.0 Miniport Driver"
+NemuNetAdp6Service_Desc = "VirtualBox NDIS 6.0 Miniport Service"

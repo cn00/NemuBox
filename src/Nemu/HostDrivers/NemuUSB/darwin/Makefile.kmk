@@ -1,0 +1,78 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Darwin NemuUSB kernel extension.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# NemuUSB.kext - The Darwin Kernel Extension.
+#
+
+# Leopard (x86) and Snow Leopard (x86/amd64)
+SYSMODS.darwin       += NemuUSB
+NemuUSB_TEMPLATE      = NEMUR0DRV
+NemuUSB_INST          = $(INST_NEMUUSB)Contents/MacOS/
+NemuUSB_DEBUG_INST.darwin = $(patsubst %/,%,$(INST_NEMUUSB))
+NemuUSB_INCS          = \
+	. \
+	..
+#NemuUSB_LDFLAGS       = -v -Wl,-whyload -Wl,-v -Wl,-whatsloaded
+NemuUSB_SOURCES      := \
+	NemuUSB.cpp \
+	../USBFilter.cpp \
+	../NemuUSBFilterMgr.cpp
+
+INSTALLS += NemuUSB.kext
+NemuUSB.kext_INST     = $(INST_NEMUUSB)Contents/
+NemuUSB.kext_SOURCES  = $(NemuUSB.kext_0_OUTDIR)/Contents/Info.plist
+NemuUSB.kext_CLEAN    = $(NemuUSB.kext_0_OUTDIR)/Contents/Info.plist
+NemuUSB.kext_BLDDIRS  = $(NemuUSB.kext_0_OUTDIR)/Contents/
+
+$$(NemuUSB.kext_0_OUTDIR)/Contents/Info.plist: $(PATH_SUB_CURRENT)/Info.plist $(NEMU_VERSION_MK) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuUSB,$@,$<)
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(SED) \
+		-e 's/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g' \
+		-e 's/@NEMU_VERSION_MAJOR@/$(NEMU_VERSION_MAJOR)/g' \
+		-e 's/@NEMU_VERSION_MINOR@/$(NEMU_VERSION_MINOR)/g' \
+		-e 's/@NEMU_VERSION_BUILD@/$(NEMU_VERSION_BUILD)/g' \
+		-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+		-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+		-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+		--output $@ \
+		$<
+
+$(evalcall2 NEMU_TEST_SIGN_KEXT,NemuUSB)
+
+# Common manual loader script.
+INSTALLS += ScriptsUSB
+ScriptsUSB_INST     = $(INST_DIST)
+ScriptsUSB_EXEC_SOURCES  = \
+	loadusb.sh
+
+ifdef NEMU_WITH_TESTCASES
+#
+# Testcase for doing some manual driver testing...
+#
+PROGRAMS += tstOpenUSBDev
+tstOpenUSBDev_TEMPLATE = NEMUR3TSTEXE
+tstOpenUSBDev_SOURCES = testcase/tstOpenUSBDev.cpp
+tstOpenUSBDev_LDFLAGS = -framework CoreFoundation -framework IOKit
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

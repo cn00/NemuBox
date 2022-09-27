@@ -1,0 +1,291 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Nemu Additions XFree86 and X.org mouse drivers.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+nemumouse_xorg_INCS = \
+	$(NEMU_PATH_X11_ROOT)/inputproto-1.9.99.902 \
+	$(NEMU_PATH_X11_ROOT)/libpciaccess-0.10.8 \
+	$(NEMU_PATH_X11_ROOT)/pixman-0.16.0 \
+	$(NEMU_PATH_X11_ROOT)/xextproto-7.1.1 \
+	$(NEMU_PATH_X11_ROOT)/xproto-7.0.18
+
+#
+# nemumouse_drv
+#
+if1of ($(KBUILD_TARGET), linux)
+ SYSMODS += nemumouse_drv
+ nemumouse_drv_TEMPLATE = NEMUGUESTR3XF86MOD
+ nemumouse_drv_DEFS.linux = linux
+ nemumouse_drv_DEFS.x86 += __i386__
+ # This one has to be defined when building server code on systems where
+ # unsigned long is 64bits
+ nemumouse_drv_DEFS.amd64 += _XSERVER64
+ nemumouse_drv_DEFS += \
+        _POSIX_C_SOURCE=199309L _POSIX_SOURCE _XOPEN_SOURCE _DEFAULT_SOURCE \
+	_BSD_SOURCE _SVID_SOURCE _GNU_SOURCE SHAPE XINPUT XKB LBX XAPPGROUP \
+	XCSECURITY TOGCUP XF86BIGFONT DPMSExtension PIXPRIV PANORAMIX RENDER \
+	GCCUSESGAS AVOID_GLYPHBLT PIXPRIV SINGLEDEPTH XFreeXDGA XvExtension \
+	XFree86LOADER XFree86Server XF86VIDMODE XvMCExtension SMART_SCHEDULE \
+	BUILDDEBUG X_BYTE_ORDER=X_LITTLE_ENDIAN DNDEBUG FUNCPROTO=15 NARROWPROTO \
+	IN_MODULE XFree86Module PNP_MOUSE IN_XF86_MODULE
+ nemumouse_drv_INCS := \
+	$(NEMU_PATH_X11_XFREE_4_3)/include \
+	$(NEMU_PATH_X11_XFREE_4_3)/include/extensions \
+	$(NEMU_PATH_X11_XFREE_4_3)/include/X11 \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86 \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/common \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/os-support \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/os-support/bus \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/mi \
+	$(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/include \
+	$(PATH_SUB_CURRENT)
+ nemumouse_drv_SOURCES = \
+	nemumouse.c
+ # Any global symbols in the driver object files will be added to XFree86's
+ # symbol table, which can cause problems if we e.g. define a symbol in two
+ # modules.
+ nemumouse_drv_POST_CMDS = \
+	objcopy --keep-global-symbol nemumouseModuleData $(out) $(out)-objcopy$$(NLTAB) \
+	$(MV) -f $(out)-objcopy $(out)
+endif
+
+
+#
+# nemumouse_drv_70
+#
+DLLS += nemumouse_drv_70
+nemumouse_drv_70_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_70_DEFS = \
+	XFree86Server IN_MODULE XFree86Module XFree86LOADER XINPUT XORG_7X IN_XF86_MODULE DONT_DEFINE_WRAPPERS NO_ANSIC
+nemumouse_drv_70_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.0.1 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_70_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_71
+#
+DLLS += nemumouse_drv_71
+nemumouse_drv_71_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_71_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_71_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.1.0 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_71_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_13
+#
+DLLS += nemumouse_drv_13
+nemumouse_drv_13_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_13_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_13_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.3.0.0 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_13_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_14
+#
+DLLS += nemumouse_drv_14
+nemumouse_drv_14_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_14_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_14_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.4.2 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_14_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_15
+#
+DLLS += nemumouse_drv_15
+nemumouse_drv_15_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_15_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_15_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.5.3 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_15_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_16
+#
+DLLS += nemumouse_drv_16
+nemumouse_drv_16_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_16_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_16_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.6.5 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_16_SOURCES = \
+	nemumouse.c
+
+
+ifneq ($(KBUILD_TARGET), linux)
+
+#
+# nemumouse_drv_17
+#
+DLLS += nemumouse_drv_17
+nemumouse_drv_17_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_17_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_17_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.7.7 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_17_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_18
+#
+DLLS += nemumouse_drv_18
+nemumouse_drv_18_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_18_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_18_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.8.0 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_18_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_19
+#
+DLLS += nemumouse_drv_19
+nemumouse_drv_19_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_19_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_19_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.9.0 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_19_SOURCES = \
+	nemumouse.c
+
+
+#
+# nemumouse_drv_110
+#
+DLLS += nemumouse_drv_110
+nemumouse_drv_110_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_110_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_110_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.10.0 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_110_SOURCES = \
+	nemumouse.c
+
+DLLS += nemumouse_drv_111
+nemumouse_drv_111_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_111_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_111_INCS := \
+	$(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.11.0 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_111_SOURCES = \
+	nemumouse.c
+
+DLLS += nemumouse_drv_112
+nemumouse_drv_112_TEMPLATE = NEMUGUESTR3XORGMOD
+nemumouse_drv_112_DEFS := $(nemumouse_drv_70_DEFS) NO_ANSIC
+nemumouse_drv_112_INCS := \
+    $(nemumouse_xorg_INCS) \
+	$(NEMU_PATH_X11_ROOT)/xorg-server-1.12.0 \
+	$(PATH_SUB_CURRENT)
+nemumouse_drv_112_SOURCES = \
+	nemumouse.c
+
+endif # neq ($(KBUILD_TARGET),linux)
+
+
+ifdef NEMU_USE_SYSTEM_XORG_HEADERS
+ # As nemumouse_drv is not needed at all for X.Org Server 1.7 and later do not
+ # build it in this case.
+ DLLS    := $(filter-out nemumouse_drv_%,$(DLLS))
+ SYSMODS := $(filter-out nemumouse_drv%,$(SYSMODS))
+endif
+
+
+# Check the undefined symbols in the X.Org modules against lists of allowed
+# symbols.  Not very elegant, but it will catch problems early.
+
+ifdef NEMU_WITH_TESTCASES
+# ifndef NEMU_ONLY_ADDITIONS
+ ifndef NEMU_USE_SYSTEM_XORG_HEADERS
+  ifeq ($(KBUILD_TARGET),linux)
+   ifeq ($(KBUILD_HOST_ARCH),$(KBUILD_TARGET_ARCH))
+    ifndef NEMU_ONLY_SDK
+     NEMUMOUSE_SRC_PATH := $(PATH_SUB_CURRENT)
+
+     ifeq ($(KBUILD_TARGET),linux)
+      TESTING += $(nemumouse_drv_0_OUTDIR)/tstnemumouse68.run
+      OTHERS += $(nemumouse_drv_0_OUTDIR)/tstnemumouse68.run
+$$(nemumouse_drv_0_OUTDIR)/tstnemumouse68.run: $$(nemumouse_drv_1_STAGE_TARGET)
+	$(QUIET)$(call MSG_L1,Checking for unresolved symbols in $<)
+	$(QUIET)/bin/sh $(PATH_ROOT)/src/bldprogs/checkUndefined.sh $(KBUILD_HOST) \
+	    "$(nemumouse_drv_1_STAGE_TARGET)" --static "$(NEMUMOUSE_SRC_PATH)/../undefined_xfree86" "$(NEMUMOUSE_SRC_PATH)/../undefined_xfree86_modules"
+	$(QUIET)$(APPEND) -t "$@" "done"
+     endif
+
+##
+# Using the extra expansion to replace $(ver) before eval, thus everything
+# else needs escaped dollars.
+     define def_nemumouse_test
+      TESTING += $$(nemumouse_drv$(ver)_0_OUTDIR)/tstnemumouse$(ver).run
+      OTHERS  += $$(nemumouse_drv$(ver)_0_OUTDIR)/tstnemumouse$(ver).run
+      $$$$(nemumouse_drv$(ver)_0_OUTDIR)/tstnemumouse$(ver).run: $$$$(nemumouse_drv$(ver)_1_STAGE_TARGET)
+	$$(QUIET)$$(call MSG_L1,Checking for unresolved symbols in $$<)
+	$$(QUIET)$$(ASH) $$(PATH_ROOT)/src/bldprogs/checkUndefined.sh $$(KBUILD_HOST)  \
+	        $$(nemumouse_drv$(ver)_1_STAGE_TARGET) $$(NEMUMOUSE_SRC_PATH)/../undefined_xfree86 $(NEMUMOUSE_SRC_PATH)/../undefined_xfree86_modules $$(NEMUMOUSE_SRC_PATH)/../undefined_xorg
+	$$(QUIET)$$(APPEND) -t "$$@" "done"
+    endef
+
+     $(foreach ver, _70 _71 _13 _14 _15 _16, $(eval $(def_nemumouse_test)))
+
+     ifneq ($(KBUILD_TARGET), linux)
+      $(foreach ver, _17 _18 _19 _110 _111 _112 _113, $(eval $(def_nemumouse_test)))
+
+     endif # neq ($(KBUILD_TARGET),linux)
+
+    endif # ! NEMU_ONLY_SDK
+   endif # eq ($(KBUILD_HOST_ARCH),$(KBUILD_TARGET_ARCH))
+  endif # eq ($(KBUILD_TARGET),linux)
+ endif # ! NEMU_USE_SYSTEM_XORG_HEADERS
+# endif # ! NEMU_ONLY_ADDITIONS
+endif # NEMU_WITH_TESTCASES
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

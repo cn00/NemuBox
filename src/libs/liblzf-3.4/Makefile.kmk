@@ -1,0 +1,51 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for liblzf.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+LIBRARIES += Nemu-liblzf
+if1of ($(KBUILD_TARGET),os2 win)
+ # only required for nemu-img
+ LIBRARIES += Nemu-liblzf-static
+endif
+Nemu-liblzf_TEMPLATE = NemuR3RuntimeDll
+Nemu-liblzf_BLD_TYPE = release # WARNING! Always optimizing this lib.
+Nemu-liblzf_DEFS = ULTRA_FAST=1 HLOG=12
+Nemu-liblzf_DEFS.x86 = STRICT_ALIGN=0
+Nemu-liblzf_DEFS.amd64 = STRICT_ALIGN=0
+Nemu-liblzf_SOURCES = \
+	lzf_c.c \
+	lzf_d.c
+
+Nemu-liblzf-static_TEMPLATE   = NEMUR3STATIC
+Nemu-liblzf-static_BLD_TYPE   = $(Nemu-liblzf_BLD_TYPE)
+Nemu-liblzf-static_DEFS       = $(Nemu-liblzf_DEFS)
+Nemu-liblzf-static_DEFS.x86   = $(Nemu-liblzf_DEFS.x86)
+Nemu-liblzf-static_DEFS.amd64 = $(Nemu-liblzf_DEFS.amd64)
+Nemu-liblzf-static_SOURCES    = $(Nemu-liblzf_SOURCES)
+
+ifdef NEMU_WITH_32_ON_64_MAIN_API # 32-bit edition.
+ LIBRARIES += Nemu-liblzf-x86
+ Nemu-liblzf-x86_TEMPLATE = NemuR3Dll-x86
+ Nemu-liblzf-x86_EXTENDS = Nemu-liblzf
+endif
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

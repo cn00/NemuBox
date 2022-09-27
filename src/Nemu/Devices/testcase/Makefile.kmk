@@ -1,0 +1,123 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the device testcases.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Globals
+#
+NEMU_PATH_DEVICES_SRC ?= $(PATH_ROOT)/src/Nemu/Devices
+NEMU_DEVICES_TEST_OUT_DIR := $(PATH_TARGET)/Devices/testcase
+BLDDIRS += $(NEMU_DEVICES_TEST_OUT_DIR)
+
+## @todo Sort the features alphabetically!
+NEMU_DEVICES_TESTS_FEATURES = \
+	$(if $(NEMU_WITH_RAW_MODE),NEMU_WITH_RAW_MODE,) \
+	$(if $(NEMU_WITH_USB),NEMU_WITH_USB,) \
+	$(if $(NEMU_WITH_EHCI_IMPL),NEMU_WITH_EHCI_IMPL,) \
+	$(if $(NEMU_WITH_XHCI_IMPL),NEMU_WITH_XHCI_IMPL,) \
+	$(if $(NEMU_WITH_AHCI),NEMU_WITH_AHCI,) \
+	$(if $(NEMU_WITH_E1000),NEMU_WITH_E1000,) \
+	$(if $(NEMU_WITH_VIRTIO),NEMU_WITH_VIRTIO,) \
+	$(if $(NEMU_WITH_SCSI),NEMU_WITH_SCSI,) \
+	$(if $(NEMU_WITH_BUSLOGIC),NEMU_WITH_BUSLOGIC,) \
+	$(if $(NEMU_WITH_LSILOGIC),NEMU_WITH_LSILOGIC,) \
+	$(if $(NEMU_WITH_NEW_PS2M),NEMU_WITH_NEW_PS2M,) \
+	$(if $(NEMU_WITH_HGSMI),NEMU_WITH_HGSMI,) \
+	$(if $(NEMU_WITH_CRHGSMI),NEMU_WITH_CRHGSMI,) \
+	$(if $(NEMU_WITH_VDMA),NEMU_WITH_VDMA,) \
+	$(if $(NEMU_WITH_WDDM),NEMU_WITH_WDDM,) \
+	$(if $(NEMU_WITH_VIDEOHWACCEL),NEMU_WITH_VIDEOHWACCEL,) \
+	$(if $(NEMU_WITH_PCI_PASSTHROUGH_IMPL),NEMU_WITH_PCI_PASSTHROUGH_IMPL,) \
+	$(if $(NEMU_WITH_VMSVGA),NEMU_WITH_VMSVGA,)
+
+
+#
+# We setup one 'other' target for executing the structure & alignment
+# validation testcases. Perhaps a bit hackish, but extremely useful.
+#
+ifeq ($(KBUILD_TARGET),$(KBUILD_HOST))
+ ifeq ($(filter-out x86.x86 amd64.amd64 x86.amd64, $(KBUILD_TARGET_ARCH).$(KBUILD_HOST_ARCH)),)
+  OTHERS += \
+	$(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSize.run
+ endif
+endif
+
+# The normal testing pass.
+TESTING += \
+	$(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSize.run
+
+ifdef NEMU_WITH_RAW_MODE
+ #
+ # The testcase generator.
+ #
+ PROGRAMS += tstDeviceStructSizeRC
+ tstDeviceStructSizeRC_TEMPLATE  = NemuRcExe
+ tstDeviceStructSizeRC_DEFS      = $(NEMU_DEVICES_TESTS_FEATURES)
+ tstDeviceStructSizeRC_SOURCES   = tstDeviceStructSizeRC.cpp
+ tstDeviceStructSizeRC_INCS      = \
+ 	$(NEMU_PATH_DEVICES_SRC)/build \
+ 	$(NEMU_PATH_DEVICES_SRC)/Bus \
+ 	$(NEMU_DEVICES_TEST_OUT_DIR)
+endif # NEMU_WITH_RAW_MODE
+
+#
+# The testcase it self.
+#
+PROGRAMS += tstDeviceStructSize
+tstDeviceStructSize_TEMPLATE = NEMUR3AUTOTST
+tstDeviceStructSize_DEFS     = $(NEMU_DEVICES_TESTS_FEATURES)
+tstDeviceStructSize_INCS     = \
+	$(NEMU_PATH_DEVICES_SRC)/build \
+	$(NEMU_PATH_DEVICES_SRC)/Bus \
+	$(NEMU_DEVICES_TEST_OUT_DIR)
+tstDeviceStructSize_SOURCES  = tstDeviceStructSize.cpp
+tstDeviceStructSize_CLEAN    = \
+	$(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSizeRC.h \
+	$(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSize.run
+ifdef NEMU_WITH_RAW_MODE
+ tstDeviceStructSize.cpp_DEPS = $(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSizeRC.h
+endif
+
+#
+# Run rule for tstDeviceStructSize.
+#
+
+# 1. Dump selected structure in the VMMRC.rc debug info.
+# 2. Generate a testcase from the dump
+## future
+
+ifdef NEMU_WITH_RAW_MODE
+# 1&2. Manually dump selected structures and members.
+$(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSizeRC.h: $$(tstDeviceStructSizeRC_1_STAGE_TARGET) | $$(dir $$@)
+	$(call MSG_GENERATE,,$@)
+	$(QUIET)$(REDIRECT) -wo $@ -- $^
+endif
+
+# 3. run it.
+$(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSize.run: $$(tstDeviceStructSize_1_STAGE_TARGET) | $$(dir $$@)
+	$(QUIET)$(RM) -f $@
+	$^
+	$(QUIET)$(APPEND) "$@" "done"
+
+# alias for the struct test.
+run-struct-tests: $(NEMU_DEVICES_TEST_OUT_DIR)/tstDeviceStructSize.run
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<VirtualBoxExtensionPack xmlns="http://www.virtualbox.org/VirtualBoxExtensionPack" version="1.0">
+    <Name>VNC</Name>
+    <Description>VNC plugin module</Description>
+    <Version revision="@NEMU_SVN_REV@">@NEMU_VERSION_STRING@</Version>
+    <MainModule>NemuVNCMain</MainModule>
+    <VRDEModule>NemuVNC</VRDEModule>
+    <ShowLicense/>
+</VirtualBoxExtensionPack>
+

@@ -1,0 +1,237 @@
+# $Id: Config.kmk $
+## @file
+# kBuild Configuration file for the VirtualBox Validation Kit.
+#
+
+#
+# Copyright (C) 2010-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+NEMU_VALIDATIONKIT_CONFIG_KMK_INCLUDED = 1
+
+# Include the top-level configure file.
+ifndef NEMU_ROOT_CONFIG_KMK_INCLUDED
+ include $(PATH_ROOT)/Config.kmk
+endif
+
+#
+# Globals
+#
+NEMU_PATH_VALIDATIONKIT_SRC := $(PATH_ROOT)/src/Nemu/ValidationKit
+
+
+#
+# Base template that drops the -static flag since we only want to use the
+# static version of our own libraries and not the system libs.
+#
+TEMPLATE_NemuValidationKitR3Base = Nemu Validation Kit ring-3 program base, both guest and host.
+TEMPLATE_NemuValidationKitR3Base_EXTENDS = NemuR3Static
+ifn1of ($(KBUILD_TARGET), darwin solaris win)
+ TEMPLATE_NemuValidationKitR3Base_CFLAGS          = $(filter-out -static, $(TEMPLATE_NemuR3Static_CFLAGS))
+ TEMPLATE_NemuValidationKitR3Base_CXXFLAGS        = $(filter-out -static, $(TEMPLATE_NemuR3Static_CXXFLAGS))
+ TEMPLATE_NemuValidationKitR3Base_OBJCFLAGS       = $(filter-out -static, $(TEMPLATE_NemuR3Static_OBJCFLAGS))
+ TEMPLATE_NemuValidationKitR3Base_LDFLAGS         = $(filter-out -static, $(TEMPLATE_NemuR3Static_LDFLAGS))
+endif
+TEMPLATE_NemuValidationKitR3Base_LIBS = $(TEMPLATE_NemuR3Static_LIBS)
+if1of ($(KBUILD_TARGET), linux)
+ TEMPLATE_NemuValidationKitR3Base_LIBS += supc++ crypt
+ TEMPLATE_NemuValidationKitR3Base_LDTOOL = $(subst GXX,GCC,$(TEMPLATE_NemuR3Static_TOOL))
+endif
+TEMPLATE_NemuValidationKitR3Base_LDFLAGS.darwin = $(TEMPLATE_NemuR3Static_LDFLAGS.darwin) -framework IOKit
+
+#
+# Template for building ring-3 progams for the Validation Kit.
+# These programs can run on any host or guest.
+#
+TEMPLATE_NemuValidationKitR3 = Nemu Validation Kit ring-3 program, both guest and host.
+TEMPLATE_NemuValidationKitR3_EXTENDS = NemuValidationKitR3Base
+TEMPLATE_NemuValidationKitR3_EXTENDS_BY = appending
+TEMPLATE_NemuValidationKitR3_INST = $(INST_VALIDATIONKIT)$(KBUILD_TARGET)/$(KBUILD_TARGET_ARCH)/
+TEMPLATE_NemuValidationKitR3_SDKS.win = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+TEMPLATE_NemuValidationKitR3_DEFS = IN_RT_R3
+TEMPLATE_NemuValidationKitR3_LIBS.darwin = iconv
+TEMPLATE_NemuValidationKitR3_LIBS.freebsd = iconv
+TEMPLATE_NemuValidationKitR3_LIBS = \
+	$(PATH_STAGE_LIB)/RuntimeR3$(NEMU_SUFF_LIB)
+ifdef IPRT_WITH_KSTUFF
+ TEMPLATE_NemuValidationKitR3_LIBS += \
+ 	$(PATH_STAGE_LIB)/Nemu-kStuffStatic$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/RuntimeR3$(NEMU_SUFF_LIB)
+endif
+ifeq ($(KBUILD_TARGET),solaris)
+ TEMPLATE_NemuValidationKitR3_LIBS += \
+	kstat \
+	nsl \
+	contract
+ if1of ($(KBUILD_TARGET_ARCH), amd64 x86)
+  TEMPLATE_NemuValidationKitR3_LIBS += \
+  	smbios
+ endif
+endif
+ifneq ($(KBUILD_TARGET),win)
+ TEMPLATE_NemuValidationKitR3_LIBS += \
+ 	$(SDK_NEMU_ZLIB_LIBS)
+endif
+
+# Make VCC100 output work on NT4, W2K, XP and W2K3.
+TEMPLATE_NemuValidationKitR3_LIBS.win.x86 = \
+       $(PATH_TOOL_$(TEMPLATE_NemuValidationKitR3_TOOL.win.x86)_LIB)/oldnames.lib \
+       $(PATH_TOOL_$(TEMPLATE_NemuValidationKitR3_TOOL.win.x86)_LIB)/libcmt$(NEMU_VCC_CRT_TYPE).lib \
+       $(PATH_TOOL_$(TEMPLATE_NemuValidationKitR3_TOOL.win.x86)_LIB)/libcpmt$(NEMU_VCC_CRT_TYPE).lib \
+	$(PATH_STAGE_LIB)/RuntimeR3VccTricks$(NEMU_SUFF_LIB)
+ifeq ($(KBUILD_TARGET).$(KBUILD_TARGET_ARCH),win.x86)
+TEMPLATE_NemuValidationKitR3_POST_CMDS = $(if $(eq $(tool_do),LINK_LIBRARY),,$(NEMU_PE_SET_VERSION) $(out)$$(NLTAB))$(TEMPLATE_NemuValidationKitR3Base_POST_CMDS)$$(NLTAB)
+endif
+TEMPLATE_NemuValidationKitR3_LNK_DEPS.win.x86  = $(if $(eq $(tool_do),LINK_LIBRARY),,$(NEMU_PE_SET_VERSION))
+
+#TODO: TEMPLATE_NemuValidationKitR3_EXTENDS = NEMUGUESTR3EXE
+
+
+#
+# Template for building ring-3 progams for the Validation Kit.
+# These programs can run on the host and may take advantage of the support
+# driver when installed.
+#
+TEMPLATE_NemuValidationKitR3Host = Nemu Validation Kit ring-3 program, mainly host.
+TEMPLATE_NemuValidationKitR3Host_EXTENDS = NemuValidationKitR3Base
+TEMPLATE_NemuValidationKitR3Host_EXTENDS_BY = appending
+TEMPLATE_NemuValidationKitR3Host_INST = $(INST_VALIDATIONKIT)$(KBUILD_TARGET)/$(KBUILD_TARGET_ARCH)/
+TEMPLATE_NemuValidationKitR3Host_SDKS.win = ReorderCompilerIncs $(NEMU_WINPSDK) $(NEMU_WINDDK) NEMU_NTDLL
+TEMPLATE_NemuValidationKitR3Host_DEFS = IN_RT_R3 IN_SUP_R3
+TEMPLATE_NemuValidationKitR3Host_LIBS.darwin = iconv
+TEMPLATE_NemuValidationKitR3Host_LIBS.freebsd = iconv
+TEMPLATE_NemuValidationKitR3Host_LIBS = \
+	$(PATH_STAGE_LIB)/RuntimeR3$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/SUPR3Static$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/RuntimeR3$(NEMU_SUFF_LIB)
+ifdef IPRT_WITH_KSTUFF
+ TEMPLATE_NemuValidationKitR3Host_LIBS += \
+ 	$(PATH_STAGE_LIB)/Nemu-kStuffStatic$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/RuntimeR3$(NEMU_SUFF_LIB)
+endif
+ifeq ($(KBUILD_TARGET),solaris)
+ TEMPLATE_NemuValidationKitR3Host_LIBS += \
+	kstat \
+	nsl \
+	contract
+ if1of ($(KBUILD_TARGET_ARCH), amd64 x86)
+  TEMPLATE_NemuValidationKitR3Host_LIBS += \
+  	smbios
+ endif
+endif
+
+#
+# Template for building agnostic ring-0 host modules for the Validation Kit.
+#
+TEMPLATE_NemuValidationKitR0 = Nemu Validation Kit agnostic ring-0 host module.
+TEMPLATE_NemuValidationKitR0_EXTENDS = NemuR0
+TEMPLATE_NemuValidationKitR0_EXTENDS_BY = appending
+TEMPLATE_NemuValidationKitR0_INST = $(INST_VALIDATIONKIT)$(KBUILD_TARGET)/$(KBUILD_TARGET_ARCH)/
+TEMPLATE_NemuValidationKitR0_DEFS = IN_RT_R0
+TEMPLATE_NemuValidationKitR0_LIBS = \
+	$(PATH_STAGE_LIB)/RuntimeR0$(NEMU_SUFF_LIB)
+if1of ($(KBUILD_TARGET),os2 win)
+ TEMPLATE_NemuValidationKitR0_LIBS += \
+ 	$(PATH_STAGE_LIB)/SUPR0$(NEMU_SUFF_LIB)
+endif
+
+#
+# List of python sources that should be linted and unittested.
+#
+NEMU_VALIDATIONKIT_PYTHON_SOURCES     :=
+NEMU_VALIDATIONKIT_PYLINT_TARGETS     :=
+NEMU_VALIDATIONKIT_PYUNITTEST_EXCLUDE :=
+
+ifdef NEMU_WITH_PYLINT
+ TESTING +=
+endif
+
+#
+# Process python sources.
+#
+if1of ($(KBUILD_TARGET), win os2)
+ NEMU_PYTHONPATH_VALIDATIONKIT = $(PYTHONPATH);$(NEMU_PATH_VALIDATIONKIT_SRC);$(NEMU_PATH_VALIDATIONKIT_SRC)/testboxscript;$(NEMU_PATH_VALIDATIONKIT_SRC)/testmanager
+else
+ NEMU_PYTHONPATH_VALIDATIONKIT = $(PYTHONPATH):$(NEMU_PATH_VALIDATIONKIT_SRC):$(NEMU_PATH_VALIDATIONKIT_SRC)/testboxscript:$(NEMU_PATH_VALIDATIONKIT_SRC)/testmanager
+endif
+BLDDIRS += $(PATH_TARGET)/pylint $(PATH_TARGET)/pyunittest
+
+define def_nemu_validationkit_py_check
+$(eval name:=$(basename $(notdir $(py))))
+
+pylint::   $(name)-py-phony.o
+$(name).o: $(name)-py-phony.o
+$(PATH_TARGET)/pylint/$(name).o $(name)-py-phony.o:: $(py) | $(PATH_TARGET)/pylint/
+ifdef NEMU_WITH_PYLINT
+	$(QUIET2)$(call MSG_L1,Subjecting $(py) to pylint...)
+	$(QUIET)$(REDIRECT) -C "$(dir $(py))" -E LC_ALL=C -E PYTHONPATH="$(NEMU_PYTHONPATH_VALIDATIONKIT)" -- \
+		$(NEMU_PYLINT) --rcfile=$(NEMU_PATH_VALIDATIONKIT_SRC)/pylintrc $$(NEMU_PYLINT_FLAGS) $$($(py)_NEMU_PYLINT_FLAGS) ./$(notdir $(py))
+endif
+	$(QUIET)$(APPEND) -t "$(PATH_TARGET)/pylint/$(name).o"
+
+ifn1of ($(py),$(NEMU_VALIDATIONKIT_PYUNITTEST_EXCLUDE))
+pyunittest:: $(name)-pyunittest.o
+$(PATH_TARGET)/pyunittest/$(name).o $(name)-pyunittest.o:: $(py) | $(PATH_TARGET)/pyunittest/
+	$(QUIET2)$(call MSG_L1,Unittesting Python source $(py)...)
+	$(QUIET)$(REDIRECT) -E LC_ALL=C -E PYTHONPATH="$(NEMU_PYTHONPATH_VALIDATIONKIT)" -C $(dir $(py)) \
+		-- $(NEMU_BLD_PYTHON) -m unittest -v $(notdir $(basename $(py)))
+	$(QUIET)$(APPEND) -t "$(PATH_TARGET)/pyunittest/$(name).o"
+NEMU_VALIDATIONKIT_PYUNITTEST_TARGETS += $(PATH_TARGET)/pyunittest/$(name).o
+
+TESTING += $(name)-pyunittest.o
+endif
+TESTING += $(name)-py-phony.o
+NEMU_VALIDATIONKIT_PYLINT_TARGETS     += $(PATH_TARGET)/pylint/$(name).o
+endef # def_nemu_validationkit_py_check
+
+
+define def_nemu_validationkit_process_python_sources
+$(if-expr $(words $(_SUB_MAKEFILE_STACK)) <= 0 || "$1" == "FORCE", \
+	$(foreach py, $(NEMU_VALIDATIONKIT_PYTHON_SOURCES), $(eval $(def_nemu_validationkit_py_check))),)
+endef
+
+
+
+#
+# http://www.jshint.com
+#
+NEMU_JSHINT       ?= jshint
+NEMU_JSHINT_FLAGS := --config $(NEMU_PATH_VALIDATIONKIT_SRC)/jshintrc.js --verbose
+ifndef NEMU_WITH_JSHINT
+ NEMU_WITH_JSHINT := $(which $(NEMU_JSHINT))
+endif
+
+#
+# List of javascript sources that should be checked and linted.
+#
+NEMU_VALIDATIONKIT_JS_SOURCES :=
+
+define def_nemu_validationkit_js_check
+$(eval name:=$(basename $(notdir $(js))))
+$(name).o $(name).obj:: # $(PATH_SUB_CURRENT)/$(js)
+	-$(REDIRECT) -E LC_ALL=C  -C $(dir $(js)) -- $$(NEMU_JSHINT) ./$(notdir $(js)) $$(NEMU_JSHINT_FLAGS)
+jslint:: $(name).o
+endef
+
+define def_nemu_validationkit_process_js_sources
+$(if-expr $(words $(_SUB_MAKEFILE_STACK)) <= 0, \
+	$(foreach js, $(NEMU_VALIDATIONKIT_JS_SOURCES), $(eval $(def_nemu_validationkit_js_check))),)
+endef
+

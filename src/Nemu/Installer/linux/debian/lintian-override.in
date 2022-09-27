@@ -1,0 +1,121 @@
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuRT.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuDD.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuDD2.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuDDU.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuKeyboard.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuSettings.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuVMM.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuREM.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuXPCOM.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuXPCOMC.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuSharedFolders.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuSharedClipboard.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuGuestPropSvc.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuGuestControlSvc.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuHostChannel.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuDragAndDropSvc.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuNetDHCP.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuNetNAT.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuVRDP.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuAuth.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/components/NemuSVCM.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/components/NemuC.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuHeadless.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuOGLhostcrutil.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuOGLhosterrorspu.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuOGLrenderspu.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuPython.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuREM32.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuREM64.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuSDL.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuSharedCrOpenGL.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/VirtualBox.so
+%VERPKG%: shlib-with-non-pic-code usr/lib/virtualbox/NemuDbg.so
+%VERPKG%: binary-without-manpage usr/bin/Nemu
+%VERPKG%: binary-without-manpage usr/bin/NemuBalloonCtrl
+%VERPKG%: binary-without-manpage usr/bin/NemuDTrace
+%VERPKG%: binary-without-manpage usr/bin/NemuHeadless
+%VERPKG%: binary-without-manpage usr/bin/NemuManage
+%VERPKG%: binary-without-manpage usr/bin/NemuSDL
+%VERPKG%: binary-without-manpage usr/bin/NemuTunctl
+%VERPKG%: binary-without-manpage usr/bin/NemuVRDP
+%VERPKG%: binary-without-manpage usr/bin/VirtualBox
+%VERPKG%: binary-without-manpage usr/bin/rdesktop-vrdp
+%VERPKG%: binary-without-manpage usr/bin/nemuballoonctrl
+%VERPKG%: binary-without-manpage usr/bin/nemudtrace
+%VERPKG%: binary-without-manpage usr/bin/nemuheadless
+%VERPKG%: binary-without-manpage usr/bin/nemumanage
+%VERPKG%: binary-without-manpage usr/bin/nemusdl
+%VERPKG%: binary-without-manpage usr/bin/nemuwebsrv
+%VERPKG%: binary-without-manpage usr/bin/virtualbox
+%VERPKG%: unstripped-binary-or-object usr/lib/virtualbox/NemuDDRC.rc
+%VERPKG%: unstripped-binary-or-object usr/lib/virtualbox/NemuDD2RC.rc
+%VERPKG%: unstripped-binary-or-object usr/lib/virtualbox/NemuDDR0.r0
+%VERPKG%: unstripped-binary-or-object usr/lib/virtualbox/NemuDD2R0.r0
+%VERPKG%: unstripped-binary-or-object usr/lib/virtualbox/VMMRC.rc
+%VERPKG%: unstripped-binary-or-object usr/lib/virtualbox/NemuVMMR0.r0
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuRT.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuDD.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuDD2.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuDDU.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuKeyboard.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuSettings.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuVMM.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuREM.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuXPCOM.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuSharedFolders.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuSharedClipboard.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuGuestPropSvc.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuGuestControlSvc.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuHostChannel.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuDragAndDropSvc.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuVRDP.so
+%VERPKG%: no-shlibs-control-file usr/lib/virtualbox/NemuAuth.so
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/bin/rdesktop-vrdp /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuDD.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuDD2.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuDDU.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuDbg.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuDTrace /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuGuestPropSvc.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuGuestControlSvc.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuHostChannel.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuHeadless /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuHeadless.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuKeyboard.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuManage /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuOGLhostcrutil.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuOGLhosterrorspu.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuOGLrenderspu.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuPython.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuREM.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuREM32.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuREM64.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuRT.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuSDL /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuSDL.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuSVC /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuSettings.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuSharedClipboard.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuSharedCrOpenGL.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuSharedFolders.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuDragAndDropSvc.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuTestOGL /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuVMM.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuVRDP.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuXPCOM.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuXPCOMIPCD /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuAuth.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/VirtualBox /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/VirtualBox.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuExtPackHelperApp /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/components/NemuC.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/components/NemuSVCM.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/components/NemuXPCOMIPCC.so /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/kchmviewer /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/NemuBalloonCtrl /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/nemuwebsrv /usr/lib/virtualbox
+%VERPKG%: binary-or-shlib-defines-rpath ./usr/lib/virtualbox/webtest /usr/lib/virtualbox
+%VERPKG%: postrm-contains-additional-updaterc.d-calls /etc/init.d/nemunet
+%VERPKG%: package-contains-empty-directory usr/lib/virtualbox/ExtensionPacks/
+

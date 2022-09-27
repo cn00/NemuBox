@@ -1,0 +1,169 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Cross Platform Guest Addition Services.
+#
+
+#
+# Copyright (C) 2007-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Incldue testcases.
+#
+include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+
+#
+# Target lists.
+#
+PROGRAMS += NemuService
+PROGRAMS.win.x86 += NemuServiceNT
+
+#
+# NemuService
+#
+NemuService_TEMPLATE      = NewNemuGuestR3Exe
+NemuService_DEFS          = NEMU_WITH_HGCM NEMUSERVICE_TIMESYNC NEMUSERVICE_MANAGEMENT NEMUSERVICE_TOOLBOX
+NemuService_DEFS         += \
+	NEMU_BUILD_TARGET=\"$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)\"
+NemuService_DEFS.win     += _WIN32_WINNT=0x0501
+NemuService_DEFS.os2      = NEMU_WITH_HGCM NEMUSERVICE_CLIPBOARD
+ifdef NEMU_WITH_DBUS
+ NemuService_DEFS        += NEMU_WITH_DBUS
+endif
+ifdef NEMU_WITH_GUEST_PROPS
+ NemuService_DEFS        += NEMU_WITH_GUEST_PROPS NEMUSERVICE_VMINFO
+endif
+ifdef NEMU_WITH_GUEST_CONTROL
+ NemuService_DEFS        += NEMU_WITH_GUEST_CONTROL NEMUSERVICE_CONTROL
+endif
+ifdef NEMU_WITH_MEMBALLOON
+ NemuService_DEFS        += NEMU_WITH_MEMBALLOON
+endif
+if1of ($(KBUILD_TARGET), win)
+ NemuService_DEFS        += NEMUSERVICE_PAGE_SHARING
+endif
+if1of ($(KBUILD_TARGET), linux)
+ NemuService_DEFS        += NEMUSERVICE_CPUHOTPLUG
+endif
+ifdef NEMU_WITH_SHARED_FOLDERS
+ # darwin freebsd
+ if1of ($(KBUILD_TARGET), linux solaris)
+  NemuService_DEFS       += NEMU_WITH_SHARED_FOLDERS
+ endif
+endif
+
+NemuService_SOURCES       = \
+	NemuService.cpp \
+	NemuServiceTimeSync.cpp \
+	NemuServiceUtils.cpp \
+	NemuServiceStats.cpp \
+	NemuServiceToolBox.cpp
+
+ifdef NEMU_WITH_GUEST_CONTROL
+ NemuService_SOURCES    += \
+ 	NemuServiceControl.cpp \
+	NemuServiceControlProcess.cpp \
+	NemuServiceControlSession.cpp
+endif
+
+ifdef NEMU_WITH_MEMBALLOON
+ NemuService_SOURCES    += \
+ 	NemuServiceBalloon.cpp
+endif
+if1of ($(KBUILD_TARGET), win)
+ NemuService_SOURCES    += \
+ 	NemuServicePageSharing.cpp
+endif
+
+ifdef NEMU_WITH_GUEST_PROPS
+ NemuService_SOURCES.win  = \
+ 	NemuServiceVMInfo-win.cpp
+ NemuService_SOURCES     += \
+ 	NemuServiceVMInfo.cpp \
+ 	NemuServicePropCache.cpp
+endif
+
+if1of ($(KBUILD_TARGET), linux)
+ NemuService_SOURCES     += \
+	NemuServiceCpuHotPlug.cpp
+endif
+
+ifdef NEMU_WITH_SHARED_FOLDERS
+ if1of ($(KBUILD_TARGET), linux solaris)
+  NemuService_SOURCES          += \
+	NemuServiceAutoMount.cpp
+  NemuService_SOURCES.linux    += \
+	../../linux/sharedfolders/vbsfmount.c
+ endif
+endif
+
+NemuService_SOURCES.win  += \
+	NemuService-win.rc \
+	NemuService-win.cpp
+
+NemuService_SOURCES.os2   = \
+	NemuService-os2.def \
+	NemuServiceClipboard-os2.cpp
+
+NemuService_LDFLAGS.darwin = -framework IOKit
+
+NemuService_LIBS        += \
+	$(NEMU_LIB_IPRT_GUEST_R3) \
+	$(NEMU_LIB_VBGL_R3) \
+	$(NEMU_LIB_IPRT_GUEST_R3)       # (The joy of unix linkers.)
+if1of ($(KBUILD_TARGET), linux)
+ NemuService_LIBS        += \
+	crypt
+endif
+ifdef NEMU_WITH_DBUS
+ if1of ($(KBUILD_TARGET), linux solaris) # FreeBSD?
+  NemuService_LIBS       += \
+	dl
+ endif
+endif
+ifdef NEMU_WITH_GUEST_PROPS
+ NemuService_LIBS.win    += \
+ 	Secur32.lib \
+ 	WtsApi32.lib \
+ 	Psapi.lib
+ NemuService_LIBS.solaris += \
+ 	nsl \
+	kstat \
+	contract
+endif
+
+#
+# NemuServiceNT - NT4 version of NemuService.
+#
+NemuServiceNT_TEMPLATE = NewNemuGuestR3Exe
+NemuServiceNT_EXTENDS  = NemuService
+NemuServiceNT_DEFS.win = _WIN32_WINNT=0x0400 TARGET_NT4 NEMUSERVICE_MANAGEMENT
+
+NemuServiceVMInfo.cpp_DEFS = NEMU_SVN_REV=$(NEMU_SVN_REV)
+NemuServiceVMInfo.cpp_DEPS = $(NEMU_SVN_REV_KMK)
+
+#
+# The icon is configurable.
+#
+NemuService-win.rc_INCS = $(NemuService_0_OUTDIR)
+NemuService-win.rc_DEPS = $(NemuService_0_OUTDIR)/NemuService-win-icon.rc
+NemuService-win.rc_CLEAN = $(NemuService_0_OUTDIR)/NemuService-win-icon.rc
+
+# Icon include file.
+$$(NemuService_0_OUTDIR)/NemuService-win-icon.rc: $(NEMU_WINDOWS_ADDITIONS_ICON_FILE) $$(NemuService_DEFPATH)/Makefile.kmk | $$(dir $$@)
+	$(RM) -f $@
+	$(APPEND) $@ 'IDI_VIRTUALBOX ICON DISCARDABLE "$(subst /,\\,$(NEMU_WINDOWS_ADDITIONS_ICON_FILE))"'
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

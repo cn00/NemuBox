@@ -1,0 +1,383 @@
+# $Id: Makefile.kmk $
+## @file
+# Install misc stuff and create dist packages for Mac OS X Guest Additions.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+#
+# Globals
+#
+NEMU_ADD_PATH_DI_SRC := $(PATH_SUB_CURRENT)
+NEMU_ADD_DI_OUT_DIR  := $(PATH_TARGET)/additions/Installer
+BLDDIRS += $(NEMU_ADD_DI_OUT_DIR)
+
+ifdef NEMU_WITH_COMBINED_PACKAGE
+ ifeq ($(KBUILD_TARGET_ARCH),x86)
+  NEMU_PATH_DIST_32 = $(NEMU_PATH_DIST)/additions
+  NEMU_PATH_DIST_64 = $(PATH_OUT_BASE)/darwin.amd64/$(KBUILD_TYPE)/dist/additions
+ else
+  NEMU_PATH_DIST_64 = $(NEMU_PATH_DIST)/additions
+  NEMU_PATH_DIST_32 = $(PATH_OUT_BASE)/darwin.x86/$(KBUILD_TYPE)/dist
+ endif
+ NEMU_DI_FN_DEP_BOTH = $(NEMU_PATH_DIST_32)/$1 $(NEMU_PATH_DIST_64)/$2
+ NEMU_DI_FN_DEP_32   = $(NEMU_PATH_DIST_32)/$1
+ NEMU_DI_FN_DEP_64   = $(NEMU_PATH_DIST_64)/$1
+ NEMU_DI_LIPO = lipo
+else
+ NEMU_DI_FN_DEP_BOTH = $(NEMU_PATH_DIST)/additions/$1
+ ifeq ($(KBUILD_TARGET_ARCH),x86)
+  NEMU_DI_FN_DEP_32  = $(NEMU_PATH_DIST)/additions/$1
+  NEMU_DI_FN_DEP_64  =
+ else
+  NEMU_DI_FN_DEP_64  = $(NEMU_PATH_DIST)/additions/$1
+  NEMU_DI_FN_DEP_32  =
+ endif
+endif
+
+# Unset this to speed up things during makefile hacking.
+NEMU_DARWIN_INST_DEP_ON_MAKEFILE := $(MAKEFILE_CURRENT)
+
+# The location of the pkgbuild program.
+ifndef NEMU_PKGBUILD
+ NEMU_PKGBUILD := pkgbuild
+endif
+
+# The location of the productbuild program.
+ifndef NEMU_PRODUCTBUILD
+ NEMU_PRODUCTBUILD := productbuild
+endif
+
+# Where we do the packing (override this in LocalConfig.kmk if building on smbfs).
+ifndef NEMU_PATH_PACK_TMP
+ NEMU_PATH_PACK_TMP := $(NEMU_ADD_DI_OUT_DIR)
+endif
+
+
+#
+# The packing.
+#
+PACKING += $(NEMU_PATH_DIST)/NemuDarwinAdditions.dmg
+#OTHER_CLEAN = TODO
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+
+
+#
+# We're running commands as root here, take some care and assertion
+# a sane environment.
+#
+ifeq ($(strip $(NEMU_PATH_DIST)),)
+ $(error NEMU_PATH_DIST=$(NEMU_PATH_DIST))
+endif
+ifeq ($(strip $(NEMU_PATH_DIST)),/)
+ $(error NEMU_PATH_DIST=$(NEMU_PATH_DIST))
+endif
+ifeq ($(strip $(NEMU_PATH_PACK_TMP)),)
+ $(error NEMU_PATH_PACK_TMP=$(NEMU_PATH_PACK_TMP))
+endif
+ifeq ($(strip $(NEMU_PATH_PACK_TMP)),/)
+ $(error NEMU_PATH_PACK_TMP=$(NEMU_PATH_PACK_TMP))
+endif
+
+#
+# The disk image.
+#
+$(NEMU_PATH_DIST)/NemuDarwinAdditions.dmg: \
+		$(NEMU_PATH_PACK_TMP)/DiskImage/NemuGuestAdditions.pkg \
+		$(NEMU_BRAND_DARWIN_DISKIMAGE_BG) \
+		$(NEMU_BRAND_DARWIN_DISKIMAGE_DS_STORE) \
+		$$(wildcard $(NEMU_ADD_PATH_DI_SRC)/DiskImage/*) \
+		$(NEMU_ADD_PATH_DI_SRC)/DiskImage/Uninstall.tool \
+		$(NEMU_DARWIN_INST_DEP_ON_MAKEFILE)
+	$(call MSG_TOOL,hdiutil,,,$@)
+	@# Cleanup any previously failed attempts and various trash.
+	sudo rm -Rf $(NEMU_PATH_PACK_TMP)/DiskImage.tmp
+	$(MKDIR) -p $(NEMU_PATH_PACK_TMP)/DiskImage.tmp/
+	sudo mv $(NEMU_PATH_PACK_TMP)/DiskImage/NemuGuestAdditions.pkg $(NEMU_PATH_PACK_TMP)/DiskImage.tmp/
+	sudo rm -Rf \
+		$@ \
+		$(NEMU_PATH_PACK_TMP)/DiskImage/
+	sudo mv $(NEMU_PATH_PACK_TMP)/DiskImage.tmp $(NEMU_PATH_PACK_TMP)/DiskImage
+	@# Remove .dmg packages from old depend builds
+	$(QUIET)$(RM) -f $(wildcard $(NEMU_PATH_DIST)/NemuDarwinAdditions-*-r*.dmg)
+	@# Populate the image with uninstaller, readme, picture, and .VolumeIcon.icns. (TODO)
+	$(INSTALL) $(NEMU_ADD_PATH_DI_SRC)/DiskImage/Uninstall.tool  $(NEMU_PATH_PACK_TMP)/DiskImage/
+ifeq (1,1)
+	@# Pedantic mode...
+	$(INSTALL) -m 644 $(NEMU_BRAND_DARWIN_DISKIMAGE_DS_STORE)           $(NEMU_PATH_PACK_TMP)/DiskImage/.DS_Store
+	$(MKDIR) $(NEMU_PATH_PACK_TMP)/DiskImage/.background
+	$(INSTALL) -m 644 $(NEMU_BRAND_DARWIN_DISKIMAGE_BG)                 $(NEMU_PATH_PACK_TMP)/DiskImage/.background/nemu_folder.tiff
+endif
+	@# Change the owners.
+	sudo chown -R root:admin $(NEMU_PATH_PACK_TMP)/DiskImage
+	@# Create the image.
+	sudo hdiutil create -format UDBZ -volname "VirtualBox Guest Additions" -srcfolder "$(NEMU_PATH_PACK_TMP)/DiskImage" "$@"
+	@# Change (back) the owner so it can be deleted by the user.
+	sudo chown "$(shell whoami)" "$@"
+	sudo chown -R "$(shell whoami)" $(NEMU_PATH_PACK_TMP)/DiskImage
+
+#
+# The meta-package.
+#
+
+$(NEMU_PATH_PACK_TMP)/DiskImage/NemuGuestAdditions.pkg: \
+		$(NEMU_PATH_PACK_TMP)/Packages/NemuGuestAdditionsKEXTs.pkg \
+		$(NEMU_PATH_PACK_TMP)/Packages/NemuGuestAdditionsToolsAndServices.pkg \
+		$$(wildcard $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/* \
+		            $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/*.lproj/*) \
+		$(foreach f,$(NEMU_INSTALLER_ADD_LANGUAGES), $(NEMU_BRAND_$(f)_VIRTUALBOX_WELCOME_RTF)) \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/Welcome.rtf \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/Conclusion.rtf \
+		$(NEMU_DARWIN_INST_DEP_ON_MAKEFILE)
+	$(call MSG_TOOL,productbuild,,,$@)
+	@# Cleanup any previously failed attempts.
+	sudo rm -Rf \
+		$@ \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.root \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.desc \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res
+	@# Correct directory permissions are important.
+	$(MKDIR) -p \
+		$(@D) \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.desc \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/English.lproj
+
+	@# Do keyword replacement in the package info and description files.
+	$(SED) \
+		-e 's/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g' \
+		-e 's/@NEMU_VERSION_MAJOR@/$(NEMU_VERSION_MAJOR)/g' \
+		-e 's/@NEMU_VERSION_MINOR@/$(NEMU_VERSION_MINOR)/g' \
+		-e 's/@NEMU_VERSION_BUILD@/$(NEMU_VERSION_BUILD)/g' \
+		-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+		-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+		-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+		--output $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/English.lproj/Welcome.rtf \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/Welcome.rtf
+	@# Copy the resources.
+	$(INSTALL) -m 0644 $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/Conclusion.rtf $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/English.lproj/Conclusion.rtf
+
+	$(SED) \
+		-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+		-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+		-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+		--output $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/English.lproj/Localizable.strings \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/Localizable.strings
+	$(INSTALL) -m 0644 $(NEMU_BRAND_DARWIN_INSTALLER_BG)                          $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/background.tif
+
+	$(foreach f,$(NEMU_INSTALLER_ADD_LANGUAGES), \
+		$(MKDIR) -p \
+			$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/$(NEMU_INSTALLER_$(f)_DARWIN_TARGET).lproj$(NLTAB) \
+		$(SED) \
+			-e 's/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g' \
+			-e 's/@NEMU_VERSION_MAJOR@/$(NEMU_VERSION_MAJOR)/g' \
+			-e 's/@NEMU_VERSION_MINOR@/$(NEMU_VERSION_MINOR)/g' \
+			-e 's/@NEMU_VERSION_BUILD@/$(NEMU_VERSION_BUILD)/g' \
+			--output $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/$(NEMU_INSTALLER_$(f)_DARWIN_TARGET).lproj/Welcome.rtf \
+			$(NEMU_BRAND_$(f)_VIRTUALBOX_WELCOME_RTF)$(NLTAB) \
+		$(INSTALL) -m 0644 $(NEMU_BRAND_$(f)_VIRTUALBOX_CONCLUSION_RTF)           $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/$(NEMU_INSTALLER_$(f)_DARWIN_TARGET).lproj/Conclusion.rtf$(NLTAB) \
+		$(SED) \
+			-e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+			-e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+			-e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+			--output $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res/$(NEMU_INSTALLER_$(f)_DARWIN_TARGET).lproj/Localizable.strings \
+			$(NEMU_BRAND_$(f)_VIRTUALBOX_LOCALIZABLE_STRINGS)$(NLTAB) \
+	)
+
+	@# Build the package.
+	$(NEMU_PRODUCTBUILD) \
+		--distribution $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditions_mpkg/distribution.dist \
+		--package-path $(NEMU_PATH_PACK_TMP)/Packages \
+		--resources $(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res \
+		--identifier org.VirtualBox.mpkg.GuestAdditions \
+		--version $(NEMU_VERSION_MAJOR).$(NEMU_VERSION_MINOR).$(NEMU_VERSION_BUILD) \
+		$(if $(NEMU_MACOSX_INSTALLER_SIGN),--sign "$(NEMU_MACOSX_INSTALLER_SIGN)",) \
+		$@
+
+	@# Cleanup.
+	sudo rm -Rf \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.root \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.desc \
+		$(NEMU_PATH_PACK_TMP)/NemuDarwinAdditions.dist.res
+
+NemuDarwinAdditions.pkg:: $(NEMU_PATH_PACK_TMP)/DiskImage/NemuDarwinAdditions.pkg
+
+#
+# The VirtualBox Kernel extensions.
+#
+NEMU_ADD_DI_KEXTS_UNIVERSAL = NemuGuest
+NEMU_ADD_DI_KEXTS = $(NEMU_ADD_DI_KEXTS_UNIVERSAL)
+
+$(NEMU_PATH_PACK_TMP)/Packages/NemuGuestAdditionsKEXTs.pkg: \
+		$(foreach kext,$(NEMU_ADD_DI_KEXTS_UNIVERSAL), $(call NEMU_DI_FN_DEP_BOTH,$(kext).kext/Contents/MacOS/$(kext))) \
+		$(foreach kext,$(NEMU_ADD_DI_KEXTS), $(NEMU_PATH_DIST)/additions/$(kext).kext/Contents/Info.plist) \
+		$$(wildcard $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsKEXTs/* \
+		            $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsKEXTs/*.lproj/*) \
+		$(foreach f,$(NEMU_INSTALLER_ADD_LANGUAGES), \
+			$(NEMU_BRAND_$(f)_NEMUKEXTS_DESCRIPTION_PLIST) \
+			$(NEMU_BRAND_$(f)_NEMUKEXTS_README_HTML) \
+			$(NEMU_BRAND_$(f)_NEMUKEXTS_INSTALLATIONCHECK_STRINGS)) \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsKEXTs/postflight \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsKEXTs/PkgBuildComponent.plist \
+		$(NEMU_DARWIN_INST_DEP_ON_MAKEFILE)
+	$(call MSG_TOOL,pkgbuild,,,$@)
+	@# Cleanup any previously failed attempts.
+	sudo rm -Rf \
+		$@ \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.desc \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.res
+	@# Correct directory permissions are important.
+	$(MKDIR) -p \
+		$(@D) \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.desc \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.res \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.res/English.lproj
+	$(MKDIR) -p -m 1775 $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library
+	$(MKDIR) -p -m 0755 \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions \
+		$(foreach kext,$(NEMU_ADD_DI_KEXTS), \
+			$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/$(kext).kext \
+			$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/$(kext).kext/Contents \
+			$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/$(kext).kext/Contents/MacOS )
+	@# Copy the common files (Info.plist).
+	$(foreach kext,$(NEMU_ADD_DI_KEXTS), \
+		$(NLTAB)$(INSTALL) -m 0644 $(NEMU_PATH_DIST)/additions/$(kext).kext/Contents/Info.plist $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/$(kext).kext/Contents/)
+	@# Copy the binaries and invoking lipo.
+ifdef NEMU_WITH_COMBINED_PACKAGE
+	$(foreach kext,$(NEMU_ADD_DI_KEXTS_UNIVERSAL), \
+		$(NLTAB)$(NEMU_DI_LIPO) -create \
+			$(NEMU_PATH_DIST_32)/additions/$(kext).kext/Contents/MacOS/$(kext) \
+			$(NEMU_PATH_DIST_64)/additions/$(kext).kext/Contents/MacOS/$(kext) \
+			-output $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/$(kext).kext/Contents/MacOS/$(kext))
+else
+	$(foreach kext,$(NEMU_ADD_DI_KEXTS), \
+		$(NLTAB)$(INSTALL) -m 0755 $(NEMU_PATH_DIST)/additions/$(kext).kext/Contents/MacOS/$(kext) $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/$(kext).kext/Contents/MacOS/)
+endif
+	@# Signed the kext bundles.
+ifdef NEMU_SIGNING_MODE
+	$(foreach kext,$(NEMU_ADD_DI_KEXTS), \
+		$(NLTAB)$(call NEMU_SIGN_BUNDLE_FN,$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/$(kext).kext,) )
+endif
+	@# Set the correct owners.
+	sudo chown    root:admin $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library
+	sudo chown -R root:wheel $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions
+
+	# Copy package internal files
+	$(INSTALL) $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsKEXTs/PkgBuildComponent.plist $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.desc/PkgBuildComponent.plist
+
+	# Copy installer scripts
+	$(INSTALL) -m 0755 $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsKEXTs/postflight $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.res
+
+	@# Build the package.
+	$(NEMU_PKGBUILD) \
+		--root   $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root/Library/Extensions/ \
+		--component-plist $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.desc/PkgBuildComponent.plist \
+		--script $(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.res \
+		--identifier org.virtualbox.pkg.additions.kexts \
+		--version $(NEMU_VERSION_MAJOR).$(NEMU_VERSION_MINOR).$(NEMU_VERSION_BUILD) \
+		--install-location /Library/Extensions/ \
+		--ownership preserve \
+		$(if $(NEMU_MACOSX_INSTALLER_SIGN),--sign "$(NEMU_MACOSX_INSTALLER_SIGN)",) \
+		$@
+	@# Cleanup
+	sudo rm -Rf \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.root \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.desc \
+		$(NEMU_PATH_PACK_TMP)/NemuGuestAdditionsKEXTs.pkg.res
+
+#
+# The VirtualBox Guest Additions Tools & Services.
+#
+
+NEMU_GA_PKG=NemuGuestAdditionsToolsAndServices.pkg
+NEMU_DI_VB_GA_BINARIES=NemuClient NemuControl NemuService
+$(NEMU_PATH_PACK_TMP)/Packages/$(NEMU_GA_PKG): \
+		$(foreach f, $(NEMU_DI_VB_GA_BINARIES)\
+			,$(call NEMU_DI_FN_DEP_BOTH,$(f)) ) \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsToolsAndServices/org.virtualbox.additions.nemuclient.plist \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsToolsAndServices/org.virtualbox.additions.nemuservice.plist \
+		$(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsToolsAndServices/NemuServiceWrapper \
+		$(NEMU_ADD_PATH_DI_SRC)/DiskImage/Uninstall.tool \
+		$(NEMU_DARWIN_INST_DEP_ON_MAKEFILE)
+	$(call MSG_TOOL,pkgbuild,,,$@)
+	@# Cleanup any previously failed attempts.
+	sudo rm -Rf \
+		$@ \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).desc \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).res
+	@# Correct directory permissions are important.
+	$(MKDIR) -p \
+		$(@D) \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).desc \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).res \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).res/English.lproj
+
+	@# Create directory structure within a package w/ proper permittions
+	$(MKDIR) -p -m 0775 \
+	    "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions" \
+	    "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/LaunchAgents" \
+	    "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/LaunchDaemons"
+
+	@# Install binaries
+ifdef NEMU_WITH_COMBINED_PACKAGE
+	$(foreach binary, $(NEMU_DI_VB_GA_BINARIES) \
+		,$(NEMU_DI_LIPO) -create \
+			$(NEMU_PATH_DIST_32)/additions/$(binary) \
+			$(NEMU_PATH_DIST_64)/additions/$(binary) \
+			-output "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions/$(binary)"$(NLTAB))
+	$(foreach binary, $(NEMU_DI_VB_GA_BINARIES), \
+		$(NLTAB)$(INSTALL) -m 0755 $(NEMU_PATH_DIST_32)/additions/$(binary) "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions/$(binary)-x86" \
+		$(NLTAB)$(INSTALL) -m 0755 $(NEMU_PATH_DIST_64)/additions/$(binary) "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions/$(binary)-amd64" )
+else
+	$(foreach binary, $(NEMU_DI_VB_GA_BINARIES) \
+		,$(INSTALL) -m 0755 $(NEMU_PATH_DIST)/additions/$(binary)           "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions/$(binary)"$(NLTAB))
+	$(foreach binary, $(NEMU_DI_VB_GA_BINARIES) \
+		,$(INSTALL) -m 0755 $(NEMU_PATH_DIST)/additions/$(binary)           "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions/$(binary)-$(KBUILD_TARGET_ARCH)"$(NLTAB))
+endif
+	# Add Uninstall.tool
+	$(INSTALL) $(NEMU_ADD_PATH_DI_SRC)/DiskImage/Uninstall.tool  "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions/" \
+
+	@# Install launchd stuff
+	$(INSTALL) -m 0755 $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsToolsAndServices/NemuServiceWrapper \
+	                                                                         "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/Application Support/VirtualBox Guest Additions/"
+	$(INSTALL) -m 644 $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsToolsAndServices/org.virtualbox.additions.nemuclient.plist \
+	                                                                         "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/LaunchAgents/"
+	$(INSTALL) -m 644 $(NEMU_ADD_PATH_DI_SRC)/NemuGuestAdditionsToolsAndServices/org.virtualbox.additions.nemuservice.plist \
+	                                                                         "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/LaunchDaemons/"
+
+	@# Correct ownership
+	sudo chown -R root:wheel "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/"
+
+	@# Build the package.
+	$(NEMU_PKGBUILD) \
+		--root   "$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root/Library/" \
+		--script $(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).res \
+		--identifier org.virtualbox.pkg.additions.tools-and-services \
+		--version $(NEMU_VERSION_MAJOR).$(NEMU_VERSION_MINOR).$(NEMU_VERSION_BUILD) \
+		--install-location "/Library/" \
+		--ownership preserve \
+		$(if $(NEMU_MACOSX_INSTALLER_SIGN),--sign "$(NEMU_MACOSX_INSTALLER_SIGN)",) \
+		$@
+	@# Cleanup
+	sudo rm -Rf \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).root \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).desc \
+		$(NEMU_PATH_PACK_TMP)/$(NEMU_GA_PKG).res

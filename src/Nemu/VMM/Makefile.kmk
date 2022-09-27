@@ -1,0 +1,821 @@
+# $Id: Makefile.kmk $
+## @file
+# Top-level makefile for the VMM.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include sub-makefiles.
+ifndef NEMU_ONLY_EXTPACKS
+ include $(PATH_SUB_CURRENT)/tools/Makefile.kmk
+endif
+# include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+
+
+# Fail on unsupported hosts.
+ifeq ($(KBUILD_TARGET_ARCH),x86)
+ ifeq ($(KBUILD_TARGET),darwin)
+  $(error 32-bit darwin is no longer a supported VirtualBox host. Go back to 4.3 or older for 32-bit support.)
+ else ifeq ($(KBUILD_TARGET),solaris)
+  $(error 32-bit solaris is no longer a supported VirtualBox host. Go back to 4.2 or older for 32-bit support.)
+ endif
+endif
+
+
+#
+# Globals
+#
+
+## DEFS variable that is picked up by all three VMM targets.
+# Can be prepended to by setting it in LocalConfig.kmk
+VMM_COMMON_DEFS ?= NEMU_IN_VMM
+ifdef NEMU_WITH_2ND_IEM_STEP
+ VMM_COMMON_DEFS += NEMU_WITH_2ND_IEM_STEP
+endif
+ifdef NEMU_WITH_3RD_IEM_STEP
+ VMM_COMMON_DEFS += NEMU_WITH_3RD_IEM_STEP
+endif
+#ifdef NEMU_WITH_IEM
+# VMM_COMMON_DEFS += NEMU_WITH_IEM
+#endif
+ifdef NEMU_WITH_REM
+ VMM_COMMON_DEFS += NEMU_WITH_REM
+endif
+ifdef NEMU_WITH_MULTI_CORE
+ VMM_COMMON_DEFS += NEMU_WITH_MULTI_CORE
+endif
+ifdef NEMU_WITH_R0_LOGGING
+ VMM_COMMON_DEFS += NEMU_WITH_R0_LOGGING
+endif
+ifdef NEMU_WITH_VMMR0_DISABLE_LAPIC_NMI
+ VMM_COMMON_DEFS += NEMU_WITH_VMMR0_DISABLE_LAPIC_NMI
+endif
+ifdef NEMU_WITH_PCI_PASSTHROUGH
+ VMM_COMMON_DEFS += NEMU_WITH_PCI_PASSTHROUGH
+endif
+ifdef NEMU_WITH_DTRACE_RC
+ VMM_COMMON_DEFS += NEMU_WITH_DTRACE_RC
+endif
+ifdef NEMU_WITH_SAFE_STR
+ VMM_COMMON_DEFS += NEMU_WITH_SAFE_STR
+endif
+ifdef NEMU_WITH_RAW_RING1
+ VMM_COMMON_DEFS += NEMU_WITH_RAW_RING1
+endif
+ifdef NEMU_WITH_64ON32_IDT
+ VMM_COMMON_DEFS += NEMU_WITH_64ON32_IDT
+endif
+ifdef NEMU_WITH_64ON32_CMOS_DEBUG
+ VMM_COMMON_DEFS += NEMU_WITH_64ON32_CMOS_DEBUG
+endif
+ifdef NEMUSTRICTRC_STRICT_ENABLED
+ VMM_COMMON_DEFS += NEMUSTRICTRC_STRICT_ENABLED
+endif
+ifeq ($(KBUILD_TARGET),amd64)
+ VMM_COMMON_DEFS += NEMU_WITH_MORE_RING0_MEM_MAPPINGS
+endif
+
+# VMM_COMMON_DEFS += NEMU_WITH_NS_ACCOUNTING_STATS
+
+# Special IEM debug mode which compares the result with HM/REM
+ifdef IEM_VERIFICATION_MODE
+ VMM_COMMON_DEFS += IEM_VERIFICATION_MODE IEM_VERIFICATION_MODE_FULL IEM_VERIFICATION_MODE_FULL_HM
+endif
+
+
+#
+# The VMM DLL.
+#
+ifndef NEMU_ONLY_EXTPACKS_USE_IMPLIBS
+ DLLS += NemuVMM
+endif
+NemuVMM_TEMPLATE = NemuR3DllNoPic
+NemuVMM_SONAME.linux = NemuVMM.so
+
+NemuVMM_DEFS     = IN_VMM_R3 IN_DIS IN_GMM_R3 IN_DBG $(VMM_COMMON_DEFS)
+## @todo eliminate IN_GMM_R3
+ifdef NEMU_WITH_PREALLOC_RAM_BY_DEFAULT
+ NemuVMM_DEFS   += NEMU_WITH_PREALLOC_RAM_BY_DEFAULT
+endif
+ifdef NEMU_WITH_VUSB
+ NemuVMM_DEFS   += NEMU_WITH_USB
+endif
+ifdef NEMU_WITH_PDM_ASYNC_COMPLETION
+ NemuVMM_DEFS   += NEMU_WITH_PDM_ASYNC_COMPLETION
+endif
+ifdef NEMU_WITH_NETSHAPER
+ NemuVMM_DEFS   += NEMU_WITH_NETSHAPER
+endif
+ifdef NEMU_WITH_RAW_MODE
+ NemuVMM_DEFS   += NEMU_WITH_RAW_MODE NEMU_WITH_RAW_MODE_NOT_R0
+endif
+ifdef NEMU_WITH_VMM_R0_SWITCH_STACK
+ NemuVMM_DEFS   += VMM_R0_SWITCH_STACK
+endif
+if "$(KBUILD_TYPE)" == "debug" && "$(USERNAME)" == "bird"
+ NemuVMM_DEFS   += RTMEM_WRAP_TO_EF_APIS
+endif
+NemuVMM_DEFS.darwin = VMM_R0_SWITCH_STACK
+
+NemuVMM_INCS     = \
+	include \
+	$(if-expr defined(NEMU_WITH_RAW_MODE),PATM,)
+NemuVMM_ASINCS   = .
+
+NemuVMM_SOURCES  = \
+	NemuVMM.d \
+	VMMR3/CFGM.cpp \
+	VMMR3/CPUM.cpp \
+	VMMR3/CPUMR3CpuId.cpp \
+	VMMR3/CPUMR3Db.cpp \
+	VMMR3/CPUMDbg.cpp \
+	VMMR3/DBGF.cpp \
+	VMMR3/DBGFAddr.cpp \
+	VMMR3/DBGFAddrSpace.cpp \
+	VMMR3/DBGFBp.cpp \
+	VMMR3/DBGFCoreWrite.cpp \
+	VMMR3/DBGFCpu.cpp \
+	VMMR3/DBGFDisas.cpp \
+	VMMR3/DBGFInfo.cpp \
+	VMMR3/DBGFLog.cpp \
+	VMMR3/DBGFMem.cpp \
+	VMMR3/DBGFOS.cpp \
+	VMMR3/DBGFR3PlugIn.cpp \
+	VMMR3/DBGFReg.cpp \
+	VMMR3/DBGFStack.cpp \
+	VMMR3/DBGFR3Trace.cpp \
+	VMMR3/EM.cpp \
+	VMMR3/EMR3Dbg.cpp \
+	$(if $(NEMU_WITH_RAW_MODE),VMMR3/EMRaw.cpp) \
+	VMMR3/EMHM.cpp \
+	VMMR3/FTM.cpp \
+	VMMR3/GIM.cpp \
+	VMMR3/GIMHv.cpp \
+	VMMR3/GIMKvm.cpp \
+	VMMR3/GIMMinimal.cpp \
+	VMMR3/IEMR3.cpp \
+	VMMR3/IOM.cpp \
+	VMMR3/GMM.cpp \
+	VMMR3/MM.cpp \
+	VMMR3/MMHeap.cpp \
+	VMMR3/MMHyper.cpp \
+	VMMR3/MMPagePool.cpp \
+	VMMR3/MMUkHeap.cpp \
+	VMMR3/PDM.cpp \
+	VMMR3/PDMBlkCache.cpp \
+	VMMR3/PDMDevice.cpp \
+	VMMR3/PDMDevHlp.cpp \
+	VMMR3/PDMDevMiscHlp.cpp \
+	VMMR3/PDMDriver.cpp \
+	VMMR3/PDMLdr.cpp \
+	VMMR3/PDMCritSect.cpp \
+	VMMR3/PDMQueue.cpp \
+	VMMR3/PDMThread.cpp \
+	VMMR3/PGM.cpp \
+	VMMR3/PGMDbg.cpp \
+	VMMR3/PGMR3DbgA.asm \
+	VMMR3/PGMHandler.cpp \
+	VMMR3/PGMMap.cpp \
+	VMMR3/PGMPhys.cpp \
+	VMMR3/PGMPool.cpp \
+	VMMR3/PGMSavedState.cpp \
+	VMMR3/PGMSharedPage.cpp \
+	VMMR3/SELM.cpp \
+	VMMR3/SSM.cpp \
+	VMMR3/STAM.cpp \
+	VMMR3/TM.cpp \
+	VMMR3/TRPM.cpp \
+	VMMR3/VM.cpp \
+	VMMR3/VMEmt.cpp \
+	VMMR3/VMReq.cpp \
+	VMMR3/VMM.cpp \
+	VMMR3/VMMGuruMeditation.cpp \
+	VMMR3/VMMSwitcher.cpp \
+	VMMR3/VMMTests.cpp \
+	VMMR3/HM.cpp \
+	$(if-expr defined(NEMU_WITH_RAW_MODE), \
+	VMMR3/CSAM.cpp \
+	VMMR3/PATM.cpp \
+	VMMR3/PATMPatch.cpp \
+	VMMR3/PATMGuest.cpp \
+	VMMR3/PATMA.asm \
+	VMMR3/PATMSSM.cpp \
+	VMMR3/PATMR3Dbg.cpp \
+       ,) \
+	VMMAll/CPUMAllRegs.cpp \
+	VMMAll/CPUMAllMsrs.cpp \
+	VMMAll/CPUMStack.cpp \
+	VMMAll/DBGFAll.cpp \
+	VMMAll/HMAll.cpp \
+	VMMAll/IEMAll.cpp \
+	VMMAll/IEMAllAImpl.asm \
+	VMMAll/IEMAllAImplC.cpp \
+	VMMAll/IOMAll.cpp \
+	VMMAll/IOMAllMMIO.cpp \
+	VMMAll/MMAll.cpp \
+	VMMAll/MMAllHyper.cpp \
+	VMMAll/MMAllPagePool.cpp \
+	VMMAll/PDMAll.cpp \
+	VMMAll/PDMAllCritSect.cpp \
+	VMMAll/PDMAllCritSectRw.cpp \
+	VMMAll/PDMAllCritSectBoth.cpp \
+	VMMAll/PDMAllQueue.cpp \
+	VMMAll/PGMAll.cpp \
+	VMMAll/PGMAllHandler.cpp \
+	VMMAll/PGMAllMap.cpp \
+	VMMAll/PGMAllPhys.cpp \
+	VMMAll/PGMAllPool.cpp \
+	VMMAll/REMAll.cpp \
+	VMMAll/SELMAll.cpp \
+	VMMAll/EMAll.cpp \
+	VMMAll/EMAllA.asm \
+	VMMAll/FTMAll.cpp \
+	VMMAll/GIMAll.cpp \
+	VMMAll/GIMAllHv.cpp \
+	VMMAll/GIMAllKvm.cpp \
+	VMMAll/TMAll.cpp \
+	VMMAll/TMAllCpu.cpp \
+	VMMAll/TMAllReal.cpp \
+	VMMAll/TMAllVirtual.cpp \
+	VMMAll/TRPMAll.cpp \
+	VMMAll/VMAll.cpp \
+	VMMAll/VMMAll.cpp \
+	VMMAll/VMMAllA.asm \
+	$(if-expr defined(NEMU_WITH_RAW_MODE), \
+	VMMAll/CSAMAll.cpp \
+	VMMAll/PATMAll.cpp \
+	,)
+ifdef NEMU_WITH_VUSB
+ NemuVMM_SOURCES += VMMR3/PDMUsb.cpp
+endif
+ifdef NEMU_WITH_PDM_ASYNC_COMPLETION
+ NemuVMM_SOURCES += \
+ 	VMMR3/PDMAsyncCompletion.cpp \
+ 	VMMR3/PDMAsyncCompletionFile.cpp \
+ 	VMMR3/PDMAsyncCompletionFileFailsafe.cpp \
+ 	VMMR3/PDMAsyncCompletionFileNormal.cpp
+endif
+ifdef NEMU_WITH_NETSHAPER
+ NemuVMM_SOURCES += \
+ 	VMMR3/PDMNetShaper.cpp \
+ 	VMMAll/PDMAllNetShaper.cpp
+endif
+
+ifdef NEMU_WITH_RAW_MODE
+ NemuVMM_SOURCES.x86 += \
+ 	VMMSwitcher/32BitTo32Bit.asm \
+ 	VMMSwitcher/32BitToPAE.asm \
+ 	VMMSwitcher/PAETo32Bit.asm \
+ 	VMMSwitcher/PAEToPAE.asm
+ NemuVMM_SOURCES.amd64 = \
+ 	VMMSwitcher/AMD64To32Bit.asm \
+ 	VMMSwitcher/AMD64ToPAE.asm
+endif
+NemuVMM_SOURCES.x86 += \
+ 	VMMSwitcher/32BitToAMD64.asm \
+ 	VMMSwitcher/PAEToAMD64.asm \
+	VMMSwitcher/X86Stub.asm
+NemuVMM_SOURCES.amd64 += \
+	VMMSwitcher/AMD64Stub.asm
+
+NemuVMM_LIBS = \
+	$(PATH_STAGE_LIB)/DisasmR3$(NEMU_SUFF_LIB)
+ifdef NEMU_WITH_DEBUGGER
+ NemuVMM_LIBS += \
+ 	$(PATH_STAGE_LIB)/Debugger$(NEMU_SUFF_LIB)
+endif
+NemuVMM_LIBS += \
+	$(LIB_REM) \
+	$(LIB_RUNTIME)
+
+NemuVMM_LIBS.win = $(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/delayimp.lib
+NemuVMM_LDFLAGS.linux = -Wl,--no-undefined
+NemuVMM_LDFLAGS.darwin = -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuVMM.dylib
+NemuVMM_LDFLAGS.solaris = -mimpure-text
+
+# SSM wish to know the build type, host os and arch.
+VMMR3/SSM.cpp_DEFS +=	\
+	KBUILD_TYPE=\"$(KBUILD_TYPE)\" \
+	KBUILD_TARGET=\"$(KBUILD_TARGET)\" \
+	KBUILD_TARGET_ARCH=\"$(KBUILD_TARGET_ARCH)\"
+
+
+#ifdef NEMU_WITH_PDM_ASYNC_COMPLETION
+# ifeq ($(KBUILD_HOST), linux)
+#NemuVMM_LIBS += aio
+# endif
+#endif
+
+$(call NEMU_SET_VER_INFO_DLL,NemuVMM,VirtualBox VMM) # Version info / description.
+
+
+if defined(NEMU_WITH_RAW_MODE) && $(intersects $(NEMU_LDR_FMT32), pe lx)
+
+ #
+ # VMMRCBuiltin.lib
+ #
+ LIBRARIES += VMMRCBuiltin
+ VMMRCBuiltin_TEMPLATE = NemuRc
+ ifeq ($(NEMU_LDR_FMT32),pe)
+  VMMRCBuiltin_SOURCES = VMMRC/VMMRCBuiltin.def
+ endif
+ ifeq ($(NEMU_LDR_FMT32),lx)
+  VMMRCBuiltin_SOURCES = $(VMMRCBuiltin_0_OUTDIR)/VMMRCBuiltin.def
+  $$(VMMRCBuiltin_0_OUTDIR)/VMMRCBuiltin.def: $(PATH_SUB_CURRENT)/VMMRC/VMMRCBuiltin.def | $$(dir $$@)
+	$(SED) -e '/not-os2/d' -e 's/^[ \t][ \t]*\([a-zA-Z]\)/    _\1/' -e 's/[ \t]DATA[ \t]*/ /' --output $@ $<
+ endif
+
+
+ #
+ # VMMRCImp.lib
+ #
+ LIBRARIES += VMMRCImp
+ VMMRCImp_TEMPLATE = NemuRc
+ VMMRCImp_SOURCES = $(VMMRCImp_0_OUTDIR)/VMMRC.def
+ VMMRCImp_CLEAN   = $(VMMRCImp_0_OUTDIR)/VMMRC.def
+
+ $$(VMMRCImp_0_OUTDIR)/VMMRC.def: $(PATH_SUB_CURRENT)/VMMRC/VMMRC.def | $$(dir $$@)
+ ifeq ($(NEMU_LDR_FMT32),lx)
+	$(SED) \
+		-e '/not-os2/d' \
+		-e 's/^[ \t][ \t]*\([a-zA-Z]\)/    _\1/' \
+		-e 's/[ \t]DATA[ \t]*/ /' \
+		--output $@ \
+		$<
+	$(APPEND) "$@" ""
+	$(APPEND) "$@" "    ___ehInit"
+ else
+	$(SED) \
+		-e '/not-win/d' \
+		-e '/not-$(KBUILD_TARGET_ARCH)/d' \
+		--output $@ $<
+ endif
+
+endif # RC && (pe || lx)
+
+
+if1of ($(NEMU_LDR_FMT), pe lx)
+ #
+ # VMMR0Imp.lib
+ #
+ LIBRARIES += VMMR0Imp
+ VMMR0Imp_TEMPLATE = NemuR0
+ VMMR0Imp_SOURCES  = $(VMMR0Imp_0_OUTDIR)/VMMR0.def
+ VMMR0Imp_CLEAN    = $(VMMR0Imp_0_OUTDIR)/VMMR0.def
+ ifeq ($(KBUILD_TARGET),win) # Experiment: Let's see how blunt the ones messing our NULL_THUNK_DATA entries on W10 are.
+  VMMR0Imp_POST_CMDS = $(KLIBTWEAKER_EXT) --clear-timestamps --fill-null_thunk_data $(out)
+ endif
+
+ $$(VMMR0Imp_0_OUTDIR)/VMMR0.def: $(PATH_SUB_CURRENT)/VMMR0/VMMR0.def | $$(dir $$@)
+ ifeq ($(NEMU_LDR_FMT),lx)
+	$(SED) \
+		-e '/not-os2/d' \
+		-e '/not-amd64/d' \
+		-e 's/^[ \t][ \t]*\([a-zA-Z]\)/    _\1/' \
+		-e 's/[ \t]DATA[ \t]*/ /'  \
+		--output $@ $<
+	$(APPEND) "$@" ""
+	$(APPEND) "$@" "    ___ehInit"
+ else
+	$(SED) \
+		-e '/not-win/d' \
+		-e '/not-$(KBUILD_TARGET_ARCH)/d' \
+		--output $@ $<
+ endif
+endif # R0: pe + lx
+
+
+#
+# VMMR3Imp.lib
+#
+IMPORT_LIBS += VMMR3Imp
+$(call NEMU_GENERATE_IMPORT_TARGET_FN,VMMR3Imp,NemuVMM,VMMR3/VMMR3.def)
+
+ifneq ($(NEMU_LIB_VMM_LAZY),$(LIB_VMM))
+ #
+ # VMMR3LazyImp.lib (experimental)
+ #
+ LIBRARIES += VMMR3LazyImp
+ VMMR3LazyImp_TEMPLATE = NemuR3Dll
+ VMMR3LazyImp_INST     = $(INST_LIB)
+ VMMR3LazyImp_SOURCES  = $(VMMR3LazyImp_0_OUTDIR)/VMMR3LazyLoad.asm
+ VMMR3LazyImp_CLEAN    = $(VMMR3LazyImp_0_OUTDIR)/VMMR3LazyLoad.asm
+ $$(VMMR3LazyImp_0_OUTDIR)/VMMR3LazyLoad.asm: $(PATH_SUB_CURRENT)/VMMR3/VMMR3.def $(NEMU_DEF_2_LAZY_LOAD) | $$(dir $$@)
+	$(NEMU_DEF_2_LAZY_LOAD) --output $@ --library NemuVMM $<
+endif
+
+
+if defined(NEMU_WITH_RAW_MODE) && !defined(NEMU_ONLY_EXTPACKS)
+ #
+ # VMMRC.rc
+ #
+ SYSMODS += VMMRC
+ VMMRC_TEMPLATE  = NemuRc
+ VMMRC_NAME      = VMMRC
+
+ VMMRC_DEFS      = IN_VMM_RC IN_RT_RC IN_DIS DIS_CORE_ONLY NEMU_WITH_RAW_MODE NEMU_WITH_RAW_MODE_NOT_R0 IN_SUP_RC \
+ 	$(VMM_COMMON_DEFS)
+ ifdef NEMU_WITH_VMM_R0_SWITCH_STACK
+  VMMRC_DEFS    += VMM_R0_SWITCH_STACK
+ endif
+
+ VMMRC_INCS     := \
+ 	include \
+ 	VMMRC \
+ 	$(if-expr defined(NEMU_WITH_RAW_MODE),PATM,)
+
+ VMMRC_LIBS      = \
+ 	$(PATH_STAGE_LIB)/DisasmRC$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/RuntimeRC$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/SUPRC$(NEMU_SUFF_LIB)
+ ifneq ($(filter pe lx,$(NEMU_LDR_FMT32)),)
+  VMMRC_LIBS    += \
+ 	$(PATH_STAGE_LIB)/VMMRCBuiltin$(NEMU_SUFF_LIB)
+ endif
+
+ VMMRC_SOURCES   = \
+ 	NemuVMM.d \
+ 	VMMRC/VMMRC0.asm \
+ 	VMMRC/VMMRCDeps.cpp \
+ 	VMMRC/CPUMRC.cpp \
+ 	VMMRC/CPUMRCA.asm \
+ 	VMMRC/CPUMRCPatchHlp.asm \
+ 	VMMRC/EMRCA.asm \
+ 	VMMRC/IOMRC.cpp \
+ 	VMMRC/MMRamRC.cpp \
+ 	VMMRC/MMRamRCA.asm \
+ 	VMMRC/PDMRCDevice.cpp \
+ 	VMMRC/PGMRC.cpp \
+ 	VMMRC/SELMRC.cpp \
+ 	VMMRC/TRPMRC.cpp \
+ 	VMMRC/TRPMRCHandlers.cpp \
+ 	VMMRC/TRPMRCHandlersA.asm \
+ 	VMMRC/VMMRC.cpp \
+ 	VMMRC/VMMRCA.asm \
+ 	$(if-expr defined(NEMU_WITH_RAW_MODE), \
+ 	VMMRC/CSAMRC.cpp \
+ 	VMMRC/PATMRC.cpp \
+ 	,) \
+ 	VMMRZ/DBGFRZ.cpp \
+ 	VMMRZ/PGMRZDynMap.cpp \
+ 	VMMRZ/VMMRZ.cpp \
+ 	VMMAll/CPUMAllRegs.cpp \
+ 	VMMAll/CPUMAllMsrs.cpp \
+ 	VMMAll/DBGFAll.cpp \
+ 	VMMAll/IEMAll.cpp \
+ 	VMMAll/IEMAllAImpl.asm \
+ 	VMMAll/IEMAllAImplC.cpp \
+ 	VMMAll/IOMAll.cpp \
+ 	VMMAll/IOMAllMMIO.cpp \
+ 	VMMAll/EMAll.cpp \
+ 	VMMAll/EMAllA.asm \
+ 	VMMAll/FTMAll.cpp \
+ 	VMMAll/GIMAll.cpp \
+ 	VMMAll/GIMAllHv.cpp \
+ 	VMMAll/GIMAllKvm.cpp \
+ 	VMMAll/MMAll.cpp \
+ 	VMMAll/MMAllHyper.cpp \
+ 	VMMAll/PDMAll.cpp \
+ 	VMMAll/PDMAllCritSect.cpp \
+ 	VMMAll/PDMAllCritSectRw.cpp \
+ 	VMMAll/PDMAllCritSectBoth.cpp \
+ 	VMMAll/PDMAllQueue.cpp \
+ 	VMMAll/PGMAll.cpp \
+ 	VMMAll/PGMAllHandler.cpp \
+ 	VMMAll/PGMAllMap.cpp \
+ 	VMMAll/PGMAllPhys.cpp \
+ 	VMMAll/PGMAllPool.cpp \
+ 	VMMAll/REMAll.cpp \
+ 	VMMAll/SELMAll.cpp \
+ 	VMMAll/TMAll.cpp \
+ 	VMMAll/TMAllCpu.cpp \
+ 	VMMAll/TMAllReal.cpp \
+ 	VMMAll/TMAllVirtual.cpp \
+ 	VMMAll/TRPMAll.cpp \
+ 	VMMAll/VMAll.cpp \
+ 	VMMAll/VMMAll.cpp \
+ 	VMMAll/VMMAllA.asm \
+ 	$(if-expr defined(NEMU_WITH_RAW_MODE), \
+ 	VMMAll/CSAMAll.cpp \
+ 	VMMAll/PATMAll.cpp \
+       ,)
+ ifeq ($(NEMU_LDR_FMT32),pe)
+  VMMRC_SOURCES += VMMRC/VMMRC.def
+ endif
+ ifeq ($(NEMU_LDR_FMT32),lx)
+  VMMRC_SOURCES += $(VMMRCImp_0_OUTDIR)/VMMRC.def
+ endif
+
+ # the very last one.
+ VMMRC_SOURCES += VMMRC/VMMRC99.asm
+
+ VMMRC/VMMRCDeps.cpp_CXXFLAGS.win = -Oi- -TC ## @todo rename VMMRCDeps.cpp to .c
+
+ $(call NEMU_SET_VER_INFO_RC,VMMRC,VirtualBox VMM - raw-mode context parts) # Version info / description.
+endif # NEMU_WITH_RAW_MODE && !NEMU_ONLY_EXTPACKS
+
+
+ifndef NEMU_ONLY_EXTPACKS
+ #
+ # NemuVMMR0.r0
+ #
+ SYSMODS += VMMR0
+ VMMR0_TEMPLATE  = NemuR0
+ VMMR0_SYSSUFF   = .r0
+
+ VMMR0_DEFS      = IN_VMM_R0 IN_RT_R0 IN_DIS DIS_CORE_ONLY IN_GVMM_R0 IN_GMM_R0 IN_INTNET_R0 \
+ 	$(VMM_COMMON_DEFS) RTASSERT_HAVE_SHOULD_PANIC
+ ## @todo eliminate IN_GVMM_R0 IN_GMM_R0
+ ifdef NEMU_WITH_PCI_PASSTHROUGH
+  VMMR0_DEFS    += IN_PCIRAW_R0
+ endif
+ ifdef NEMU_WITH_TRIPLE_FAULT_HACK
+  VMMR0_DEFS    += NEMU_WITH_TRIPLE_FAULT_HACK
+ endif
+ ifdef NEMU_WITH_RAW_MODE
+  VMMR0_DEFS    += NEMU_WITH_RAW_MODE
+ endif
+ ifdef NEMU_WITH_VMM_R0_SWITCH_STACK
+  VMMR0_DEFS    += VMM_R0_SWITCH_STACK
+ endif
+ VMMR0_DEFS.darwin = VMM_R0_SWITCH_STACK
+ VMMR0_DEFS.win.amd64  = NEMU_WITH_KERNEL_USING_XMM
+
+ VMMR0_INCS      = \
+ 	include \
+ 	$(if-expr defined(NEMU_WITH_RAW_MODE),PATM,)
+
+ VMMR0_SOURCES   = \
+ 	NemuVMM.d \
+ 	VMMR0/CPUMR0.cpp \
+ 	VMMR0/CPUMR0A.asm \
+ 	VMMR0/GIMR0.cpp \
+ 	VMMR0/GIMR0Hv.cpp \
+ 	VMMR0/GIMR0Kvm.cpp \
+ 	VMMR0/GMMR0.cpp \
+ 	VMMR0/GVMMR0.cpp \
+ 	VMMR0/HMR0.cpp \
+ 	VMMR0/HMR0A.asm \
+ 	VMMR0/HMVMXR0.cpp \
+ 	VMMR0/HMSVMR0.cpp \
+ 	VMMR0/PDMR0Device.cpp \
+ 	VMMR0/PDMR0Driver.cpp \
+ 	VMMR0/PGMR0.cpp \
+ 	VMMR0/PGMR0SharedPage.cpp \
+ 	VMMR0/TRPMR0.cpp \
+ 	VMMR0/TRPMR0A.asm \
+ 	VMMR0/VMMR0.cpp \
+ 	VMMRZ/DBGFRZ.cpp \
+ 	VMMRZ/VMMRZ.cpp \
+ 	VMMAll/CPUMAllRegs.cpp \
+ 	VMMAll/CPUMAllMsrs.cpp \
+ 	VMMAll/CPUMStack.cpp \
+ 	VMMAll/DBGFAll.cpp \
+ 	VMMAll/EMAll.cpp \
+ 	VMMAll/EMAllA.asm \
+ 	VMMAll/FTMAll.cpp \
+ 	VMMAll/GIMAll.cpp \
+ 	VMMAll/GIMAllHv.cpp \
+ 	VMMAll/GIMAllKvm.cpp \
+ 	VMMAll/HMAll.cpp \
+ 	VMMAll/IEMAll.cpp \
+ 	VMMAll/IEMAllAImpl.asm \
+ 	VMMAll/IEMAllAImplC.cpp \
+ 	VMMAll/IOMAll.cpp \
+ 	VMMAll/IOMAllMMIO.cpp \
+ 	VMMAll/MMAll.cpp \
+ 	VMMAll/MMAllHyper.cpp \
+ 	VMMAll/MMAllPagePool.cpp \
+ 	VMMAll/PDMAll.cpp \
+ 	VMMAll/PDMAllCritSect.cpp \
+ 	VMMAll/PDMAllCritSectRw.cpp \
+ 	VMMAll/PDMAllCritSectBoth.cpp \
+ 	VMMAll/PDMAllQueue.cpp \
+ 	VMMAll/PGMAll.cpp \
+ 	VMMAll/PGMAllHandler.cpp \
+ 	VMMAll/PGMAllMap.cpp \
+ 	VMMAll/PGMAllPhys.cpp \
+ 	VMMAll/PGMAllPool.cpp \
+ 	VMMAll/REMAll.cpp \
+ 	VMMAll/SELMAll.cpp \
+ 	VMMAll/TMAll.cpp \
+ 	VMMAll/TMAllCpu.cpp \
+ 	VMMAll/TMAllReal.cpp \
+ 	VMMAll/TMAllVirtual.cpp \
+ 	VMMAll/TRPMAll.cpp \
+ 	VMMAll/VMAll.cpp \
+ 	VMMAll/VMMAll.cpp \
+ 	VMMAll/VMMAllA.asm
+ if1of ($(NEMU_LDR_FMT), pe lx)
+  VMMR0_SOURCES += $(VMMR0Imp_0_OUTDIR)/VMMR0.def
+ endif
+ ifdef NEMU_WITH_TRIPLE_FAULT_HACK
+  VMMR0_SOURCES += \
+ 	VMMR0/VMMR0TripleFaultHack.cpp \
+ 	VMMR0/VMMR0TripleFaultHackA.asm
+ endif
+ ifdef NEMU_WITH_NETSHAPER
+  VMMR0_SOURCES += \
+ 	VMMAll/PDMAllNetShaper.cpp
+ endif
+ VMMR0_SOURCES.amd64 = \
+ 	VMMR0/VMMR0JmpA-amd64.asm
+ VMMR0_SOURCES.x86 = \
+ 	VMMR0/VMMR0JmpA-x86.asm
+
+ VMMR0_LIBS = \
+ 	$(PATH_STAGE_LIB)/ServicesR0$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/RuntimeR0$(NEMU_SUFF_LIB) \
+ 	$(PATH_STAGE_LIB)/DisasmR0$(NEMU_SUFF_LIB)
+ ifneq ($(filter pe lx,$(NEMU_LDR_FMT)),)
+  VMMR0_LIBS += \
+  	$(PATH_STAGE_LIB)/SUPR0$(NEMU_SUFF_LIB)
+ endif
+
+ $(call NEMU_SET_VER_INFO_R0,VMMR0,VirtualBox VMM - ring-0 context parts) # Version info / description.
+endif # !NEMU_ONLY_EXTPACKS
+
+
+ifndef NEMU_ONLY_EXTPACKS
+ #
+ # SSMStandalone.lib/a for linking with NemuSVC and other executables.
+ #
+ LIBRARIES += SSMStandalone
+ SSMStandalone_TEMPLATE = NEMUR3EXE
+ SSMStandalone_DEFS     = IN_VMM_R3 IN_VMM_STATIC SSM_STANDALONE CPUM_DB_STANDALONE
+ SSMStandalone_INCS     = include
+ SSMStandalone_SOURCES  = \
+ 	VMMR3/SSM.cpp \
+ 	VMMR3/CPUMR3Db.cpp
+endif # !NEMU_ONLY_EXTPACKS
+
+
+if !defined(NEMU_ONLY_EXTPACKS) \
+ && (   defined(NEMU_WITH_DTRACE_R3) \
+     || defined(NEMU_WITH_DTRACE_R0) \
+     || defined(NEMU_WITH_DTRACE_RC))
+ #
+ # Install the dtrace library files.
+ #
+ INSTALLS += VMMLibDTrace
+ VMMLibDTrace_INST    = $(NEMU_INST_DTRACE_LIB)$(KBUILD_TARGET_ARCH)/
+ VMMLibDTrace_SOURCES = \
+ 	dtrace/lib/nemu-types.d \
+ 	dtrace/lib/$(KBUILD_TARGET_ARCH)/nemu-arch-types.d \
+ 	$(VMMLibDTrace_0_OUTDIR)/vm.d \
+ 	$(VMMLibDTrace_0_OUTDIR)/cpumctx.d \
+ 	$(VMMLibDTrace_0_OUTDIR)/CPUMInternal.d \
+ 	$(VMMLibDTrace_0_OUTDIR)/x86.d \
+
+
+ ##
+ # Turn the header $2 into the DTrace library script $1.
+ #
+ define def_vmm_lib_dtrace_preprocess
+  $$$$(VMMLibDTrace_0_OUTDIR)/$1: $2 $$(NEMU_NEMUCPP) | $$$$(dir $$$$@)
+	$$(QUIET)$$(call MSG_GENERATE,VMMLibDTrace,$$@,$$<)
+	$$(QUIET)$(NEMU_NEMUCPP) -d \
+		-D NEMU_FOR_DTRACE_LIB \
+		-D NEMU_FOR_DTRACE_LIB_$(toupper $(KBUILD_TARGET_ARCH)) \
+		-D IN_RING0 \
+		-D RT_C_DECLS_BEGIN= \
+		-D RT_C_DECLS_END= \
+		-D 'RCPTRTYPE(a_Type)=RTRCPTR' \
+		-D 'R3PTRTYPE(a_Type)=RTR3PTR' \
+		-D 'R0PTRTYPE(a_Type)=a_Type' \
+		-D 'AssertCompile(a_Expr)=' \
+		-D 'AssertCompileSize(a_Stuct, a_Size)=' \
+		-D 'bool=uint8_t' \
+		$$(foreach def,\
+			$$(DEFS) \
+			$$(DEFS.$$(KBUILD_TARGET)) \
+			$$(DEFS.$(KBUILD_TARGET_ARCH)) \
+			$$(VMM_COMMON_DEFS) \
+			$$(ARCH_BITS_DEFS)\
+		   ,-D '$$(def)') \
+		$$< \
+		$$@
+	$$(QUIET)$$(CHMOD) 644 $$@
+ endef
+ $(evalcall2 def_vmm_lib_dtrace_preprocess,vm.d,$(PATH_ROOT)/include/Nemu/vmm/vm.h)
+ $(evalcall2 def_vmm_lib_dtrace_preprocess,cpumctx.d,$(PATH_ROOT)/include/Nemu/vmm/cpumctx.h)
+ $(evalcall2 def_vmm_lib_dtrace_preprocess,CPUMInternal.d,$(PATH_SUB_CURRENT)/include/CPUMInternal.h)
+ $(evalcall2 def_vmm_lib_dtrace_preprocess,x86.d,$(PATH_ROOT)/include/iprt/x86.h)
+
+endif
+
+
+
+#
+# For vmmGetSvnRev.
+#
+VMMAll/VMMAll.cpp_DEFS = NEMU_SVN_REV=$(NEMU_SVN_REV)
+
+#
+# Disable annoying warnings about array subscript above array bounds in aPages[]
+#
+ifneq ($(KBUILD_TARGET),win)
+ VMMR3/PGMPool.cpp_CXXFLAGS     = $(NEMU_GCC_Wno-array_bounds)
+ VMMAll/PGMAllPool.cpp_CXXFLAGS = $(NEMU_GCC_Wno-array_bounds)
+ VMMAll/PGMAll.cpp_CXXFLAGS     = -Wno-unused-function
+ VMMAll/IEMAll.cpp_CXXFLAGS     = -Wno-unused-parameter
+endif
+
+#
+# Always optimize the interpreter.
+#
+ifn1of ($(USERNAME),bird)
+if1of ($(KBUILD_TARGET), win)
+ # -noover is recognized despite the statement saying otherwise. It silences these warnings:
+ # cl : Command line warning D9025 : overriding '/Od' with '/O2'
+ # cl : Command line warning D9025 : overriding '/Oy-' with '/Oy'
+ VMMAll/IEMAll.cpp_CXXFLAGS += -noover -O2xy
+else
+ VMMAll/IEMAll.cpp_CXXFLAGS += -O2
+ #VMMAll/IEMAll.cpp_CXXFLAGS += -fno-align-functions -fno-align-jumps -fno-align-loops # Saves a few of percents, not worth it.
+ #VMMAll/IEMAll.cpp_CXXFLAGS += -fno-reorder-blocks    # Saves one or two percent ... never mind.
+ VMMAll/IEMAll.cpp_CXXFLAGS += -fomit-frame-pointer # Omitting the frame pointer results in larger code, but it might be worth it. (esp addressing vs ebp?)
+endif
+endif # bird wants good stacks
+
+
+# Alias the CPU database entries.
+$(foreach base,$(notdir $(basename $(wildcard $(PATH_SUB_CURRENT)/VMMR3/cpus/*.h))), $(eval $(base).o $(base).obj: CPUMR3Db.o))
+
+
+#
+# Test for undefined symbols.
+#
+if1of ($(SYSMODS),VMMRC)
+ test-undef-rc:: $(PATH_TARGET)/undef-rc.run
+ OTHERS      += $(PATH_TARGET)/undef-rc.run
+ CLEANS      += $(PATH_TARGET)/undef-rc.run
+ $(PATH_TARGET)/undef-rc.run: \
+		$$(VMMRC_1_TARGET)
+ ifn1of ($(KBUILD_TARGET), linux solaris)
+ else
+	$(call MSG_L1,VMM: Testing for undefined symbols in VMMRC using nm...)
+	$(QUIET)$(NEMU_NM) $^  2> /dev/null \
+		| $(SED) -n \
+			-e '/^ *U .*/!d' \
+			-e 's/ *U //' \
+			\
+			-e '/^g_VM\>/d'\
+			-e '/^g_CPUM\>/d'\
+			-e '/^g_Logger\>/d'\
+			-e '/^g_RelLogger\>/d'\
+			-e '/^g_TRPM\>/d'\
+			-e '/^g_TRPMCPU\>/d'\
+			-e '/^g_pSUPGlobalInfoPage\>/d'\
+			-e '/^g_trpmHyperCtxCore\>/d' \
+			-e '/^g_trpmGuestCtxCore\>/d' \
+			\
+			-e 's/\(.*\)$(DOLLAR)/  Undefined symbol: \1/' \
+			-e 'p' \
+			-e 'q 1'
+ endif
+	$(QUIET)$(APPEND) -t $@
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+
+
+# Alias the PGM templates to the object in which they are defined.
+PGMInternal.o \
+PGMBth.o   	PGMGst.o   	PGMShw.o \
+PGMBth.obj 	PGMGst.obj 	PGMShw.obj: 	PGM.o
+
+PGMAllBth.o   	PGMAllGst.o   	PGMAllShw.o \
+PGMAllBth.obj 	PGMAllGst.obj 	PGMAllShw.obj: 	PGMAll.o
+
+PGMRCBth.o   	PGMRCGst.o   	PGMRCShw.o \
+PGMRCBth.obj 	PGMRCGst.obj 	PGMRCShw.obj: 	PGMRC.o
+
+PGMPhysRWTmpl.o PGMPhysRWTmpl.obj: 		PGMPhys.o
+
+PGMInline.o 	PGMInline.obj: 			PGMDbg.o
+
+# Alias the IEM templates to the object in which they are instantiated.
+IEMInternal.o \
+IEMAllInstructions.cpp.o  IEMAllInstructions.cpp.obj \
+IEMAllCImpl.cpp.o         IEMAllCImpl.cpp.obj \
+IEMAllCImplStrInstr.cpp.o IEMAllCImplStrInstr.cpp.obj: IEMAll.o
+
+# Alias the switcher templates.
+PAEand32Bit.o PAEand32Bit.obj:                 PAETo32Bit.o   PAEToPAE.o   32BitTo32Bit.o PAETo32Bit.o
+LegacyandAMD64.o LegacyandAMD64.obj:           32BitToAMD64.o PAEToAMD64.o
+AMD64andLegacy.o AMD64andLegacy.obj:           AMD64To32Bit.o AMD64ToPAE.o
+

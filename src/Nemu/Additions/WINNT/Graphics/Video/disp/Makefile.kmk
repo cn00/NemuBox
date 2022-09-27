@@ -1,0 +1,230 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Windows guest display driver.
+#
+
+#
+# Copyright (C) 2011-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# NemuDisp - Windows Guest Additions XPDM Display Driver
+#
+# Note. This has to run on NT4! (*_NT4 => *_W2K3 when targeting 64-bit.)
+#
+SYSMODS += NemuDisp
+NemuDisp_TEMPLATE      = NEMUGUESTR0
+NemuDisp_SYSSUFF       = .dll
+NemuDisp_SDKS          = ReorderCompilerIncs $(NEMU_WINDDK_GST_NT4)
+NemuDisp_DEFS.x86      = _WIN32_WINNT=0x0501
+NemuDisp_DEFS          = NEMU_WITH_DDRAW
+NemuDisp_DEFS         += LOG_TO_BACKDOOR #LOG_ENABLED
+ifdef NEMU_WITH_VIDEOHWACCEL
+ NemuDisp_DEFS        += NEMU_WITH_VIDEOHWACCEL
+endif
+ifdef NEMU_WITH_CROGL
+ NemuDisp_DEFS        += NEMU_WITH_CROGL
+endif
+#NemuDisp_DEFS         += NEMU_VBVA_ADJUST_RECT
+NemuDisp_INCS          = ../../../include ..
+NemuDisp_LDFLAGS.x86   = /Entry:DrvEnableDriver@12
+NemuDisp_LDFLAGS.amd64 = /Entry:DrvEnableDriver
+NemuDisp_SOURCES     = \
+	xpdm/NemuDispDriver.cpp \
+	xpdm/NemuDispMini.cpp \
+	xpdm/NemuDispMouse.cpp \
+	xpdm/NemuDispPalette.cpp \
+	xpdm/NemuDispVBVA.cpp \
+	xpdm/NemuDispDrawCmd.cpp \
+	xpdm/NemuDispVRDP.cpp \
+	xpdm/NemuDispVrdpBmp.cpp \
+	xpdm/NemuDispVrdpTxt.cpp \
+	xpdm/NemuDispDriverDDraw.cpp \
+	xpdm/NemuDispDDraw.cpp \
+	xpdm/NemuDisp.def \
+	xpdm/NemuDisp.rc \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/HGSMIBase.cpp \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/VBVABase.cpp \
+	$(PATH_ROOT)/src/Nemu/Additions/common/NemuVideo/Modesetting.cpp
+ifdef NEMU_WITH_VIDEOHWACCEL
+ NemuDisp_SOURCES += \
+ 	xpdm/NemuDispVHWA.cpp \
+ 	xpdm/NemuDispDDrawVHWA.cpp
+endif
+NemuDisp_LIBS = \
+	$(PATH_SDK_$(NEMU_WINDDK_GST_NT4)_LIB)/win32k.lib \
+	$(NEMU_LIB_IPRT_GUEST_R0_NT4) \
+	$(NEMU_PATH_ADDITIONS_LIB)/HGSMIGuestR0Lib$(NEMU_SUFF_LIB)
+
+# Signing requires both miniport and display drivers
+# so it'd be dealt with in the parent makefile.
+ifdef NEMU_SIGN_ADDITIONS
+ NemuDisp_INSTTYPE           = none
+ NemuDisp_DEBUG_INSTTYPE     = both
+ ifdef NEMU_WITH_WDDM
+  NemuDispD3D_INSTTYPE       = none
+  NemuDispD3D_DEBUG_INSTTYPE = both
+ endif
+endif
+
+ifdef NEMU_WITH_WDDM
+#
+# NemuDispD3D - Windows Guest Additions WDDM R3 Display Driver
+#
+DLLS += NemuDispD3D
+NemuDispD3D_TEMPLATE = NEMUGUESTR3DLL
+NemuDispD3D_SDKS     = ReorderCompilerIncs $(NEMU_WINDDK_GST_WLH)
+NemuDispD3D_DEFS     = UNICODE _UNICODE NEMU_WITH_WDDM NEMUWDDMDISP LOG_TO_BACKDOOR LOG_TO_BACKDOOR_DRV NEMU_WITH_HGCM D3D_UMD_INTERFACE_VERSION=0x000C
+ifdef DEBUG_misha
+NemuDispD3D_DEFS    += LOG_ENABLED
+endif
+ifdef NEMUWDDM_WITH_VBVA
+NemuDispD3D_DEFS    += NEMUWDDM_WITH_VBVA
+endif
+ifdef NEMU_WITH_VIDEOHWACCEL
+ NemuDispD3D_DEFS   += NEMU_WITH_VIDEOHWACCEL
+endif
+ifdef NEMU_WDDMDISP_WITH_PROFILE
+ NemuDispD3D_DEFS   += NEMU_WDDMDISP_WITH_PROFILE
+endif
+ifdef NEMUWDDM_TEST_UHGSMI
+ NemuDispD3D_DEFS   += NEMUWDDM_TEST_UHGSMI
+endif
+ifdef NEMU_WITH_CROGL
+ NemuDispD3D_DEFS   += NEMU_WITH_CROGL
+endif
+NemuDispD3D_INCS     = \
+	../../../include \
+	.. \
+	$(NEMU_PATH_CROGL_INCLUDE)
+NemuDispD3D_SOURCES  = \
+	wddm/NemuDispD3D.cpp \
+	wddm/NemuDispD3DIf.cpp \
+	wddm/NemuDispCm.cpp \
+	wddm/NemuDispKmt.cpp \
+	wddm/NemuDispDbg.cpp \
+	wddm/NemuD3DIf.cpp \
+	wddm/NemuDispD3D.rc \
+	wddm/NemuDispD3D.def
+ifdef NEMU_WITH_CRHGSMI
+NemuDispD3D_DEFS   += NEMU_WITH_CRHGSMI
+endif
+NemuDispD3D_LIBS     = \
+	$(NEMU_LIB_IPRT_GUEST_R3) \
+	$(NEMU_LIB_VBGL_R3) \
+	Psapi.lib \
+	$(NEMU_PATH_ADDITIONS_LIB)/NemuDispMpLogger$(NEMU_SUFF_LIB) \
+	$(NEMU_PATH_ADDITIONS_LIB)/NemuCrHgsmi$(NEMU_SUFF_LIB)
+
+#
+# 64-bit systems needs a 32-bit version of NemuDispD3D.
+#
+DLLS.amd64 += NemuDispD3D-x86
+NemuDispD3D-x86_EXTENDS = NemuDispD3D
+NemuDispD3D-x86_BLD_TRG_ARCH = x86
+NemuDispD3D-x86_LIBS = \
+	$(NEMU_LIB_IPRT_GUEST_R3_X86) \
+	$(NEMU_LIB_VBGL_R3_X86) \
+	Psapi.lib \
+	$(NEMU_PATH_ADDITIONS_LIB)/NemuDispMpLogger-x86$(NEMU_SUFF_LIB) \
+	$(NEMU_PATH_ADDITIONS_LIB)/NemuCrHgsmi-x86$(NEMU_SUFF_LIB)
+NemuDispD3D-x86_DEFS = $(NemuDispD3D_DEFS) NEMU_WDDM_WOW64
+
+ifdef NEMU_WITH_CRHGSMI
+#
+# NemuCrHgsmi - Chromium HGSMI API library
+#
+LIBRARIES += NemuCrHgsmi
+NemuCrHgsmi_TEMPLATE    = NEMUGUESTR3LIB
+NemuCrHgsmi_SDKS        = ReorderCompilerIncs $(NEMU_WINDDK_GST_WLH)
+#use same defines as NemuDispD3D to ensure structure definitions match
+NemuCrHgsmi_DEFS        = $(subst NEMUWDDMDISP,IN_NEMUCRHGSMI,$(NemuDispD3D_DEFS))
+NemuCrHgsmi_INCS        = ../../../include .. $(NEMU_PATH_CROGL_INCLUDE)
+NemuCrHgsmi_SOURCES     = \
+	wddm/NemuCrHgsmi.cpp \
+	wddm/NemuDispKmt.cpp \
+	wddm/NemuDispDbg.cpp \
+	wddm/NemuUhgsmiKmt.cpp \
+	wddm/NemuUhgsmiBase.cpp \
+	wddm/NemuUhgsmiDisp.cpp
+
+#
+# 64-bit systems needs a 32-bit version of NemuCrHgsmi.
+#
+LIBRARIES.amd64 += NemuCrHgsmi-x86
+NemuCrHgsmi-x86_TEMPLATE    = NEMUGUESTR3LIB
+NemuCrHgsmi-x86_EXTENDS = NemuCrHgsmi
+NemuCrHgsmi-x86_BLD_TRG_ARCH = x86
+NemuCrHgsmi-x86_DEFS = $(NemuCrHgsmi_DEFS) NEMU_WDDM_WOW64
+endif #NEMU_WITH_CRHGSMI
+
+#
+# NemuDispMpLogger - display backdoor logger library
+#
+LIBRARIES += NemuDispMpLogger
+NemuDispMpLogger_TEMPLATE    = NEMUGUESTR3LIB
+NemuDispMpLogger_SDKS        = ReorderCompilerIncs $(NEMU_WINDDK_GST_WLH)
+NemuDispMpLogger_DEFS        = UNICODE _UNICODE NEMU_WITH_CRHGSMI IN_NEMUCRHGSMI NEMU_WITH_WDDM NEMU_WITH_VDMA NEMU_WITH_HGCM
+NemuDispMpLogger_INCS        = ../../../include ..
+NemuDispMpLogger_SOURCES     = \
+    wddm/NemuDispMpLogger.cpp
+
+#
+# 64-bit systems needs a 32-bit version of NemuCrHgsmi.
+#
+LIBRARIES.amd64 += NemuDispMpLogger-x86
+NemuDispMpLogger-x86_TEMPLATE    = NEMUGUESTR3LIB
+NemuDispMpLogger-x86_EXTENDS = NemuDispMpLogger
+NemuDispMpLogger-x86_BLD_TRG_ARCH = x86
+NemuDispMpLogger-x86_DEFS = $(NemuDispMpLogger_DEFS) NEMU_WDDM_WOW64
+
+endif #ifdef NEMU_WITH_WDDM
+
+ifdef NEMUVIDEOWINDBG
+DLLS += vbvdbg
+vbvdbg_TEMPLATE = NEMUR3STATIC
+vbvdbg_SDKS     = ReorderCompilerIncs $(NEMU_WINDDK_GST_WLH)
+vbvdbg_DEFS     = UNICODE _UNICODE
+vbvdbg_SOURCES  = \
+	wddm/dbg/NemuVideoWinDbg.cpp \
+	wddm/dbg/NemuVideoWinDbg.def
+
+PROGRAMS += tstMvWnd
+tstMvWnd_TEMPLATE = NEMUR3EXE
+tstMvWnd_DEFS     = UNICODE _UNICODE
+tstMvWnd_SOURCES  = \
+	wddm/dbg/tstMvWnd.cpp
+tstMvWnd_LIBS     = $(NEMU_LIB_IPRT_GUEST_R3)
+tstMvWnd_LDFLAGS.win = /SUBSYSTEM:windows
+
+PROGRAMS += DumpD3DCaps9
+DumpD3DCaps9_TEMPLATE = NEMUR3EXE
+DumpD3DCaps9_SDKS     = ReorderCompilerIncs $(NEMU_WINDDK_GST_WLH)
+DumpD3DCaps9_DEFS     = UNICODE _UNICODE
+DumpD3DCaps9_SOURCES  = \
+	wddm/dbg/DumpD3DCaps9.cpp
+DumpD3DCaps9_LIBS     = $(NEMU_LIB_IPRT_GUEST_R3) d3d9.lib
+DumpD3DCaps9_LDFLAGS.win = /SUBSYSTEM:CONSOLE
+
+PROGRAMS += D3DFeatureLevel
+D3DFeatureLevel_TEMPLATE = NEMUR3EXE
+D3DFeatureLevel_SDKS     = ReorderCompilerIncs $(NEMU_WINDDK_GST_WLH)
+D3DFeatureLevel_SOURCES  = \
+	wddm/dbg/D3DFeatureLevel.cpp
+D3DFeatureLevel_LIBS     = $(NEMU_LIB_IPRT_GUEST_R3) d3d11.lib
+D3DFeatureLevel_LDFLAGS.win = /SUBSYSTEM:CONSOLE
+
+endif #NEMUVIDEOWINDBG
+
+include $(FILE_KBUILD_SUB_FOOTER)

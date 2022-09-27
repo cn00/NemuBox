@@ -1,0 +1,352 @@
+# $Id: Makefile.kmk $
+## @file
+# Toplevel sub-makefile for the EFI firmwares.
+#
+# Note! kBuild is only used for the build tools, the rest is handled by the
+#       very custom EFI build system.
+#
+
+#
+# Copyright (C) 2013-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Make sure our Config.kmk is included.
+#
+ifndef NEMU_EFI_FIRMWARE_CONFIG_KMK_INCLUDED
+ include $(PATH_SUB_CURRENT)/Config.kmk
+endif
+
+
+#
+# Include sub-makefiles.
+#
+NEMU_EFI_BLDPROGS := $(BLDPROGS)
+include $(PATH_SUB_CURRENT)/BaseTools/Makefile.kmk
+NEMU_EFI_BLDPROGS := $(filter-out $(NEMU_EFI_BLDPROGS),$(BLDPROGS)) NemuEfiBldPythonWrappers
+
+#
+# Binary wrappers for python scripts.
+#
+NEMU_EFI_PYTHON_WRAPPERS = \
+	BPDG \
+	build \
+	Ecc \
+	GenFds \
+	GenPatchPcdTable \
+	PatchPcdValue \
+	Trim \
+	TargetTool \
+	UPT
+
+INSTALLS += NemuEfiBldPythonWrappers
+NemuEfiBldPythonWrappers_TEMPLATE = NemuEfiBldProg
+if1of ($(KBUILD_HOST), win os2)
+ NemuEfiBldPythonWrappers_EXEC_SOURCES = \
+	$(foreach PyWrap,$(NEMU_EFI_PYTHON_WRAPPERS),$(NemuEfiBldPythonWrappers_0_OUTDIR)/$(PyWrap).cmd)
+else
+ NemuEfiBldPythonWrappers_EXEC_SOURCES = \
+	$(addprefix $(NemuEfiBldPythonWrappers_0_OUTDIR)/,$(NEMU_EFI_PYTHON_WRAPPERS))
+endif
+NemuEfiBldPythonWrappers_CLEAN = $(NemuEfiBldPythonWrappers_SOURCES)
+
+if1of ($(KBUILD_HOST), win os2)
+ define NemuEfiBldPythonWrappersRuleTemplate
+  $$$$(NemuEfiBldPythonWrappers_0_OUTDIR)/$(PyWrap).cmd: | $$$$(dir $$$$@)
+	$$(APPEND) -tn "$$@" \
+		'@SET PYTHONPATH=$$(NEMU_PATH_EFI_FIRMWARE)/BaseTools/Source/Python' \
+		'@"$$(NEMU_BLD_PYTHON)" "$$(NEMU_PATH_EFI_FIRMWARE)/BaseTools/Source/Python/$(PyWrap)/$(PyWrap).py" %*'
+ endef
+else
+ define NemuEfiBldPythonWrappersRuleTemplate
+  $$$$(NemuEfiBldPythonWrappers_0_OUTDIR)/$(PyWrap): | $$$$(dir $$$$@)
+	$$(APPEND) -tn "$$@" \
+		'#!$(ASH)' \
+		'export PYTHONPATH="$$(NEMU_PATH_EFI_FIRMWARE)/BaseTools/Source/Python"' \
+		'exec "$$(NEMU_BLD_PYTHON)" "$$(NEMU_PATH_EFI_FIRMWARE)/BaseTools/Source/Python/$(PyWrap)/$(PyWrap).py" "$$(DOLLAR)@"'
+	$$(CHMOD) a+x "$$@"
+ endef
+endif
+$(foreach PyWrap,$(NEMU_EFI_PYTHON_WRAPPERS),$(eval $(NemuEfiBldPythonWrappersRuleTemplate)))
+
+#
+# Rules for building and installing the Nemu EFI firmware images.
+#
+INSTALLS += NemuEfiFirmware
+NemuEfiFirmware_INST = $(INST_BIN)
+NemuEfiFirmware_MODE = 0644
+NemuEfiFirmware_SOURCES = \
+	$(NemuEfiFirmware_0_OUTDIR)/x86/$(NEMU_EFI_OUTPUT_SUBDIR)/FV/OVMF.fd=>NemuEFI32.fd \
+	$(NemuEfiFirmware_0_OUTDIR)/amd64/$(NEMU_EFI_OUTPUT_SUBDIR)/FV/OVMF.fd=>NemuEFI64.fd
+NemuEfiFirmware_BLDDIRS = \
+	$(NemuEfiFirmware_0_OUTDIR)/x86/ \
+	$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/ \
+	$(NemuEfiFirmware_0_OUTDIR)/amd64/ \
+	$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/
+NemuEfiFirmware_CLEAN = \
+	$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/target.txt \
+	$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/tools_def.txt \
+	$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/target.txt \
+	$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/tools_def.txt
+
+# Install the debug info.
+INSTALLS += NemuEfiFirmwareDbg32
+NemuEfiFirmwareDbg32_INST = $(INST_NEMUDBG_SYMS)x86/
+NemuEfiFirmwareDbg32_MODE = 0644
+if1of ($(KBUILD_HOST), win)
+ NemuEfiFirmwareDbg32_SOURCES = \
+ 	$(foreach mod,$(NEMU_EFI_MODULES),$(NemuEfiFirmware_0_OUTDIR)/x86/$(NEMU_EFI_OUTPUT_SUBDIR)/IA32/$(mod).pdb)
+else
+ NemuEfiFirmwareDbg32_SOURCES = \
+ 	$(foreach mod,$(NEMU_EFI_MODULES_FLAT),$(NemuEfiFirmware_0_OUTDIR)/x86/$(NEMU_EFI_OUTPUT_SUBDIR)/IA32/$(mod).debug)
+endif
+
+INSTALLS += NemuEfiFirmwareDbg64
+NemuEfiFirmwareDbg64_INST = $(INST_NEMUDBG_SYMS)amd64/
+NemuEfiFirmwareDbg64_MODE = 0644
+if1of ($(KBUILD_HOST), win)
+ NemuEfiFirmwareDbg64_SOURCES = \
+ 	$(foreach mod,$(NEMU_EFI_MODULES),$(NemuEfiFirmware_0_OUTDIR)/amd64/$(NEMU_EFI_OUTPUT_SUBDIR)/X64/$(mod).pdb)
+else
+ NemuEfiFirmwareDbg64_SOURCES = \
+ 	$(foreach mod,$(NEMU_EFI_MODULES_FLAT),$(NemuEfiFirmware_0_OUTDIR)/amd64/$(NEMU_EFI_OUTPUT_SUBDIR)/X64/$(mod).debug)
+endif
+
+
+#
+# Install a custom clean up rule for dealing with the EFI build system output.
+#
+PASS_CLEAN_trgs += NemuEfiFirmwareCleanup
+NemuEfiFirmwareCleanup:
+	$(if $(NemuEfiFirmware_0_OUTDIR),,exit 1)
+	$(RM) -Rf -- "$(NemuEfiFirmware_0_OUTDIR)/amd64/" "$(NemuEfiFirmware_0_OUTDIR)/x86/"
+.PHONY: NemuEfiFirmwareCleanup
+
+
+#
+# The reset vector code.
+#
+
+# Dummy Linker.
+TOOL_NemuEfiResetVectorLd = Dummy linker for the EFI reset vectors.
+TOOL_NemuEfiResetVectorLd_LINK_MISCBIN_OUTPUT =
+TOOL_NemuEfiResetVectorLd_LINK_MISCBIN_DEPEND =
+TOOL_NemuEfiResetVectorLd_LINK_MISCBIN_DEPORD =
+define TOOL_NemuEfiResetVectorLd_LINK_MISCBIN_CMDS
+	$(NEMU_BLD_PYTHON) $(NEMU_PATH_EFI_FIRMWARE)/UefiCpuPkg/ResetVector/Vtf0/Tools/FixupForRawSection.py \
+       	"--only-padd-image" \
+		"$(objs)" \
+		"$(out)"
+endef
+
+# Makes a boot sector test image.
+TEMPLATE_NemuEfiResetVectorRaw = kBuild tool config for building the EFI reset vectors.
+TEMPLATE_NemuEfiResetVectorRaw_INSTTYPE = none
+TEMPLATE_NemuEfiResetVectorRaw_BINSUFF = .raw
+TEMPLATE_NemuEfiResetVectorRaw_MODE    = 0644
+TEMPLATE_NemuEfiResetVectorRaw_ASTOOL  = YASM
+TEMPLATE_NemuEfiResetVectorRaw_ASFLAGS:= -f bin $(NEMU_YASM_Wno-segreg-in-64bit) --mapfile
+TEMPLATE_NemuEfiResetVectorRaw_ASDEFS  = ASM_FORMAT_BIN __YASM__
+TEMPLATE_NemuEfiResetVectorRaw_LDTOOL  = NemuEfiResetVectorLd
+
+MISCBINS += NemuEfiResetVector-x86
+NemuEfiResetVector-x86_TEMPLATE = NemuEfiResetVectorRaw
+NemuEfiResetVector-x86_DEFS     = ARCH_IA32 RT_ARCH_X86 DEBUG_NONE
+NemuEfiResetVector-x86_SOURCES  = UefiCpuPkg/ResetVector/Vtf0/ResetVectorCode.asm
+
+MISCBINS += NemuEfiResetVector-amd64
+NemuEfiResetVector-amd64_TEMPLATE = NemuEfiResetVectorRaw
+NemuEfiResetVector-amd64_DEFS     = ARCH_X64 RT_ARCH_AMD64 DEBUG_NONE
+NemuEfiResetVector-amd64_SOURCES  = UefiCpuPkg/ResetVector/Vtf0/ResetVectorCode.asm
+
+
+#
+# Include the footer early so that we can use NemuEfiFirmware_0_OUTDIR below.
+#
+include $(FILE_KBUILD_SUB_FOOTER)
+
+#
+# Incomplete list of dependencies relative.
+#
+NEMU_EFI_DEPENDENCIES = \
+	$(NEMU_PATH_EFI_FIRMWARE)/../DevEFI.h \
+       $(NEMU_PATH_EFI_FIRMWARE)/NemuPkg/Library/NemuDebugAgentLib/NemuDebugAgentLib.c \
+       $(NEMU_PATH_EFI_FIRMWARE)/NemuPkg/Library/NemuDebugAgentLib/NemuDebugAgentLib.inf \
+       $(NEMU_PATH_EFI_FIRMWARE)/NemuPkg/Library/NemuPeCoffExtraActionLib/NemuPeCoffExtraActionLib.c \
+       $(NEMU_PATH_EFI_FIRMWARE)/NemuPkg/Library/NemuPeCoffExtraActionLib/NemuPeCoffExtraActionLib.inf \
+       $(NEMU_PATH_EFI_FIRMWARE)/NemuPkg/NemuPkg.dec \
+       \
+       $(NEMU_PATH_EFI_FIRMWARE)/OvmfPkg/OvmfPkg.dec \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/BdsBoot.c \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/BdsConnect.c \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/BdsConsole.c \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/BdsMisc.c \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/DevicePath.c \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/GenericBdsLib.inf \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/GenericBdsStrings.uni \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/InternalBdsLib.h \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/Performance.c \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/String.c \
+	$(NEMU_PATH_EFI_FIRMWARE)/IntelFrameworkModulePkg/Library/GenericBdsLib/String.h \
+
+#
+# The common build.py invocation part.
+#
+if1of ($(KBUILD_HOST), win)
+ NEMU_EFI_REDIRECT_E_EQUAL:=$(EQUAL)
+ NEMU_EFI_BUILD_CMD = $(REDIRECT) \
+	-E 'PATH=$(NEMU_PATH_STAGE_EFI_BLDPROGS)$(NEMU_SEP)$(PATH)' \
+	-E 'INCLUDE=$(PATH_ROOT)/include$(NEMU_SEP)$(PATH_OUT)$(NEMU_SEP)$(NEMU_SEP)$(PATH_TOOL_$(NEMU_VCC_TOOL)_INC)$(INCLUDE)' \
+	-E 'COMSPEC=$(windir)\system32\cmd.exe'
+else
+ NEMU_EFI_REDIRECT_E_EQUAL:=
+NEMU_EFI_BUILD_CMD = $(REDIRECT) \
+	-E "PATH=$(NEMU_PATH_STAGE_EFI_BLDPROGS)$(NEMU_SEP)$(PATH)" \
+	-E     "C_INCLUDE_PATH=$(PATH_ROOT)/include$(NEMU_SEP)$(PATH_OUT)$(NEMU_SEP)$(C_INCLUDE_PATH)" \
+	-E "CPLUS_INCLUDE_PATH=$(PATH_ROOT)/include$(NEMU_SEP)$(PATH_OUT)$(NEMU_SEP)$(C_INCLUDE_PATH)"
+endif
+NEMU_EFI_BUILD_CMD += \
+	-E 'PYTHONPATH=$(NEMU_PATH_EFI_FIRMWARE)/BaseTools/Source/Python' \
+	-E 'PYTHONDONTWRITEBYTECODE=1' \
+	-E 'IASL_BIN=$(NEMU_IASLCMD)' \
+	-E 'WORKSPACE=$(NEMU_PATH_EFI_FIRMWARE)' \
+	-E 'EDK_TOOLS_PATH=$(NEMU_PATH_EFI_FIRMWARE)/BaseTools' \
+	-E 'EFI_SOURCE$(NEMU_EFI_REDIRECT_E_EQUAL)' \
+	-E 'ECP_SOURCE$(NEMU_EFI_REDIRECT_E_EQUAL)' \
+	-E 'EDK_SOURCE$(NEMU_EFI_REDIRECT_E_EQUAL)' \
+	-E 'X64_PETOOLS_PREFIX$(NEMU_EFI_REDIRECT_E_EQUAL)' \
+	-E 'ARCH$(NEMU_EFI_REDIRECT_E_EQUAL)' \
+	-E 'IPF_PETOOLS_PREFIX=__no_ipf__' \
+	-E $(if-expr "$(EFI_QUIET)" != "" || "$(KBUILD_VERBOSE)" != "",'EFI_QUIET=','EFI_QUIET=@') \
+	-C '$(NEMU_PATH_EFI_FIRMWARE)' \
+	-- $(NEMU_BLD_PYTHON) "$(NEMU_PATH_EFI_FIRMWARE)/BaseTools/Source/Python/build/build.py" \
+	-D NEMU_WITH_EDK2_REV=13361 \
+	-D NEMU=1 \
+	-D NEMU_WITH_OVMF=1 \
+	-D BUILD_NEW_SHELL=1 \
+	-D NEMU_REV=$(NEMU_SVN_REV) \
+	-D "NEMU_OUTPUT_BASE_DIR=$(NemuEfiFirmware_0_OUTDIR)" \
+	-D "NEMU_PATH_ROOT=$(PATH_ROOT)" \
+	-D "NEMU_RESET_VECTOR_X86=$(NemuEfiResetVector-x86_1_TARGET)" \
+	-D "NEMU_RESET_VECTOR_AMD64=$(NemuEfiResetVector-amd64_1_TARGET)" \
+	$(if $(NEMU_OSE),-D "NEMU_OSE=1") \
+	--silent \
+	$(if $(KBUILD_VERBOSE),,--quiet) \
+	--no-cache \
+	--buildtarget $(NEMU_EFI_BUILD_TARGET) \
+	--tagname $(NEMU_EFI_TOOL_CHAIN)
+
+#
+# Tools configurations.
+#
+$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/tools_def.txt \
+$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/tools_def.txt: \
+               $(NEMU_PATH_EFI_FIRMWARE)/nemu-tools_def.txt \
+		$(MAKEFILE) | $$(dir $$@)
+	$(RM) -f -- "$@"
+	$(SED) \
+		-e 's,@NEMU_IASLCMD@,$(NEMU_IASLCMD),' \
+		-e 's,@KMK@,$(MAKE),' \
+               \
+		-e 's,@NEMU_PATH_PREFIX_MINGW32@,$(NEMU_PATH_PREFIX_MINGW32),' \
+		-e 's,@NEMU_PATH_PREFIX_MINGW64@,$(NEMU_PATH_PREFIX_MINGW64),' \
+		-e 's,@NEMU_MINGW32_Wno@,-Wno-address $(NEMU_MINGW32_Wno-unused-but-set-variable) $(NEMU_MINGW32_Wno-maybe-uninitialized) $(NEMU_MINGW32_Wno-array-bounds),' \
+		-e 's,@NEMU_MINGW64_Wno@,-Wno-address $(NEMU_MINGW64_Wno-unused-but-set-variable) $(NEMU_MINGW64_Wno-maybe-uninitialized) $(NEMU_MINGW64_Wno-array-bounds),' \
+		-e 's,@NEMU_MINGW64_USER_LABEL_PREFIX@,$(NEMU_MINGW64_USER_LABEL_PREFIX),' \
+               \
+		-e 's,@PATH_VS2010@,$(PATH_TOOL_$(NEMU_VCC_TOOL)),' \
+		-e 's,@PATH_VS2010_AMD64_BIN@,$(PATH_TOOL_$(NEMU_VCC_TOOL))/bin/$(subst x86,x86_amd64,$(KBUILD_HOST_ARCH)),' \
+               \
+		--output $@ $<
+
+#
+# NemuEFI32
+#
+$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/target.txt: $(MAKEFILE) | $$(dir $$@) $(NEMU_EFI_BLDPROGS)
+	$(APPEND) -tn "$@" \
+		"# Automatically generated, do not edit" \
+		"" \
+		"# These variables cannot be overriden by the build.py command line." \
+		"TOOL_CHAIN_CONF = $(NemuEfiFirmware_0_OUTDIR)/x86/Conf/tools_def.txt" \
+		"BUILD_RULE_CONF = BaseTools/Conf/build_rule.template" \
+		"" \
+		"# These variables are overridden and this is just for show." \
+		"ACTIVE_PLATFORM = OvmfPkg/OvmfPkgIa32.dsc" \
+		"TARGET          = $(NEMU_EFI_BUILD_TARGET)" \
+		"TARGET_ARCH     = IA32" \
+		"TOOL_CHAIN_TAG  = $(NEMU_EFI_TOOL_CHAIN)" \
+		"MAX_CONCURRENT_THREAD_NUMBER = 1"
+
+## @todo 32-bit DEBUG is busted, image to big.
+$(NemuEfiFirmware_0_OUTDIR)/x86/$(NEMU_EFI_OUTPUT_SUBDIR)/FV/OVMF.fd \
++ $(NemuEfiFirmwareDbg32_SOURCES): \
+		$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/target.txt \
+		$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/tools_def.txt \
+		$$(NemuEfiResetVector-x86_1_TARGET) \
+		$(NEMU_EFI_DEPENDENCIES) \
+		$(NEMU_PATH_EFI_FIRMWARE)/OvmfPkg/OvmfPkgIa32.dsc \
+		$(NEMU_PATH_EFI_FIRMWARE)/OvmfPkg/OvmfPkgIa32.fdf
+	+ $(NEMU_EFI_BUILD_CMD) \
+		--nemu-target-conf "$(NemuEfiFirmware_0_OUTDIR)/x86/Conf/target.txt" \
+		--arch IA32 \
+		--platform OvmfPkg/OvmfPkgIa32.dsc \
+		-n 1 # -v
+
+#
+# NemuEFI64
+#
+$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/target.txt: $(MAKEFILE) | $$(dir $$@) $(NEMU_EFI_BLDPROGS)
+	$(APPEND) -tn "$@" \
+		"# Automatically generated, do not edit" \
+		"" \
+		"# These variables cannot be overriden by the build.py command line." \
+		"TOOL_CHAIN_CONF = $(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/tools_def.txt" \
+		"BUILD_RULE_CONF = BaseTools/Conf/build_rule.template" \
+		"" \
+		"# These variables are overridden and this is just for show." \
+		"ACTIVE_PLATFORM = OvmfPkg/OvmfPkgX64.dsc" \
+		"TARGET          = $(NEMU_EFI_BUILD_TARGET)" \
+		"TARGET_ARCH     = X64" \
+		"TOOL_CHAIN_TAG  = $(NEMU_EFI_TOOL_CHAIN)" \
+		"MAX_CONCURRENT_THREAD_NUMBER = 1"
+
+$(NemuEfiFirmware_0_OUTDIR)/amd64/$(NEMU_EFI_OUTPUT_SUBDIR)/FV/OVMF.fd \
++ $(NemuEfiFirmwareDbg64_SOURCES): \
+		$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/target.txt \
+		$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/tools_def.txt \
+		$$(NemuEfiResetVector-amd64_1_TARGET) \
+		$(NEMU_EFI_DEPENDENCIES) \
+		$(NEMU_PATH_EFI_FIRMWARE)/OvmfPkg/OvmfPkgX64.dsc \
+		$(NEMU_PATH_EFI_FIRMWARE)/OvmfPkg/OvmfPkgX64.fdf
+	+ $(NEMU_EFI_BUILD_CMD) \
+		--nemu-target-conf "$(NemuEfiFirmware_0_OUTDIR)/amd64/Conf/target.txt" \
+		--arch X64 \
+		--platform OvmfPkg/OvmfPkgX64.dsc \
+               -n 1 # -v
+
+#
+# Some aliases.
+#
+build-efi-x86:   $$(filter %NemuEFI32.fd,$$(NemuEfiFirmware_2_STAGE_TARGETS))
+build-efi-amd64: $$(filter %NemuEFI64.fd,$$(NemuEfiFirmware_2_STAGE_TARGETS))
+

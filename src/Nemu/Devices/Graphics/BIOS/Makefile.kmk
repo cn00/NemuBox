@@ -1,0 +1,148 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the New VGA BIOS ROM.
+#
+
+#
+# Copyright (C) 2012-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+ifdef NEMU_WITH_OPEN_WATCOM
+
+ #
+ # NemuVgaBios - The VGA BIOS.
+ #
+ MISCBINS += NemuVgaBios
+ NemuVgaBios_TEMPLATE = NemuBios
+ NemuVgaBios_ASFLAGS = -0
+ NemuVgaBios_DEFS = VBE
+ NemuVgaBios_SOURCES = \
+ 	vgarom.asm \
+ 	vberom.asm \
+ 	vgabios.c \
+ 	vbe.c
+ NemuVgaBios_LDFLAGS = \
+ 	output raw offset=0xC0000 \
+ 	order \
+ 	 clname CODE  \
+	  segment VGAROM segaddr=0xC000 \
+ 	  segment _TEXT  segaddr=0xC000 offset=0xA00 \
+ 	  segment VBE32  segaddr=0xC000 offset=0x4400 \
+ 	 clname DATA \
+ 	  segment _DATA  segaddr=0xC000 offset=0x4600 \
+
+ #
+ # Updates the alternative source file.
+ #
+ update-vgabios-source +| $(PATH_SUB_CURRENT)/NemuVgaBiosAlternative.asm $(PATH_SUB_CURRENT)/NemuVgaBiosAlternative.md5sum: \
+ 		$$(NemuVgaBios_1_TARGET) \
+ 		$(NEMU_MAKE_ALTERNATIVE_SOURCE) \
+		$(NEMU_NEMUCMP)
+ if1of ($(KBUILD_TYPE), release)
+	$(NEMU_MAKE_ALTERNATIVE_SOURCE) \
+		--bios-image $< \
+		--bios-map $(basename $<).map \
+		--bios-sym $(basename $<).sym \
+               --bios-type vga \
+		--output $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.asm
+	$(QUIET)yasm -f bin -o $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.bin $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.asm
+	$(NEMU_NEMUCMP) $< $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.bin
+	$(CP) --changed -- $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.asm $(PATH_ROOT)/src/Nemu/Devices/Graphics/BIOS/NemuVgaBiosAlternative.asm
+	$(REDIRECT) -C $(dir $(NemuVgaBios_1_TARGET)) -- \
+		$(MD5SUM_EXT) -bo $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.md5sum $(notdir $(NemuVgaBios_1_TARGET))
+	$(CP) --changed -- $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.md5sum $(PATH_ROOT)/src/Nemu/Devices/Graphics/BIOS/NemuVgaBiosAlternative.md5sum
+	$(RM) -f -- $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.asm $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.bin $(NemuVgaBios_0_OUTDIR)/NemuVgaBiosAlternative.md5sum
+ else
+	$(QUIET)$(ECHO) "Fatal error: Can only update NemuVgaBiosAlternative.asm/md5sum with a release build."
+	$(QUIET)exit 1
+ endif
+
+endif # NEMU_WITH_OPEN_WATCOM
+
+
+#
+# The library containing the VGA BIOS image.
+#
+LIBRARIES += VgaBiosBin
+VgaBiosBin_TEMPLATE  = NEMUR3
+VgaBiosBin_DEFS      = IN_NEMUDD2
+VgaBiosBin_SOURCES   = \
+	$(VgaBiosBin_0_OUTDIR)/VgaBiosBin.c
+VgaBiosBin_DEPS      = \
+	$(VgaBiosBin_0_OUTDIR)/vbetables.h
+VgaBiosBin_CLEAN     = \
+	$(VgaBiosBin_0_OUTDIR)/VgaBiosBin.c \
+	$(VgaBiosBin_0_OUTDIR)/vbetables.h
+
+ifdef NEMU_WITH_OPEN_WATCOM
+ $$(VgaBiosBin_0_OUTDIR)/VgaBiosBin.c: $$(NemuVgaBios_1_TARGET) $(NEMU_BIN2C) | $$(dir $$@)
+	$(call MSG_TOOL,bin2c,VgaBiosBin,$<,$@)
+	$(QUIET)$(NEMU_BIN2C) -min 32 -max 36 -mask 0x0fff -ascii -export VgaBiosBinary $< $@
+else
+ VgaBiosBin_CLEAN    += $(VgaBiosBin_0_OUTDIR)/NemuVgaBios.rom
+
+ $$(VgaBiosBin_0_OUTDIR)/VgaBiosBin.c + $$(VgaBiosBin_0_OUTDIR)/NemuVgaBios.rom: \
+		$(PATH_SUB_CURRENT)/NemuVgaBiosAlternative.asm \
+		$(PATH_SUB_CURRENT)/NemuVgaBiosAlternative.md5sum \
+		$(NEMU_BIN2C) | $$(dir $$@)
+	$(call MSG_TOOL,bin2c,VgaBiosBin,$<,$@)
+	$(QUIET)yasm -f bin -o $(VgaBiosBin_0_OUTDIR)/NemuVgaBios.rom $<
+	$(QUIET)$(REDIRECT) -C $(VgaBiosBin_0_OUTDIR) -- \
+		$(MD5SUM_EXT) -c $(basename $<).md5sum
+	$(QUIET)$(NEMU_BIN2C) -min 32 -max 36 -mask 0x0fff -ascii -export VgaBiosBinary $(VgaBiosBin_0_OUTDIR)/NemuVgaBios.rom $@
+	$(QUIET)$(RM) -f -- $$(VgaBiosBin_0_OUTDIR)/NemuVgaBios.rom
+endif
+
+
+# Rule for making the vbetables.h that DevVGA uses.
+$$(VgaBiosBin_0_OUTDIR)/vbetables.h: $(MAKEFILE_CURRENT) $$(vbetables-gen_1_TARGET) | $$(dir $$@)
+	$(QUIET)$(REDIRECT) -wo $@ -- $(vbetables-gen_1_TARGET)
+
+
+#
+# The VBE tables.
+#
+BLDPROGS += vbetables-gen
+vbetables-gen_TEMPLATE = NemuBldProg
+vbetables-gen_SOURCES  = vbetables-gen.c
+vbetables-gen_CLEAN    = $(vbetables-gen)
+
+
+#
+# The VGA BIOS Logo.
+#
+LIBRARIES += VgaDefBiosLogo
+VgaDefBiosLogo_TEMPLATE  = NEMUR3
+VgaDefBiosLogo_INCS      = $(NEMU_PATH_DEVICES_SRC)
+VgaDefBiosLogo_SOURCES   = $(VgaDefBiosLogo_0_OUTDIR)/VgaDefBiosLogo.c
+VgaDefBiosLogo_CLEAN     = $(VgaDefBiosLogo_0_OUTDIR)/VgaDefBiosLogo.c
+
+# Rule for making the bios logo.
+$$(VgaDefBiosLogo_0_OUTDIR)/VgaDefBiosLogo.c: $(NEMU_BRAND_BIOS_LOGO) $(NEMU_BIN2C) | $$(dir $$@)
+	$(call MSG_TOOL,bin2c,VgaDefBiosLogo,$<,$@)
+	$(QUIET)$(NEMU_BIN2C) VgaDefBiosLogo $< $@
+
+
+ifdef NEMU_WITH_OPEN_WATCOM
+ #
+ # Install the symbol file for the BIOS.
+ #
+ INSTALLS += NemuVgaBiosSym
+ NemuVgaBiosSym_TEMPLATE = NemuDbgSyms
+ NemuVgaBiosSym_SOURCES = $(basename $(NemuVgaBios_1_TARGET)).sym
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

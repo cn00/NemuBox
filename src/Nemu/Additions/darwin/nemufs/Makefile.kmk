@@ -1,0 +1,57 @@
+# $Id: Makefile.kmk $
+#
+# VirtualBox Shared Folders driver
+#
+# Copyright (C) 2007-2013 Oracle Corporation
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# mount.nemuvfs - The Shared Folders mouning tool
+#
+PROGRAMS += mount.nemuvfs
+mount.nemuvfs_TEMPLATE = NewNemuGuestR3Exe
+mount.nemuvfs_SOURCES  = mount.nemuvfs.c
+mount.nemuvfs_INST     = $(INST_ADDITIONS)NemuVFS.kext/Contents/MacOS/
+
+#
+# nemuvfs - The Shared Folders Driver
+#
+SYSMODS              += NemuVFS
+NemuVFS_TEMPLATE      = NEMUGUESTR0
+NemuVFS_DEFS          = NEMU_WITH_HGCM
+NemuVFS_LIBS          = $(NEMU_LIB_VBGL_R0)
+#                        $(NEMU_LIB_IPRT_GUEST_R0)
+
+NemuVFS_SOURCES       = NemuVFS.cpp \
+                        NemuVFS-VFSOps.cpp \
+                        NemuVFS-VNODEOps.cpp \
+                        NemuVFS-utils.cpp
+
+NemuVFS_INST          = $(INST_ADDITIONS)NemuVFS.kext/Contents/MacOS/
+
+# Files necessary to make a darwin kernel extension bundle.
+INSTALLS += NemuVFS.kext
+NemuVFS.kext_INST     = $(INST_ADDITIONS)NemuVFS.kext/Contents/
+NemuVFS.kext_SOURCES  = $(NemuVFS.kext_0_OUTDIR)/Info.plist
+NemuVFS.kext_CLEAN    = $(NemuVFS.kext_0_OUTDIR)/Info.plist
+
+$$(NemuVFS.kext_0_OUTDIR)/Info.plist: \
+        $(PATH_SUB_CURRENT)/Info.plist \
+        $(NEMU_VERSION_MK) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuVFS,$@,$<)
+	    $(QUIET)$(RM) -f $@
+	    $(QUIET)$(SED) \
+	    -e 's/@NEMU_VERSION_STRING@/$(NEMU_VERSION_STRING)/g' \
+	    -e 's/@NEMU_VERSION_MAJOR@/$(NEMU_VERSION_MAJOR)/g' \
+	    -e 's/@NEMU_VERSION_MINOR@/$(NEMU_VERSION_MINOR)/g' \
+	    -e 's/@NEMU_VERSION_BUILD@/$(NEMU_VERSION_BUILD)/g' \
+	    -e 's/@NEMU_VENDOR@/$(NEMU_VENDOR)/g' \
+	    -e 's/@NEMU_PRODUCT@/$(NEMU_PRODUCT)/g' \
+	    -e 's/@NEMU_C_YEAR@/$(NEMU_C_YEAR)/g' \
+	    --output $@ \
+	    $<
+
+include $(FILE_KBUILD_SUB_FOOTER)

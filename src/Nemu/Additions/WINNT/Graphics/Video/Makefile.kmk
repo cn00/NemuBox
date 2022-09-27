@@ -1,0 +1,417 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Windows guest video driver.
+#
+
+#
+# Copyright (C) 2011-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include sub-makefiles.
+include $(PATH_SUB_CURRENT)/mp/Makefile.kmk
+include $(PATH_SUB_CURRENT)/disp/Makefile.kmk
+
+#
+# Install the inf & cat.
+# This has to be done here since it depends on both the
+# miniport driver and the display dll.
+#
+INSTALLS += NemuVideo-inf
+NemuVideo-inf_INST = $(INST_ADDITIONS)
+NemuVideo-inf_MODE = a+r,u+w
+NemuVideo-inf_SOURCES = \
+	$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.inf
+ifdef NEMU_SIGN_ADDITIONS
+ NemuVideo-inf_SOURCES += \
+ 	$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.sys \
+ 	$(PATH_TARGET)/NemuVideoCat.dir/NemuDisp.dll \
+ 	$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.cat
+endif
+NemuVideo-inf_CLEAN = $(NemuVideo-inf_SOURCES)
+NemuVideo-inf_BLDDIRS = \
+	$(PATH_TARGET)/NemuVideoCat.dir
+
+$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.inf: $(PATH_SUB_CURRENT)/mp/xpdm/NemuVideo.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuVideo-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.sys: $$(NemuVideo_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+$(PATH_TARGET)/NemuVideoCat.dir/NemuDisp.dll: $$(NemuDisp_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.cat: \
+		$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.inf \
+		$(PATH_TARGET)/NemuVideoCat.dir/NemuVideo.sys \
+		$(PATH_TARGET)/NemuVideoCat.dir/NemuDisp.dll
+	$(call MSG_TOOL,Inf2Cat,NemuVideo-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+
+ifdef NEMU_WITH_WDDM
+ NEMUWDDM_WITH_DISPD3D = 1
+ ifdef NEMU_WITH_CROGL
+  NEMUWDDM_WITH_GL = 1
+ endif
+
+ #
+ # Install the inf & cat.
+ # This has to be done here since it depends on both the
+ # miniport driver and the display dll.
+ #
+ INSTALLS += NemuVideoWddm-inf
+ NemuVideoWddm-inf_INST = $(INST_ADDITIONS)
+ NemuVideoWddm-inf_MODE = a+r,u+w
+ NemuVideoWddm-inf_SOURCES = \
+ 	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.inf
+ ifdef NEMU_SIGN_ADDITIONS
+  NemuVideoWddm-inf_SOURCES += \
+  	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.sys \
+  	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.cat
+
+  ifdef NEMUWDDM_WITH_DISPD3D
+   NemuVideoWddm-inf_SOURCES += \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuDispD3D.dll
+   NemuVideoWddm-inf_SOURCES.amd64 += \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuDispD3D-x86.dll
+  endif # NEMUWDDM_WITH_DISPD3D
+
+  ifdef NEMUWDDM_WITH_GL
+   NemuVideoWddm-inf_SOURCES += \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGL.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuD3D9wddm.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/wined3dwddm.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLarrayspu.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLcrutil.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLerrorspu.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLfeedbackspu.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpackspu.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpassthroughspu.dll
+   NemuVideoWddm-inf_SOURCES.amd64 += \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGL-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuD3D9wddm-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/wined3dwddm-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLarrayspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLcrutil-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLerrorspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLfeedbackspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpackspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpassthroughspu-x86.dll
+  endif # NEMUWDDM_WITH_GL
+
+ endif # signing
+ NemuVideoWddm-inf_CLEAN = $(NemuVideoWddm-inf_SOURCES)
+ NemuVideoWddm-inf_BLDDIRS = \
+ 	$(PATH_TARGET)/NemuVideoWddmCat.dir
+
+ NEMUWDDM_EDIT_INF_DISPD3D_FN_ARG = $(if $(NEMUWDDM_WITH_DISPD3D),-e 's/^;dispd3d  *//', -e '/^;dispd3d /d')
+ NEMUWDDM_EDIT_INF_GL_FN_ARG      = $(if $(NEMUWDDM_WITH_GL),-e 's/^;gl  *//', -e '/^;gl /d')
+
+ $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.inf: \
+		$(PATH_SUB_CURRENT)/mp/wddm/NemuVideoWddm.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuVideoWddm-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@ $(NEMUWDDM_EDIT_INF_DISPD3D_FN_ARG) $(NEMUWDDM_EDIT_INF_GL_FN_ARG))
+
+ $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.sys: $$(NemuVideoWddm_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+ ifdef NEMUWDDM_WITH_DISPD3D
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuDispD3D.dll: $$(NemuDispD3D_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  ifeq ($(KBUILD_TARGET_ARCH),amd64)
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuDispD3D-x86.dll: $$(NemuDispD3D-x86_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+  endif
+ endif # NEMUWDDM_WITH_DISPD3D
+
+ ifdef NEMUWDDM_WITH_GL
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGL.dll: $(PATH_OBJ)/NemuOGL/NemuOGL.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuD3D9wddm.dll: $(PATH_OBJ)/NemuD3D9wddm/NemuD3D9wddm.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/wined3dwddm.dll: $(PATH_OBJ)/wined3dwddm/wined3dwddm.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLarrayspu.dll: $(PATH_OBJ)/NemuOGLarrayspu/NemuOGLarrayspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLcrutil.dll: $(PATH_OBJ)/NemuOGLcrutil/NemuOGLcrutil.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLerrorspu.dll: $(PATH_OBJ)/NemuOGLerrorspu/NemuOGLerrorspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLfeedbackspu.dll: $(PATH_OBJ)/NemuOGLfeedbackspu/NemuOGLfeedbackspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpackspu.dll: $(PATH_OBJ)/NemuOGLpackspu/NemuOGLpackspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpassthroughspu.dll: $(PATH_OBJ)/NemuOGLpassthroughspu/NemuOGLpassthroughspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  ifeq ($(KBUILD_TARGET_ARCH),amd64)
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGL-x86.dll: $(PATH_OBJ)/NemuOGL-x86/NemuOGL-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuD3D9wddm-x86.dll: $(PATH_OBJ)/NemuD3D9wddm-x86/NemuD3D9wddm-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/wined3dwddm-x86.dll: $(PATH_OBJ)/wined3dwddm-x86/wined3dwddm-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLarrayspu-x86.dll: $(PATH_OBJ)/NemuOGLarrayspu-x86/NemuOGLarrayspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLcrutil-x86.dll: $(PATH_OBJ)/NemuOGLcrutil-x86/NemuOGLcrutil-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLerrorspu-x86.dll: $(PATH_OBJ)/NemuOGLerrorspu-x86/NemuOGLerrorspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLfeedbackspu-x86.dll: $(PATH_OBJ)/NemuOGLfeedbackspu-x86/NemuOGLfeedbackspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpackspu-x86.dll: $(PATH_OBJ)/NemuOGLpackspu-x86/NemuOGLpackspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpassthroughspu-x86.dll: $(PATH_OBJ)/NemuOGLpassthroughspu-x86/NemuOGLpassthroughspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+  endif # ($(KBUILD_TARGET_ARCH), amd64)
+ endif # NEMUWDDM_WITH_GL
+
+ $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.cat: \
+		$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.inf \
+		$(PATH_TARGET)/NemuVideoWddmCat.dir/NemuVideoWddm.sys \
+		$(if $(NEMUWDDM_WITH_DISPD3D), $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuDispD3D.dll, ) \
+		$(if $(NEMUWDDM_WITH_DISPD3D), $(if-expr "$(KBUILD_TARGET_ARCH)" == "amd64", $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuDispD3D-x86.dll, ), ) \
+		$(if $(NEMUWDDM_WITH_GL),  $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGL.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuD3D9wddm.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/wined3dwddm.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLarrayspu.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLcrutil.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLerrorspu.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLfeedbackspu.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpackspu.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpassthroughspu.dll, ) \
+		$(if $(NEMUWDDM_WITH_GL), $(if-expr "$(KBUILD_TARGET_ARCH)" == "amd64", \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGL-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuD3D9wddm-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/wined3dwddm-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLarrayspu-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLcrutil-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLerrorspu-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLfeedbackspu-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpackspu-x86.dll \
+					   $(PATH_TARGET)/NemuVideoWddmCat.dir/NemuOGLpassthroughspu-x86.dll, ), )
+	$(call MSG_TOOL,Inf2Cat,NemuVideoWddm-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+
+ ifdef NEMU_WITH_WDDM_W8
+  NEMUWDDMW8_WITH_DISPD3D = 1
+  ifdef NEMU_WITH_CROGL
+   NEMUWDDMW8_WITH_GL = 1
+  endif
+
+  INSTALLS += NemuVideoW8-inf
+  NemuVideoW8-inf_INST = $(INST_ADDITIONS)
+  NemuVideoW8-inf_MODE = a+r,u+w
+
+  NemuVideoW8-inf_SOURCES = \
+  	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.inf
+  ifdef NEMU_SIGN_ADDITIONS
+   NemuVideoW8-inf_SOURCES += \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.sys \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.cat
+   if defined(NEMUWDDMW8_WITH_DISPD3D) && !defined(NEMUWDDM_WITH_DISPD3D)
+    NemuVideoW8-inf_SOURCES += \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuDispD3D.dll
+    NemuVideoW8-inf_SOURCES.amd64 += \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuDispD3D-x86.dll
+   endif
+   if defined(NEMUWDDMW8_WITH_GL) && !defined(NEMUWDDM_WITH_GL)
+    NemuVideoW8-inf_SOURCES += \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu.dll
+    NemuVideoW8-inf_SOURCES.amd64 += \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu-x86.dll \
+    	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu-x86.dll
+   endif # NEMUWDDMW8_WITH_GL
+  endif # NEMU_SIGN_ADDITIONS
+
+  NemuVideoW8-inf_CLEAN = $(NemuVideoW8-inf_SOURCES)
+  if defined(NEMUWDDMW8_WITH_DISPD3D) && defined(NEMUWDDM_WITH_DISPD3D)
+   NemuVideoW8-inf_CLEAN += \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu.dll
+  endif
+  if defined(NEMUWDDMW8_WITH_GL) && !defined(NEMUWDDM_WITH_GL)
+   NemuVideoW8-inf_CLEAN += \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu.dll
+   NemuVideoW8-inf_CLEAN.amd64 += \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu-x86.dll \
+   	$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu-x86.dll
+  endif
+  NemuVideoW8-inf_BLDDIRS = \
+      $(PATH_TARGET)/NemuVideoW8Cat.dir
+
+  NEMUWDDMW8_EDIT_INF_DISPD3D_FN_ARG = $(if $(NEMUWDDMW8_WITH_DISPD3D),-e 's/^;dispd3d  *//', -e '/^;dispd3d /d')
+  NEMUWDDMW8_EDIT_INF_GL_FN_ARG      = $(if $(NEMUWDDMW8_WITH_GL),-e 's/^;gl  *//', -e '/^;gl /d')
+  NEMUWDDMW8_EDIT_INF_ICD_FN_ARG     = $(if $(NEMUWDDMW8_WITH_ICD),-e 's/^;icd  *//', -e '/^;icd /d')
+
+  $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.inf: $(PATH_SUB_CURRENT)/mp/wddm/NemuVideoW8.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuVideoW8-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@ $(NEMUWDDMW8_EDIT_INF_DISPD3D_FN_ARG) $(NEMUWDDMW8_EDIT_INF_GL_FN_ARG) $(NEMUWDDMW8_EDIT_INF_ICD_FN_ARG))
+
+  $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.sys: $$(NemuVideoW8_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  ifdef NEMUWDDMW8_WITH_DISPD3D
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuDispD3D.dll: $$(NemuDispD3D_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   ifeq ($(KBUILD_TARGET_ARCH),amd64)
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuDispD3D-x86.dll: $$(NemuDispD3D-x86_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+   endif # ($(KBUILD_TARGET_ARCH), amd64)
+  endif # NEMUWDDMW8_WITH_DISPD3D
+
+  ifdef NEMUWDDMW8_WITH_GL
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL.dll: $(PATH_OBJ)/NemuOGL/NemuOGL.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm.dll: $(PATH_OBJ)/NemuD3D9wddm/NemuD3D9wddm.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm.dll: $(PATH_OBJ)/wined3dwddm/wined3dwddm.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu.dll: $(PATH_OBJ)/NemuOGLarrayspu/NemuOGLarrayspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil.dll: $(PATH_OBJ)/NemuOGLcrutil/NemuOGLcrutil.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu.dll: $(PATH_OBJ)/NemuOGLerrorspu/NemuOGLerrorspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu.dll: $(PATH_OBJ)/NemuOGLfeedbackspu/NemuOGLfeedbackspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu.dll: $(PATH_OBJ)/NemuOGLpackspu/NemuOGLpackspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu.dll: $(PATH_OBJ)/NemuOGLpassthroughspu/NemuOGLpassthroughspu.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+   ifeq ($(KBUILD_TARGET_ARCH), amd64)
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL-x86.dll: $(PATH_OBJ)/NemuOGL-x86/NemuOGL-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm-x86.dll: $(PATH_OBJ)/NemuD3D9wddm-x86/NemuD3D9wddm-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm-x86.dll: $(PATH_OBJ)/wined3dwddm-x86/wined3dwddm-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu-x86.dll: $(PATH_OBJ)/NemuOGLarrayspu-x86/NemuOGLarrayspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil-x86.dll: $(PATH_OBJ)/NemuOGLcrutil-x86/NemuOGLcrutil-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu-x86.dll: $(PATH_OBJ)/NemuOGLerrorspu-x86/NemuOGLerrorspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu-x86.dll: $(PATH_OBJ)/NemuOGLfeedbackspu-x86/NemuOGLfeedbackspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu-x86.dll: $(PATH_OBJ)/NemuOGLpackspu-x86/NemuOGLpackspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+    $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu-x86.dll: $(PATH_OBJ)/NemuOGLpassthroughspu-x86/NemuOGLpassthroughspu-x86.dll | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+   endif # ($(KBUILD_TARGET_ARCH), amd64)
+  endif # NEMUWDDMW8_WITH_GL
+
+  $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.cat: \
+		$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.inf \
+		$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuVideoW8.sys \
+		$(if $(NEMUWDDMW8_WITH_DISPD3D), $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuDispD3D.dll, ) \
+		$(if $(NEMUWDDMW8_WITH_DISPD3D), $(if-expr "$(KBUILD_TARGET_ARCH)" == "amd64", $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuDispD3D-x86.dll, ), ) \
+		$(if $(NEMUWDDMW8_WITH_GL),  $(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu.dll, ) \
+		$(if $(NEMUWDDMW8_WITH_GL), $(if-expr "$(KBUILD_TARGET_ARCH)" == "amd64", \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGL-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuD3D9wddm-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/wined3dwddm-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLarrayspu-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLcrutil-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLerrorspu-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLfeedbackspu-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpackspu-x86.dll \
+				$(PATH_TARGET)/NemuVideoW8Cat.dir/NemuOGLpassthroughspu-x86.dll, ), )
+	$(call MSG_TOOL,Inf2Cat,NemuVideoW8-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+
+ endif # NEMU_WITH_WDDM_W8
+endif # NEMU_WITH_WDDM
+
+include $(FILE_KBUILD_SUB_FOOTER)

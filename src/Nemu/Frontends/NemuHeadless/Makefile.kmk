@@ -1,0 +1,69 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the headless frontend.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+
+#
+# Targets.
+#
+ifdef NEMU_WITH_HARDENING
+ PROGRAMS += NemuHeadlessHardened
+ DLLS += NemuHeadless
+else
+ PROGRAMS += NemuHeadless
+endif
+
+
+#
+# Hardened NemuHeadless.
+#
+NemuHeadlessHardened_TEMPLATE = NEMUR3HARDENEDEXE
+NemuHeadlessHardened_SOURCES = NemuHeadlessHardened.cpp
+NemuHeadlessHardened_SOURCES.win = $(NemuHeadless_0_OUTDIR)/NemuHeadless-icon.rc
+NemuHeadlessHardened_NAME = NemuHeadless
+
+
+#
+# NemuHeadless
+#
+NemuHeadless_TEMPLATE  := $(if $(NEMU_WITH_HARDENING),NEMUMAINCLIENTDLL,NEMUMAINCLIENTEXE)
+NemuHeadless_DEFS      += $(if $(NEMU_WITH_VPX),NEMU_WITH_VPX,)
+NemuHeadless_SOURCES    = NemuHeadless.cpp
+ifdef NEMU_WITH_GUEST_PROPS
+ NemuHeadless_DEFS     += NEMU_WITH_GUEST_PROPS
+endif
+ifdef NEMU_WITH_HARDENING
+ NemuHeadless_LDFLAGS.darwin += -install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuHeadless.dylib
+endif
+
+
+ifeq ($(KBUILD_TARGET),win)
+# Icon include file.
+NemuHeadless_SOURCES   += NemuHeadless.rc
+NemuHeadless.rc_INCS    = $(NemuHeadless_0_OUTDIR)
+NemuHeadless.rc_DEPS    = $(NemuHeadless_0_OUTDIR)/NemuHeadless-icon.rc
+NemuHeadless.rc_CLEAN   = $(NemuHeadless_0_OUTDIR)/NemuHeadless-icon.rc
+$$(NemuHeadless_0_OUTDIR)/NemuHeadless-icon.rc: $(NEMU_WINDOWS_ICON_FILE) $$(NemuHeadless_DEFPATH)/Makefile.kmk | $$(dir $$@)
+	$(RM) -f $@
+	$(APPEND) $@ 'IDI_VIRTUALBOX ICON DISCARDABLE "$(subst /,\\,$(NEMU_WINDOWS_ICON_FILE))"'
+endif # win
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

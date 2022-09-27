@@ -1,0 +1,221 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the common guest addition code library.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Target config.
+#
+if defined(NEMU_WITH_ADDITION_DRIVERS) && !defined(NEMU_ONLY_VALIDATIONKIT)
+ LIBRARIES += \
+ 	NemuGuestR0Lib \
+ 	NemuGuestR0LibBase
+endif
+LIBRARIES += \
+	NemuGuestR3Lib \
+	NemuGuestR3LibShared
+ifndef NEMU_ONLY_VALIDATIONKIT
+ if1of ($(KBUILD_TARGET), freebsd linux netbsd openbsd)
+  LIBRARIES += \
+  	NemuGuestR3LibXFree86
+ endif
+ if1of ($(KBUILD_TARGET), freebsd linux netbsd openbsd solaris)
+  LIBRARIES += \
+  	NemuGuestR3LibXOrg
+ endif
+endif
+LIBRARIES.win.amd64 += NemuGuestR3Lib-x86 NemuGuestR3LibShared-x86
+
+
+#
+# NemuGuestR0Lib
+#
+NemuGuestR0Lib_TEMPLATE     = NEMUGUESTR0LIB
+NemuGuestR0Lib_DEFS         = NEMU_WITH_HGCM \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NEMU_WITH_DRAG_AND_DROP,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,)
+NemuGuestR0Lib_INCS         = \
+	$(NemuGuestR0Lib_0_OUTDIR)
+NemuGuestR0Lib_SOURCES      = \
+	GenericRequest.cpp \
+	SysHlp.cpp \
+	PhysHeap.cpp \
+	Init.cpp \
+	Mouse.cpp \
+	VMMDev.cpp \
+	HGCM.cpp \
+	NemuGuestR0LibSharedFolders.c \
+	NemuGuestR0LibCrOgl.cpp \
+	VbglR0CanUsePhysPageList.cpp
+
+#
+# NemuGuestR0LibBase
+#
+NemuGuestR0LibBase_TEMPLATE = NEMUGUESTR0LIB
+NemuGuestR0LibBase_DEFS     = NEMU_WITH_HGCM VBGL_NEMUGUEST \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NEMU_WITH_DRAG_AND_DROP,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,)
+NemuGuestR0LibBase_INCS     = $(NemuGuestR0Lib_INCS)
+NemuGuestR0LibBase_INCS.win = $(NemuGuestR0Lib_INCS.win)
+NemuGuestR0LibBase_SOURCES  = \
+	GenericRequest.cpp \
+	SysHlp.cpp \
+	PhysHeap.cpp \
+	Init.cpp \
+	VMMDev.cpp \
+	HGCMInternal.cpp \
+	VbglR0CanUsePhysPageList.cpp
+
+#
+# NemuGuestR3Lib
+#
+NemuGuestR3Lib_TEMPLATE    = NEMUGUESTR3LIB
+NemuGuestR3Lib_DEFS        = \
+	NEMU_WITH_HGCM \
+	$(if $(NEMU_WITH_GUEST_PROPS),NEMU_WITH_GUEST_PROPS,) \
+	$(if $(NEMU_WITH_SHARED_FOLDERS),NEMU_WITH_SHARED_FOLDERS,) \
+	$(if $(NEMU_WITH_GUEST_CONTROL),NEMU_WITH_GUEST_CONTROL,)
+NemuGuestR3Lib_SOURCES     = \
+	NemuGuestR3Lib.cpp \
+	NemuGuestR3LibAdditions.cpp \
+	NemuGuestR3LibAutoLogon.cpp \
+	NemuGuestR3LibBalloon.cpp \
+	NemuGuestR3LibClipboard.cpp \
+	NemuGuestR3LibCoreDump.cpp \
+	NemuGuestR3LibCpuHotPlug.cpp \
+	NemuGuestR3LibCredentials.cpp \
+	NemuGuestR3LibEvent.cpp \
+	NemuGuestR3LibGuestUser.cpp \
+	NemuGuestR3LibGR.cpp \
+	NemuGuestR3LibHostChannel.cpp \
+	NemuGuestR3LibLog.cpp \
+	NemuGuestR3LibMisc.cpp \
+	NemuGuestR3LibStat.cpp \
+	NemuGuestR3LibTime.cpp \
+ 	NemuGuestR3LibModule.cpp \
+ 	NemuGuestR3LibPidFile.cpp
+ifneq ($(KBUILD_TARGET),win) ## @todo get rid of this hack (as soon as it's all implemented / #defined).
+ NemuGuestR3Lib_SOURCES   += \
+ 	NemuGuestR3LibDaemonize.cpp \
+ 	NemuGuestR3LibMouse.cpp \
+ 	NemuGuestR3LibSeamless.cpp \
+ 	NemuGuestR3LibVideo.cpp
+endif
+ifdef NEMU_WITH_GUEST_PROPS
+ NemuGuestR3Lib_SOURCES   += \
+ 	NemuGuestR3LibGuestProp.cpp \
+ 	NemuGuestR3LibHostVersion.cpp
+endif
+ifdef NEMU_WITH_SHARED_FOLDERS
+ NemuGuestR3Lib_SOURCES   += \
+ 	NemuGuestR3LibSharedFolders.cpp
+endif
+ifdef NEMU_WITH_GUEST_CONTROL
+ NemuGuestR3Lib_SOURCES   += \
+ 	NemuGuestR3LibGuestCtrl.cpp
+endif
+ifdef NEMU_WITH_DRAG_AND_DROP
+ NemuGuestR3Lib_DEFS      += \
+    NEMU_WITH_DRAG_AND_DROP \
+    $(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,)
+ NemuGuestR3Lib_SOURCES   += \
+ 	NemuGuestR3LibDragAndDrop.cpp
+endif
+
+NemuGuestR3LibAdditions.cpp_DEFS = NEMU_SVN_REV=$(NEMU_SVN_REV)
+
+#
+# NemuGuestR3LibShared - a PIC variant of NemuGuestR3Lib for linking into .so/.dll/.dylib.
+#
+NemuGuestR3LibShared_TEMPLATE = NEMUGUESTR3DLL
+NemuGuestR3LibShared_DEFS    := $(NemuGuestR3Lib_DEFS)
+NemuGuestR3LibShared_SOURCES := $(NemuGuestR3Lib_SOURCES)
+NemuGuestR3LibShared_INST    := $(INST_ADDITIONS_LIB)
+
+
+#
+# NemuGuestR3Lib-x86 - an x86 (32-bit) variant of NemuGuestR3Lib for 64-bit Windows.
+#
+NemuGuestR3Lib-x86_EXTENDS      := NemuGuestR3Lib
+NemuGuestR3Lib-x86_BLD_TRG_ARCH := x86
+
+
+#
+# NemuGuestR3LibShared-x86 - an x86 (32-bit) variant of NemuGuestR3LibShared for 64-bit Windows.
+#
+NemuGuestR3LibShared-x86_EXTENDS      := NemuGuestR3LibShared
+NemuGuestR3LibShared-x86_BLD_TRG_ARCH := x86
+
+
+#
+# NemuGuestR3LibXFree86 - a reduced version of the guest library which uses
+# the X server runtime instead of IPRT, for use with old servers where the
+# C library is not available.
+#
+NemuGuestR3LibXFree86_TEMPLATE = NEMUGUESTR3XF86LIB
+NemuGuestR3LibXFree86_DEFS     = \
+	NEMU_WITH_HGCM \
+	NEMU_VBGLR3_XFREE86 \
+	RTMEM_NO_WRAP_TO_EF_APIS \
+	$(if $(NEMU_WITH_GUEST_PROPS),NEMU_WITH_GUEST_PROPS,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NEMU_WITH_DRAG_AND_DROP,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,)
+NemuGuestR3LibXFree86_SOURCES  = \
+	NemuGuestR3Lib.cpp \
+	NemuGuestR3LibGR.cpp \
+	$(if $(NEMU_WITH_GUEST_PROPS),NemuGuestR3LibGuestProp.cpp,) \
+	NemuGuestR3LibMouse.cpp \
+	NemuGuestR3LibMisc.cpp \
+	NemuGuestR3LibSeamless.cpp \
+	NemuGuestR3LibVideo.cpp \
+	NemuGuestR3LibRuntimeXF86.cpp
+NemuGuestR3LibXFree86_INCS     = \
+        $(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/common/ \
+        $(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/hw/xfree86/os-support \
+        $(NEMU_PATH_X11_XFREE_4_3)/programs/Xserver/include \
+        $(NEMU_PATH_X11_XFREE_4_3)/include \
+        $(NEMU_PATH_X11_XFREE_4_3)/exports/include/X11
+
+#
+# NemuGuestR3LibXOrg - a reduced version of the guest library which uses
+# the C server runtime instead of IPRT.
+#
+NemuGuestR3LibXOrg_TEMPLATE = NEMUGUESTR3XORGLIB
+NemuGuestR3LibXOrg_DEFS     = \
+	NEMU_WITH_HGCM \
+	NEMU_VBGLR3_XORG \
+	RTMEM_NO_WRAP_TO_EF_APIS \
+	IN_RT_STATIC \
+	$(if $(NEMU_WITH_GUEST_PROPS),NEMU_WITH_GUEST_PROPS,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NEMU_WITH_DRAG_AND_DROP,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,)
+NemuGuestR3LibXOrg_SOURCES  = $(NemuGuestR3LibXFree86_SOURCES)
+
+NemuGuestR3LibRuntimeXF86.cpp_CXXFLAGS = -Wno-shadow
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

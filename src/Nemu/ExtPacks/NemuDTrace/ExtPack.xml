@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<VirtualBoxExtensionPack xmlns="http://www.virtualbox.org/VirtualBoxExtensionPack" version="1.0">
+    <Name>Oracle NemuDTrace Extension Pack</Name>
+    <Description>Experimental and unsupported extension pack providing DTrace features to VirtualBox.</Description>
+    <Version revision="@NEMU_SVN_REV@">@NEMU_VERSION_STRING@</Version>
+    <MainModule>NemuDTraceMain</MainModule>
+</VirtualBoxExtensionPack>
+

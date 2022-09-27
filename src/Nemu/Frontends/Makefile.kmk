@@ -1,0 +1,51 @@
+# $Id: Makefile.kmk $
+## @file
+# Top-level makefile for the Nemu frontends.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include Sub-Makefiles
+ifdef NEMU_WITH_MAIN
+ include $(PATH_SUB_CURRENT)/NemuManage/Makefile.kmk
+endif
+ifndef NEMU_ONLY_DOCS
+ ifdef NEMU_WITH_MAIN
+  include $(PATH_SUB_CURRENT)/NemuBalloonCtrl/Makefile.kmk
+  include $(PATH_SUB_CURRENT)/NemuAutostart/Makefile.kmk
+ endif
+ ifdef NEMU_WITH_NEMUSDL
+  include $(PATH_SUB_CURRENT)/NemuSDL/Makefile.kmk
+ endif
+ ifdef NEMU_WITH_NEMUFB
+  include $(PATH_SUB_CURRENT)/NemuFB/Makefile.kmk
+ endif
+ ifdef NEMU_WITH_HEADLESS
+  include $(PATH_SUB_CURRENT)/NemuHeadless/Makefile.kmk
+ endif
+ ifdef NEMU_WITH_QTGUI
+  include $(PATH_SUB_CURRENT)/VirtualBox/Makefile.kmk
+ endif
+ include $(PATH_SUB_CURRENT)/Common/Makefile.kmk
+endif # !NEMU_ONLY_DOCS
+
+## @todo Include Python shell into binary delivery?
+ifdef NEMU_ONLY_SDK
+ include $(PATH_SUB_CURRENT)/NemuShell/Makefile.kmk
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

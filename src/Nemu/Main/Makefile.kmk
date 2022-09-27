@@ -1,0 +1,1276 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the Nemu Main module.
+#
+
+#
+# Copyright (C) 2004-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Make sure our Config.kmk is included.
+#
+ifndef NEMU_MAIN_CONFIG_KMK_INCLUDED
+ include $(PATH_SUB_CURRENT)/Config.kmk
+endif
+
+#
+# Include sub-makefile(s).
+#
+ifdef NEMU_WITH_WEBSERVICES
+ include $(PATH_SUB_CURRENT)/webservice/Makefile.kmk
+endif
+include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+include $(PATH_SUB_CURRENT)/cbinding/Makefile.kmk
+
+
+#
+# Targets and globals (bit of a mess...)
+#
+NEMU_PATH_MAIN_SRC := $(PATH_SUB_CURRENT)
+
+ifdef NEMU_ONLY_SDK
+ # I'm Evil! Dr. Evil.
+ NemuCOM_0_OUTDIR = $(PATH_TARGET)/NemuCOM
+ BLDDIRS += $(NemuCOM_0_OUTDIR) $(PATH_STAGE_BIN)/components
+ include $(KBUILD_PATH)/tools/$(NEMU_VCC_TOOL).kmk # For the idl /cpp statement.
+ include $(KBUILD_PATH)/sdks/$(NEMU_WINPSDK).kmk
+endif # !NEMU_ONLY_SDK
+
+
+# Construct NEMU_MAIN_DEFS
+## @todo eliminate or expand NEMU_MAIN_DEFS.
+NEMU_MAIN_DEFS   =
+ifneq ($(KBUILD_TARGET),win)
+ ifndef NEMU_WITH_XPCOM
+  $(error "Nemu: NEMU_WITH_XPCOM isn't defined")
+ endif
+ NEMU_MAIN_DEFS += NEMU_WITH_GENERIC_SESSION_WATCHER
+endif
+NEMU_MAIN_DEFS += \
+	$(if $(NEMU_WITH_RAW_MODE),NEMU_WITH_RAW_MODE,) \
+	$(if $(NEMU_WITH_RAW_RING1),NEMU_WITH_RAW_RING1,) \
+	$(if $(NEMU_WITH_VMSVGA),NEMU_WITH_VMSVGA,) \
+	$(if $(NEMU_WITH_VMSVGA3D),NEMU_WITH_VMSVGA3D,) \
+	$(if $(NEMU_WITH_NETFLT),NEMU_WITH_NETFLT,) \
+	$(if $(NEMU_WITH_COPYTOGUEST),NEMU_WITH_COPYTOGUEST,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NEMU_WITH_DRAG_AND_DROP,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,) \
+	$(if $(NEMU_WITH_CROGL),NEMU_WITH_CROGL,) \
+	$(if $(NEMU_WITH_CRHGSMI),NEMU_WITH_CRHGSMI,) \
+	$(if $(NEMU_WITH_GUEST_PROPS),NEMU_WITH_GUEST_PROPS,) \
+	$(if $(NEMU_WITH_GUEST_PROPS_RDONLY_GUEST),NEMU_WITH_GUEST_PROPS_RDONLY_GUEST,) \
+	$(if $(NEMU_WITH_GUEST_CONTROL),NEMU_WITH_GUEST_CONTROL,) \
+	$(if $(NEMU_WITH_USB_CARDREADER),NEMU_WITH_USB_CARDREADER,) \
+	$(if $(NEMU_WITH_USB_CARDREADER_TEST),NEMU_WITH_USB_CARDREADER_TEST,) \
+	$(if $(NEMU_WITH_HOSTNETIF_API),NEMU_WITH_HOSTNETIF_API,) \
+
+# Unconditionally enable the new semaphore key generation code
+NEMU_MAIN_DEFS += NEMU_WITH_NEW_SYS_V_KEYGEN
+
+NEMU_IDL_FILE.MSCOM    = $(NEMU_PATH_SDK)/bindings/mscom/idl/VirtualBox.idl
+NEMU_IDL_FILE.XPCOM    = $(NEMU_PATH_SDK)/bindings/xpcom/idl/VirtualBox_XPCOM.idl
+
+NEMU_IDL_TYPELIB.XPCOM = $(PATH_STAGE_BIN)/components/VirtualBox_XPCOM.xpt
+NEMU_IDL_HEADER.XPCOM  = $(NEMU_PATH_SDK)/bindings/xpcom/include/VirtualBox_XPCOM.h
+
+# The MS COM specific stuff.
+if defined(NEMU_ONLY_SDK) || "$(KBUILD_TARGET)" == "win"
+ OTHERS         += \
+	$(NEMU_IDL_FILE.MSCOM)
+ OTHER_CLEAN    += \
+	$(NEMU_IDL_FILE.MSCOM)
+
+ INSTALLS += Nemu-mscom-bindings-include Nemu-mscom-bindings-lib
+ Nemu-mscom-bindings-include_INST = $(INST_SDK)bindings/mscom/include/
+ Nemu-mscom-bindings-include_MODE = a+r,u+w
+ Nemu-mscom-bindings-include_SOURCES = $(NemuCOM_0_OUTDIR)/VirtualBox.h
+ Nemu-mscom-bindings-include_CLEAN = $(NemuCOM_0_OUTDIR)/VirtualBox.h
+ Nemu-mscom-bindings-lib_INST = $(INST_SDK)bindings/mscom/lib/
+ Nemu-mscom-bindings-lib_MODE = a+r,u+w
+ Nemu-mscom-bindings-lib_SOURCES = $(NemuCOM_0_OUTDIR)/VirtualBox_i.c \
+	$(NemuCOM_0_OUTDIR)/VirtualBox.tlb
+ Nemu-mscom-bindings-lib_CLEAN = $(NemuCOM_0_OUTDIR)/VirtualBox_i.c \
+	$(NemuCOM_0_OUTDIR)/VirtualBox.tlb
+
+ BLDDIRS += $(NEMU_PATH_SDK)/bindings/mscom/idl
+endif
+
+# The XPCOM specific stuff.
+# if defined(NEMU_ONLY_SDK) || "$(KBUILD_TARGET)" != "win" -- does not build on Windows
+if "$(KBUILD_TARGET)" != "win"
+ OTHERS         += $(NEMU_IDL_FILE.XPCOM) $(NEMU_IDL_TYPELIB.XPCOM) $(NEMU_IDL_HEADER.XPCOM)
+ OTHER_CLEAN    += \
+	$(NEMU_IDL_FILE.XPCOM) \
+	$(NEMU_IDL_HEADER.XPCOM) \
+	$(NEMU_IDL_TYPELIB.XPCOM)
+
+ INSTALLS += Nemu-xpcom-bindings-lib
+ Nemu-xpcom-bindings-lib_INST = $(INST_SDK)bindings/xpcom/lib/
+ Nemu-xpcom-bindings-lib_MODE = a+r,u+w
+ Nemu-xpcom-bindings-lib_SOURCES = $(NemuCOM_0_OUTDIR)/VirtualBox_XPCOM_i.c=>VirtualBox_i.c
+ Nemu-xpcom-bindings-lib_CLEAN = $(NemuCOM_0_OUTDIR)/VirtualBox_XPCOM_i.c
+
+ NEMU_MAIN_PREREQS += $(NEMU_IDL_TYPELIB.XPCOM) $(NEMU_IDL_HEADER.XPCOM)
+ BLDDIRS += \
+	$(NEMU_PATH_SDK)/bindings/xpcom/idl \
+	$(NEMU_PATH_SDK)/bindings/xpcom/include
+endif # xpcom
+
+
+#
+# Strip documentation from source XIDL so that we don't get a full
+# recompile every time a comma in the documentation is changed.
+#
+$(NEMU_XIDL_FILE).ts +| $(NEMU_XIDL_FILE): \
+		$(NEMU_XIDL_FILE_SRC) \
+		$(NEMU_PATH_MAIN_SRC)/idl/docstrip.xsl \
+		| $$(dir $$@)
+# 	$(CP) -fv $< $(NEMU_XIDL_FILE).ts
+	$(QUIET)$(NEMU_XSLTPROC) -o $(NEMU_XIDL_FILE).ts $(NEMU_PATH_MAIN_SRC)/idl/docstrip.xsl $<
+	$(QUIET)$(CP) --changed -fv $(NEMU_XIDL_FILE).ts $(NEMU_XIDL_FILE)
+
+OTHER_CLEAN += $(NEMU_XIDL_FILE) $(NEMU_XIDL_FILE).ts
+
+#
+# The Main API documentation
+#
+NEMU_MAIN_DOC_DIR = $(NEMU_PATH_SDK)/docs
+BLDDIRS += $(NEMU_MAIN_DOC_DIR)
+
+$(PATH_TARGET)/docs.Main: \
+		$(NEMU_PATH_MAIN_SRC)/Doxyfile.Main \
+		$(NEMU_PATH_MAIN_SRC)/idl/doxygen.xsl \
+		$(NEMU_XIDL_FILE_SRC) \
+		| $(PATH_TARGET)/ \
+		$(NEMU_MAIN_DOC_DIR)/
+	$(call MSG_TOOL,xsltproc,doxygen input,$<,$@)
+	$(QUIET)$(RM) -f $(wildcard $(NEMU_MAIN_DOC_DIR)/html/*) $(PATH_TARGET)/docs.Main
+	$(QUIET)$(NEMU_XSLTPROC) -o $(PATH_TARGET)/VirtualBox.idl $(NEMU_PATH_MAIN_SRC)/idl/doxygen.xsl $(NEMU_XIDL_FILE_SRC)
+	$(QUIET)$(REDIRECT) -E 'DOCDIR=$(NEMU_MAIN_DOC_DIR)' -E 'PATH_TARGET=$(PATH_TARGET)' -E 'PATH_CHM=$(subst /,\,$(NEMU_MAIN_DOC_DIR)/VirtualBoxAPI.chm)' \
+		-- doxygen $(NEMU_PATH_MAIN_SRC)/Doxyfile.Main
+	$(QUIET)$(TEST) -s "$(PATH_TARGET)/Main.err" -- $(ECHO_EXT) ">>>>>>>>>>>>>>>>>>>> Main.err: >>>>>>>>>>>>>>>>>>>>>>>>"
+	$(QUIET)$(TEST) -s "$(PATH_TARGET)/Main.err" -- $(CAT) "$(PATH_TARGET)/Main.err"
+	$(QUIET)$(TEST) -s "$(PATH_TARGET)/Main.err" -- $(ECHO_EXT) "<<<<<<<<<<<<<<<<<<<< Main.err <<<<<<<<<<<<<<<<<<<<<<<<<"
+	$(QUIET)$(TEST) -s "$(PATH_TARGET)/Main.err" -- $(ECHO_EXT) "===> **************************************************"
+	$(QUIET)$(TEST) -s "$(PATH_TARGET)/Main.err" -- $(ECHO_EXT) "===> Please fix above doxygen errors/warnings listed in"
+	$(QUIET)$(TEST) -s "$(PATH_TARGET)/Main.err" -- $(ECHO_EXT) "===> $(PATH_TARGET)/Main.err"
+	$(QUIET)$(TEST) -s "$(PATH_TARGET)/Main.err" -- $(ECHO_EXT) "===> **************************************************"
+	-$(EXEC_X86_WIN32) $(NEMU_PATH_HTML_HELP_WORKSHOP)/hhc.exe $(subst /,\\,$(NEMU_MAIN_DOC_DIR)/html/index.hhp)
+	$(APPEND) $(PATH_TARGET)/docs.Main
+# aliases
+docs.main docs.Main: $(PATH_TARGET)/docs.Main
+if !defined(NEMU_ONLY_DOCS) && defined(NEMU_WITH_ALL_DOXYGEN_TARGETS)
+docs:                $(PATH_TARGET)/docs.Main
+else
+docs:
+endif
+
+
+ifndef NEMU_ONLY_SDK
+#
+# Generate library with API class wrappers from the XIDL file.
+#
+LIBRARIES += NemuAPIWrap
+NemuAPIWrap_TEMPLATE        = NemuMainLib
+NemuAPIWrap_SOURCES         = \
+	$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d \
+	$(NEMU_MAIN_APIWRAPPER_GEN_SRCS)
+NemuAPIWrap_INTERMEDIATES   = $(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+NemuAPIWrap_DEFS.win.x86   += _WIN32_WINNT=0x0500
+NemuAPIWrap_DEFS.win.amd64 += _WIN32_WINNT=0x0510
+NemuAPIWrap_INCS           += \
+	include
+NemuAPIWrap_CLEAN           = \
+	$(wildcard $(NemuAPIWrap_0_OUTDIR)/*.cpp) \
+	$(wildcard $(NemuAPIWrap_0_OUTDIR)/*.h) \
+	$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d.ts \
+	$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d \
+	$(NemuAPIWrap_0_OUTDIR)/apiwrappers-headers \
+	$(NemuAPIWrap_0_OUTDIR)/apiwrappers-sources-even \
+	$(NemuAPIWrap_0_OUTDIR)/apiwrappers-sources-odd
+
+# Two Nemu variables used here and/or in the rules generating wrappers.
+NemuAPIWrap_NEMU_XSLT       = \
+	$(NEMU_PATH_MAIN_SRC)/idl/apiwrap-server.xsl
+
+
+# This include file (generated at the bottom of this file), defines
+# NEMU_MAIN_APIWRAPPER_GEN_SRCS and NEMU_MAIN_APIWRAPPER_GEN_HDRS.
+NemuAPIWrap_NEMU_KMK_FILE = $(PATH_OUT)/nemuapiwrap.kmk
+include $(NemuAPIWrap_NEMU_KMK_FILE)
+
+ifdef NEMU_WITH_32_ON_64_MAIN_API
+LIBRARIES += NemuAPIWrap-x86
+NemuAPIWrap-x86_TEMPLATE = NemuMainLib-x86
+NemuAPIWrap-x86_EXTENDS  = NemuAPIWrap
+NemuAPIWrap-x86_DTRACE_HDR_FLAGS = -32 # ugly, should be fixed in the tool in Config.kmk
+endif
+
+endif # !NEMU_ONLY_SDK
+
+#
+# Some SDK bit.
+#
+INSTALLS += Nemu-main-xidl
+Nemu-main-xidl_INST = $(INST_SDK)bindings/
+Nemu-main-xidl_MODE = a+r,u+w
+Nemu-main-xidl_SOURCES = $(NEMU_XIDL_FILE_SRC)
+
+ifdef NEMU_WITH_PYTHON
+INSTALLS += Nemu-python-glue
+Nemu-python-glue_INST = $(INST_SDK)installer/nemuapi/
+Nemu-python-glue_MODE = a+r,u+w
+Nemu-python-glue_SOURCES = \
+	glue/nemuapi.py=>__init__.py \
+	$(Nemu-python-glue_0_OUTDIR)/VirtualBox_constants.py
+Nemu-python-glue_CLEAN = \
+	$(Nemu-python-glue_0_OUTDIR)/VirtualBox_constants.py
+
+$$(Nemu-python-glue_0_OUTDIR)/VirtualBox_constants.py:  \
+		$(NEMU_PATH_MAIN_SRC)/glue/constants-python.xsl \
+		$(NEMU_XIDL_FILE) \
+		| $$(dir $$@)
+	$(call MSG_TOOL,xsltproc,Python constants,$<,$@)
+	$(QUIET)$(NEMU_XSLTPROC) -o $@ $< $(NEMU_XIDL_FILE)
+
+endif # NEMU_WITH_PYTHON
+
+ifndef NEMU_ONLY_SDK # Note this goes on for *very* long
+
+#
+# Generate SchemaDefs.h and SchemaDefs.cpp from XML Schema
+# These two files are used by both NemuC and NemuSVC.
+#
+BLDDIRS += $(PATH_TARGET)/Main
+
+testschemadefs: $(NEMU_XML_SCHEMADEFS_H) $(NEMU_XML_SCHEMADEFS_CPP)
+
+
+#
+# NemuSVC executable
+#
+PROGRAMS += NemuSVC
+NemuSVC_TEMPLATE = NEMUMAINEXE
+NemuSVC_DEFS = \
+	NEMU_MAIN_SETTINGS_ADDONS \
+	IN_VMM_STATIC \
+	$(NEMU_MAIN_DEFS) \
+	$(if $(NEMU_WITH_NEMUSDL),NEMU_WITH_NEMUSDL,) \
+	$(if $(NEMU_WITH_HEADLESS),NEMU_WITH_HEADLESS,) \
+	$(if $(NEMU_WITH_QTGUI),NEMU_WITH_QTGUI,) \
+	$(if $(NEMU_WITH_HGCM),NEMU_WITH_HGCM,) \
+	$(if $(NEMU_WITH_ALSA),NEMU_WITH_ALSA,) \
+	$(if $(NEMU_WITH_PULSE),NEMU_WITH_PULSE,) \
+	$(if $(NEMU_WITH_WINMM),NEMU_WITH_WINMM,) \
+	$(if $(NEMU_WITH_SOLARIS_OSS),NEMU_WITH_SOLARIS_OSS,) \
+	$(if $(NEMU_WITH_E1000),NEMU_WITH_E1000,) \
+	$(if $(NEMU_WITH_VIRTIO),NEMU_WITH_VIRTIO,) \
+	$(if $(NEMU_WITH_AHCI),NEMU_WITH_AHCI,) \
+	$(if $(NEMU_WITH_LSILOGIC),NEMU_WITH_LSILOGIC,) \
+	$(if $(NEMU_WITH_LINUX_COMPILER_H),NEMU_WITH_LINUX_COMPILER_H,) \
+	$(if $(NEMU_WITH_RESOURCE_USAGE_API),NEMU_WITH_RESOURCE_USAGE_API,) \
+	$(if $(NEMU_WITH_PDM_ASYNC_COMPLETION),NEMU_WITH_PDM_ASYNC_COMPLETION,) \
+	$(if $(NEMU_WITH_DBUS),NEMU_WITH_DBUS,) \
+	$(if $(NEMU_WITH_DBUS),$(if $(NEMU_USB_WITH_DBUS),NEMU_USB_WITH_DBUS,),) \
+	$(if $(NEMU_USB_WITH_SYSFS),NEMU_USB_WITH_SYSFS,) \
+	$(if $(NEMU_USB_WITH_INOTIFY),NEMU_USB_WITH_INOTIFY,) \
+	$(if $(NEMU_WITH_LIVE_MIGRATION),NEMU_WITH_LIVE_MIGRATION,) \
+	$(if $(NEMU_WITH_EXTPACK),NEMU_WITH_EXTPACK,) \
+	$(if $(NEMU_WITH_VUSB),NEMU_WITH_VUSB,) \
+	$(if $(NEMU_WITH_S3),NEMU_WITH_S3,) \
+	$(if $(NEMU_WITH_PCI_PASSTHROUGH),NEMU_WITH_PCI_PASSTHROUGH,) \
+	$(if $(NEMU_WITH_NAT_SERVICE),NEMU_WITH_NAT_SERVICE,) \
+	$(if $(NEMU_WITH_CROGL),NEMU_WITH_CROGL,) \
+	$(if $(NEMU_WITH_CRHGSMI),NEMU_WITH_CRHGSMI,)
+ifdef NEMU_WITH_USB
+ NemuSVC_DEFS += \
+	NEMU_WITH_USB \
+	$(if $(NEMU_WITH_EHCI),NEMU_WITH_EHCI,) \
+	$(if $(NEMU_WITH_NEW_USB_CODE_ON_DARWIN),NEMU_WITH_NEW_USB_CODE_ON_DARWIN,)
+endif
+NemuSVC_DEFS.win += NEMU_COM_OUTOFPROC_MODULE
+NemuSVC_DEFS.win += _WIN32_WINNT=0x0510
+# Try to load and use libhal at runtime for probing removable media
+# NemuSVC_DEFS.linux += NEMU_USE_LIBHAL
+NemuSVC_DEFS.solaris += NEMU_USE_LIBHAL
+
+NemuSVC_CXXFLAGS = $(filter-out -Wno-unused,$(TEMPLATE_NEMUMAINEXE_CXXFLAGS))
+
+NemuSVC_INCS = \
+	include \
+	$(NemuSVC_0_OUTDIR) \
+	$(dir $(NEMU_XML_SCHEMADEFS_H)) \
+	$(NEMU_MAIN_APIWRAPPER_INCS) \
+	.
+NemuSVC_INCS.win = \
+	$(NemuCOM_0_OUTDIR)
+ifdef NEMU_WITH_USB
+ NemuSVC_INCS.os2 = \
+	$(PATH_ROOT)/src/Nemu/HostDrivers/NemuUSB/os2
+endif
+
+NemuSVC_LIBS += \
+	$(PATH_STAGE_LIB)/NemuAPIWrap$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/SSMStandalone$(NEMU_SUFF_LIB) \
+	$(LIB_DDU)
+
+NemuSVC_SDKS = NEMU_LIBPNG NEMU_ZLIB NEMU_OPENSSL
+NemuSVC_LIBS.solaris = \
+	adm \
+	nsl \
+	devinfo \
+	socket \
+	$(LIB_VMM)
+
+NemuSVC_LIBS.win += \
+	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/dnsapi.lib
+
+NemuSVC_INTERMEDIATES = \
+	$(NEMU_MAIN_PREREQS) \
+	$(NEMU_XML_SCHEMADEFS_H) \
+	$(NEMU_AUTOGEN_EVENT_H) \
+	$(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+
+NemuSVC_SOURCES = \
+	$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d \
+	src-all/AuthLibrary.cpp \
+	src-all/DisplayPNGUtil.cpp \
+	src-all/DisplayResampleImage.cpp \
+	src-all/DisplayUtils.cpp \
+	src-all/EventImpl.cpp \
+	src-all/Global.cpp \
+	src-all/HashedPw.cpp \
+	src-all/Logging.cpp \
+	src-all/PCIDeviceAttachmentImpl.cpp \
+	src-all/ProgressImpl.cpp \
+	src-all/QMTranslatorImpl.cpp \
+	src-all/SecretKeyStore.cpp \
+	src-all/SharedFolderImpl.cpp \
+	src-all/AutoCaller.cpp \
+	src-all/VirtualBoxBase.cpp \
+	src-all/VirtualBoxErrorInfoImpl.cpp \
+	$(if $(NEMU_WITH_EXTPACK),src-all/ExtPackManagerImpl.cpp src-all/ExtPackUtil.cpp,) \
+	src-server/ApplianceImpl.cpp \
+	src-server/ApplianceImplExport.cpp \
+	src-server/ApplianceImplImport.cpp \
+	src-server/ApplianceImplIO.cpp \
+	src-server/AudioAdapterImpl.cpp \
+	src-server/BandwidthControlImpl.cpp \
+	src-server/BandwidthGroupImpl.cpp \
+	src-server/BIOSSettingsImpl.cpp \
+	src-server/ClientWatcher.cpp \
+	src-server/ClientToken.cpp \
+	src-server/DHCPServerImpl.cpp \
+	src-server/NetworkServiceRunner.cpp \
+	src-server/NATNetworkImpl.cpp \
+	src-server/GuestOSTypeImpl.cpp \
+	src-server/HostDnsService.cpp \
+	src-server/HostImpl.cpp \
+	src-server/HostNetworkInterfaceImpl.cpp \
+	src-server/HostPower.cpp \
+	src-server/HostVideoInputDeviceImpl.cpp \
+	src-server/MachineImpl.cpp \
+	src-server/MachineImplCloneVM.cpp \
+	src-server/Matching.cpp \
+	src-server/MediumAttachmentImpl.cpp \
+	src-server/MediumFormatImpl.cpp \
+	src-server/MediumImpl.cpp \
+	src-server/MediumLock.cpp \
+	src-server/NATEngineImpl.cpp \
+	src-server/NetworkAdapterImpl.cpp \
+	src-server/ParallelPortImpl.cpp \
+	src-server/ProgressProxyImpl.cpp \
+	src-server/SerialPortImpl.cpp \
+	src-server/SnapshotImpl.cpp \
+	src-server/StorageControllerImpl.cpp \
+	src-server/SystemPropertiesImpl.cpp \
+	src-server/TokenImpl.cpp \
+	src-server/USBControllerImpl.cpp \
+	src-server/USBDeviceFiltersImpl.cpp \
+	src-server/VFSExplorerImpl.cpp \
+	src-server/VirtualBoxImpl.cpp \
+	src-server/VRDEServerImpl.cpp \
+	src-server/generic/AutostartDb-generic.cpp \
+	xml/ovfreader.cpp \
+	xml/Settings.cpp \
+	$(NEMU_XML_SCHEMADEFS_CPP) \
+	$(NEMU_AUTOGEN_EVENT_CPP) \
+	$(if $(NEMU_WITH_XPCOM),src-server/xpcom/server.cpp,)
+
+ifn1of ($(KBUILD_TARGET), win darwin)
+	NemuSVC_SOURCES += $(PATH_ROOT)/src/Nemu/Devices/Network/slirp/resolv_conf_parser.c
+endif
+
+NemuSVC_SOURCES.darwin = \
+	src-server/darwin/iokit.cpp \
+	src-server/darwin/HostPowerDarwin.cpp \
+	src-server/darwin/HostDnsServiceDarwin.cpp
+
+NemuSVC_SOURCES.win = \
+	src-server/win/svcmain.cpp \
+	src-server/win/svchlp.cpp \
+	src-server/win/HostPowerWin.cpp \
+	src-server/win/NemuSVC.rc \
+	src-server/win/NemuComEvents.cpp \
+	src-server/win/HostDnsServiceWin.cpp
+
+NemuSVC_SOURCES.linux = \
+	src-server/linux/HostHardwareLinux.cpp \
+	src-server/linux/HostDnsServiceLinux.cpp \
+	$(if $(NEMU_WITH_DBUS),src-server/linux/HostPowerLinux.cpp) \
+	src-server/HostDnsServiceResolvConf.cpp
+
+NemuSVC_SOURCES.solaris = \
+	src-server/linux/nemu-libhal.cpp \
+	src-server/solaris/DynLoadLibSolaris.cpp \
+	src-server/HostDnsServiceResolvConf.cpp
+
+NemuSVC_SOURCES.os2 = \
+	src-server/HostDnsServiceResolvConf.cpp
+
+NemuSVC_SOURCES.freebsd = \
+	src-server/freebsd/HostHardwareFreeBSD.cpp \
+	src-server/HostDnsServiceResolvConf.cpp
+
+
+ifdef NEMU_WITH_USB
+ ifdef NEMU_WITH_SYSFS_BY_DEFAULT
+  src-server/linux/USBProxyServiceLinux.cpp_DEFS += NEMU_WITH_SYSFS_BY_DEFAULT
+ endif
+ NemuSVC_SOURCES  += \
+	src-server/USBDeviceFilterImpl.cpp \
+	src-server/USBProxyService.cpp \
+	src-server/HostUSBDeviceImpl.cpp
+ NemuSVC_SOURCES.darwin  +=  src-server/darwin/USBProxyServiceDarwin.cpp
+ NemuSVC_SOURCES.linux   +=   src-server/linux/USBProxyServiceLinux.cpp
+ NemuSVC_SOURCES.linux   +=   src-server/linux/USBGetDevices.cpp
+ NemuSVC_SOURCES.os2     +=     src-server/os2/USBProxyServiceOs2.cpp
+ NemuSVC_SOURCES.solaris += src-server/solaris/USBProxyServiceSolaris.cpp
+ NemuSVC_SOURCES.win     +=     src-server/win/USBProxyServiceWindows.cpp
+ NemuSVC_SOURCES.freebsd += src-server/freebsd/USBProxyServiceFreeBSD.cpp
+endif
+
+ifdef NEMU_WITH_NETFLT
+ NemuSVC_LIBS.win += \
+	$(PATH_STAGE_LIB)/WinNetConfig$(NEMU_SUFF_LIB) \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/newdev.lib \
+	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+endif
+NemuSVC_LDFLAGS.darwin    = -framework IOKit -framework SystemConfiguration
+
+ifdef NEMU_WITH_CROGL
+ NemuSVC_LIBS += $(PATH_STAGE_LIB)/NemuOGLTest$(NEMU_SUFF_LIB)
+ NemuSVC_LDFLAGS.darwin += -framework OpenGL
+endif
+
+ifeq ($(KBUILD_TYPE),debug)
+ NemuSVC_LDFLAGS.linux   += -rdynamic # for backtrace_symbols()
+endif
+
+ifdef NEMU_WITH_RESOURCE_USAGE_API
+ NemuSVC_SOURCES += \
+	src-server/PerformanceImpl.cpp \
+	src-server/Performance.cpp
+ NemuSVC_SOURCES.darwin  +=  src-server/darwin/PerformanceDarwin.cpp
+ NemuSVC_SOURCES.freebsd += src-server/freebsd/PerformanceFreeBSD.cpp
+ NemuSVC_SOURCES.linux   +=   src-server/linux/PerformanceLinux.cpp
+ NemuSVC_SOURCES.os2     +=     src-server/os2/PerformanceOs2.cpp
+ NemuSVC_SOURCES.solaris += src-server/solaris/PerformanceSolaris.cpp
+ NemuSVC_SOURCES.win     +=     src-server/win/PerformanceWin.cpp
+ NemuSVC_LDFLAGS.darwin  += -lproc
+ NemuSVC_LDFLAGS.solaris += -lkstat -lnvpair
+ NemuSVC_LDFLAGS.win     += psapi.lib powrprof.lib
+endif
+
+ifdef NEMU_WITH_HOSTNETIF_API
+ NemuSVC_SOURCES.win     +=     src-server/win/NetIf-win.cpp
+ NemuSVC_SOURCES.linux   +=   src-server/linux/NetIf-linux.cpp
+ NemuSVC_SOURCES.os2     +=     src-server/os2/NetIf-os2.cpp
+ NemuSVC_SOURCES.darwin  +=  src-server/darwin/NetIf-darwin.cpp
+ NemuSVC_SOURCES.solaris += src-server/solaris/NetIf-solaris.cpp
+ NemuSVC_SOURCES.freebsd += src-server/freebsd/NetIf-freebsd.cpp
+ NemuSVC_DEFS            += NEMU_WITH_HOSTNETIF_API
+ if1of ($(KBUILD_TARGET), linux darwin solaris freebsd)
+  NemuSVC_SOURCES        += src-server/generic/NetIf-generic.cpp
+ endif
+endif
+
+ifdef NEMU_WITH_MAIN_USB_ID_DATABASE  # Generate a database of USB vendor IDs and device IDs.
+ NemuSVC_DEFS    += NEMU_WITH_MAIN_USB_ID_DATABASE
+ NemuSVC_SOURCES += $(NemuSVC_0_OUTDIR)/USBIdDatabase.cpp
+ NemuSVC_CLEAN   += $(NemuSVC_0_OUTDIR)/USBIdDatabase.cpp
+
+ $$(NemuSVC_0_OUTDIR)/USBIdDatabase.cpp:  $$(USBIdDatabaseGenerator_1_TARGET) \
+ 		$(PATH_SUB_CURRENT)/src-server/usb.ids $(PATH_SUB_CURRENT)/src-server/custom.ids | $$(dir $$@)
+	$(call MSG_GENERATE,SchemaDefs,$@,$<)
+	$(QUIET)$(USBIdDatabaseGenerator_1_TARGET) -o "$@" $(filter %.ids,$^)
+
+ BLDPROGS += USBIdDatabaseGenerator
+ USBIdDatabaseGenerator_TEMPLATE = NemuAdvBldProg
+ USBIdDatabaseGenerator_SOURCES  = src-server/USBIdDatabaseGenerator.cpp
+else
+ NemuSVC_SOURCES += src-server/USBIdDatabaseStub.cpp
+endif
+
+src-server/win/NemuSVC.rc_INCS  = $(NemuSVC_0_OUTDIR)
+src-server/win/NemuSVC.rc_DEPS  = $(NemuSVC_0_OUTDIR)/NemuSVC.rgs $(NemuSVC_0_OUTDIR)/NemuSVC-icon.rc
+src-server/win/NemuSVC.rc_CLEAN = $(NemuSVC_0_OUTDIR)/NemuSVC.rgs $(NemuSVC_0_OUTDIR)/NemuSVC-icon.rc
+
+$$(NemuSVC_0_OUTDIR)/NemuSVC-icon.rc: $(MAKEFILE_CURRENT) $(NEMU_WINDOWS_ICON_FILE) | $$(dir $$(@D))
+	$(APPEND) -t $@ '1 ICON DISCARDABLE "$(subst /,\\,$(NEMU_WINDOWS_ICON_FILE))"'
+
+$$(NemuSVC_0_OUTDIR)/NemuSVC.rgs: $(NEMU_PATH_MAIN_SRC)/src-all/win/VirtualBox_rgs.xsl $(NEMU_XIDL_FILE) | $$(dir $$(@D))
+	$(NEMU_XSLTPROC) --stringparam Module NemuSVC -o $@ $< $(NEMU_XIDL_FILE)
+
+## @todo r=klaus unfortunately we don't have xmllint everywhere, would be
+# good to check the validity for every VirtualBox.xidl change.
+#$(NEMU_XIDL_FILE).validated.ts: $(NEMU_XIDL_FILE_SRC)
+#	xmllint --dtdvalid $(NEMU_PATH_MAIN_SRC)/idl/VirtualBox.dtd --noout $<
+#	$(QUIET)$(CP) --changed -fv $< $(NEMU_XIDL_FILE).validated.ts
+#
+#OTHERS += $(NEMU_XIDL_FILE).validated.ts
+#OTHER_CLEAN += $(NEMU_XIDL_FILE).validated.ts
+
+testvalidxidl: $(NEMU_XIDL_FILE_SRC)
+	xmllint --dtdvalid $(NEMU_PATH_MAIN_SRC)/idl/VirtualBox.dtd --noout $<
+
+
+#
+# Embed some constraints from XML Schema file into NemuSVC
+#
+NEMU_XML_SCHEMA	= $(NEMU_PATH_MAIN_SRC)/xml/VirtualBox-settings.xsd
+
+$(NEMU_XML_SCHEMADEFS_H): $(NEMU_XML_SCHEMADEFS_XSL) $(NEMU_XML_SCHEMA) | $$(dir $$@)
+	$(call MSG_GENERATE,SchemaDefs,$@,$<)
+	$(QUIET)$(NEMU_XSLTPROC)  --stringparam mode declare -o $@ $(NEMU_XML_SCHEMADEFS_XSL) $(NEMU_XML_SCHEMA)
+
+$(NEMU_XML_SCHEMADEFS_CPP): $(NEMU_XML_SCHEMADEFS_XSL) $(NEMU_XML_SCHEMA) | $$(dir $$@)
+	$(call MSG_GENERATE,SchemaDefs,$@,$<)
+	$(QUIET)$(NEMU_XSLTPROC)  --stringparam mode define  -o $@ $(NEMU_XML_SCHEMADEFS_XSL) $(NEMU_XML_SCHEMA)
+
+testvalidsettings: $(NEMU_XML_SCHEMA)
+	xmllint --schema $< --noout $(HOME)/.VirtualBox/VirtualBox.xml
+	xmllint --schema $< --noout $(HOME)/.VirtualBox/Machines/*/*.xml
+	xmllint --schema $< --noout $(HOME)/.VirtualBox/Machines/*/*.nemu
+	xmllint --schema $< --noout $(HOME)/VirtualBox\ VMs/*/*.nemu
+
+OTHER_CLEAN += $(NEMU_XML_SCHEMADEFS_H) $(NEMU_XML_SCHEMADEFS_CPP)
+
+
+#
+# Generate some event stuff for NemuSVC and NemuC.
+#
+$(NEMU_AUTOGEN_EVENT_H): $(NEMU_PATH_MAIN_SRC)/idl/comimpl.xsl $(NEMU_XIDL_FILE) | $$(dir $$@)
+	$(call MSG_TOOL,xsltproc,autogen events,$<,$@)
+	$(QUIET)$(NEMU_XSLTPROC) --stringparam G_kind NemuEventHeader -o $@ $< $(NEMU_XIDL_FILE)
+
+$(NEMU_AUTOGEN_EVENT_CPP): $(NEMU_PATH_MAIN_SRC)/idl/comimpl.xsl $(NEMU_XIDL_FILE) | $$(dir $$@)
+	$(call MSG_TOOL,xsltproc,autogen events,$<,$@)
+	$(QUIET)$(NEMU_XSLTPROC) --stringparam G_kind NemuEvent -o $@ $< $(NEMU_XIDL_FILE)
+
+OTHER_CLEAN += $(NEMU_AUTOGEN_EVENT_H) $(NEMU_AUTOGEN_EVENT_CPP)
+
+ifdef NEMU_WITH_XPCOM
+#
+# NemuSVCM - NemuSVC wrapper module
+#
+DLLS += NemuSVCM
+NemuSVCM_TEMPLATE       = NEMUMAINCOMP
+NemuSVCM_DEFS           = IN_RING3 $(NEMU_MAIN_DEFS)
+ifdef NEMU_WITH_HARDENING
+ NemuSVCM_DEFS         += NEMU_WITH_HARDENING
+endif
+NemuSVCM_INCS           = \
+	include \
+	$(NemuC_0_OUTDIR) \
+	.
+NemuSVCM_INTERMEDIATES  = $(NEMU_MAIN_PREREQS)
+NemuSVCM_SOURCES        = \
+	src-server/xpcom/server_module.cpp
+NemuSVCM_LDFLAGS.darwin = \
+	-install_name $(NEMU_DYLD_EXECUTABLE_PATH)/components/NemuSVCM.dylib \
+	-exported_symbols_list $(NemuSVCM_0_OUTDIR)/NemuSVCM.def
+ ifeq ($(KBUILD_TARGET),darwin)
+NemuSVCM_ORDERDEPS     += $(NemuSVCM_0_OUTDIR)/NemuSVCM.def
+NemuSVCM_CLEAN         += $(NemuSVCM_0_OUTDIR)/NemuSVCM.def
+$$(NemuSVCM_0_OUTDIR)/NemuSVCM.def:
+	$(RM) -f $@
+	$(APPEND) $@ _NSGetModule
+ endif
+NemuSVCM_INTERMEDIATES += $(NEMU_IDL_HEADER.XPCOM)
+
+ # 32-bit version of the module.
+ ifdef NEMU_WITH_32_ON_64_MAIN_API
+DLLS += NemuSVCM-x86
+NemuSVCM-x86_TEMPLATE = NemuMainComp-x86
+NemuSVCM-x86_EXTENDS  = NemuSVCM
+ endif
+
+endif # NEMU_WITH_XPCOM
+
+
+#
+# NemuC module
+#
+DLLS += NemuC
+NemuC_TEMPLATE = NEMUMAINCOMP
+NemuC_DEFS = \
+	IN_RING3 \
+	$(NEMU_MAIN_DEFS) \
+	NEMU_COM_INPROC \
+	$(if $(NEMU_WITH_HGCM),NEMU_WITH_HGCM,) \
+	$(if $(NEMU_WITH_ALSA),NEMU_WITH_ALSA,) \
+	$(if $(NEMU_WITH_PULSE),NEMU_WITH_PULSE,) \
+	$(if $(NEMU_WITH_WINMM),NEMU_WITH_WINMM,) \
+	$(if $(NEMU_WITH_SOLARIS_OSS),NEMU_WITH_SOLARIS_OSS,) \
+	$(if $(NEMU_WITH_E1000),NEMU_WITH_E1000,) \
+	$(if $(NEMU_WITH_VIRTIO),NEMU_WITH_VIRTIO,) \
+	$(if $(NEMU_WITH_EFI),NEMU_WITH_EFI,) \
+	$(if $(NEMU_WITH_PDM_ASYNC_COMPLETION),NEMU_WITH_PDM_ASYNC_COMPLETION,) \
+	$(if $(NEMU_WITH_LIVE_MIGRATION),NEMU_WITH_LIVE_MIGRATION,) \
+	$(if $(NEMU_WITH_VUSB),NEMU_WITH_VUSB,) \
+	$(if $(NEMU_WITH_HGSMI),NEMU_WITH_HGSMI,) \
+	$(if $(NEMU_WITH_VIDEOHWACCEL),NEMU_WITH_VIDEOHWACCEL,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP),NEMU_WITH_DRAG_AND_DROP,) \
+	$(if $(NEMU_WITH_DRAG_AND_DROP_GH),NEMU_WITH_DRAG_AND_DROP_GH,) \
+	$(if $(NEMU_WITH_USB),NEMU_WITH_USB,) \
+	$(if-expr defined(NEMU_WITH_EHCI) && defined(NEMU_WITH_USB),NEMU_WITH_EHCI,) \
+	$(if $(NEMU_WITH_EXTPACK),NEMU_WITH_EXTPACK,) \
+	$(if $(NEMU_WITH_PCI_PASSTHROUGH),NEMU_WITH_PCI_PASSTHROUGH,) \
+	$(if $(NEMU_WITH_VRDEAUTH_IN_NEMUSVC),NEMU_WITH_VRDEAUTH_IN_NEMUSVC,) \
+	$(if $(NEMU_WITH_VPX),NEMU_WITH_VPX,)
+ifdef NEMU_WITH_CRHGSMI
+ NemuC_DEFS += NEMU_WITH_CRHGSMI
+endif
+ifdef NEMU_WITH_NETSHAPER
+ NemuC_DEFS += NEMU_WITH_NETSHAPER
+endif
+NemuC_DEFS.darwin.x86 = NEMU_WITH_2X_4GB_ADDR_SPACE
+NemuC_DEFS.win.x86 += _WIN32_WINNT=0x0500
+NemuC_DEFS.win.amd64 += _WIN32_WINNT=0x0510
+
+NemuC_SDKS = NEMU_LIBPNG NEMU_ZLIB
+ifdef NEMU_WITH_VPX
+  NemuC_SDKS += NEMU_VPX
+endif
+ifdef NEMU_WITH_OPENSSL_FIPS
+  NemuC_SDKS += NEMU_OPENSSL2
+endif
+
+NemuC_INCS          = \
+	include \
+	$(NemuC_0_OUTDIR) \
+	$(NEMU_MAIN_APIWRAPPER_INCS) \
+	$(dir $(NEMU_XML_SCHEMADEFS_H)) \
+       $(NEMU_MAIN_APIWRAPPER_DIR)/dtrace
+NemuC_INCS.win      = \
+	$(NemuCOM_0_OUTDIR) \
+	.
+
+NemuC_LDFLAGS.darwin = \
+	-install_name $(NEMU_DYLD_EXECUTABLE_PATH)/components/NemuC.dylib \
+	-exported_symbols_list $(NemuC_0_OUTDIR)/NemuC.def \
+	-framework IOKit
+NemuC_LDFLAGS.win += /MANIFEST \
+  	/DELAYLOAD:user32.dll
+
+
+NemuC_LIBS += \
+	$(PATH_STAGE_LIB)/NemuAPIWrap$(NEMU_SUFF_LIB) \
+	$(if-expr "$(LIB_VMM)" == "$(NEMU_LIB_VMM_LAZY)",$(LIB_REM),) \
+	$(NEMU_LIB_VMM_LAZY)
+NemuC_LIBS.win += \
+	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/psapi.lib \
+	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/delayimp.lib
+ifdef NEMU_WITH_NETFLT
+ NemuC_LIBS.win += \
+	$(PATH_STAGE_LIB)/NemuDrvCfg$(NEMU_SUFF_LIB) \
+	$(PATH_SDK_$(NEMU_WINDDK)_LIB)/newdev.lib \
+	$(PATH_STAGE_LIB)/WinNetConfig$(NEMU_SUFF_LIB) \
+	$(PATH_TOOL_$(NEMU_VCC_TOOL)_LIB)/comsupp.lib \
+	$(PATH_SDK_$(NEMU_WINPSDK)_LIB)/WbemUuid.Lib
+ NemuC_LDFLAGS.win += \
+  	/DELAYLOAD:newdev.dll \
+  	/DELAYLOAD:setupapi.dll \
+  	/DELAYLOAD:iphlpapi.dll
+endif
+
+ifdef NEMU_WITH_CROGL
+ NemuC_LIBS += $(PATH_STAGE_LIB)/NemuOGLTest$(NEMU_SUFF_LIB)
+ NemuC_LDFLAGS.darwin += -framework OpenGL
+endif
+
+ifdef NEMU_WITH_DRAG_AND_DROP
+ NemuC_LIBS += $(PATH_STAGE_LIB)/NemuDnDHostR3Lib$(NEMU_SUFF_LIB)
+endif
+
+NemuC_INTERMEDIATES = \
+	$(NEMU_MAIN_PREREQS) \
+	$(NEMU_XML_SCHEMADEFS_H) \
+	$(NEMU_AUTOGEN_EVENT_H) \
+	$(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+
+NemuC_SOURCES = \
+	$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d \
+	src-all/DisplayPNGUtil.cpp \
+	src-all/DisplayResampleImage.cpp \
+	src-all/DisplayUtils.cpp \
+	src-all/EventImpl.cpp \
+	src-all/Global.cpp \
+	src-all/HashedPw.cpp \
+	src-all/Logging.cpp \
+	src-all/PCIDeviceAttachmentImpl.cpp \
+	src-all/ProgressImpl.cpp \
+	src-all/SecretKeyStore.cpp \
+	src-all/SharedFolderImpl.cpp \
+	src-all/AutoCaller.cpp \
+	src-all/VirtualBoxBase.cpp \
+	src-all/VirtualBoxErrorInfoImpl.cpp \
+	$(if $(NEMU_WITH_EXTPACK),src-all/ExtPackManagerImpl.cpp src-all/ExtPackUtil.cpp,) \
+	src-client/UsbWebcamInterface.cpp \
+	$(if $(NEMU_WITH_USB_CARDREADER),src-client/UsbCardReader.cpp,) \
+	src-client/Nvram.cpp \
+	src-client/AdditionsFacilityImpl.cpp \
+	src-client/BusAssignmentManager.cpp \
+	$(if $(NEMU_WITH_PCI_PASSTHROUGH),src-client/PCIRawDevImpl.cpp,) \
+	src-client/ClientTokenHolder.cpp \
+	src-client/ConsoleImpl.cpp \
+	src-client/ConsoleImpl2.cpp \
+	src-client/ConsoleImplTeleporter.cpp \
+	src-client/ConsoleVRDPServer.cpp \
+	src-client/DisplayImpl.cpp \
+	src-client/DisplayImplLegacy.cpp \
+	src-client/DisplaySourceBitmapImpl.cpp \
+	src-client/EmulatedUSBImpl.cpp \
+	src-client/GuestImpl.cpp \
+	src-client/GuestCtrlImpl.cpp \
+	src-client/KeyboardImpl.cpp \
+	src-client/MachineDebuggerImpl.cpp \
+	src-client/MouseImpl.cpp \
+	src-client/RemoteUSBDeviceImpl.cpp \
+	src-client/SessionImpl.cpp \
+	src-client/USBDeviceImpl.cpp \
+	src-client/NemuDriversRegister.cpp \
+	src-client/VirtualBoxClientImpl.cpp \
+	src-client/VMMDevInterface.cpp \
+	$(NEMU_AUTOGEN_EVENT_CPP) \
+	$(NEMU_XML_SCHEMADEFS_CPP) \
+	../Devices/Audio/AudioMixBuffer.cpp \
+	../Devices/Audio/DrvAudioCommon.cpp \
+	src-client/DrvAudioVRDE.cpp
+
+NemuC_SOURCES.win = \
+	src-client/win/dllmain.cpp \
+	src-client/win/NemuC.def \
+	src-client/win/NemuC.rc
+ifdef NEMU_WITH_GUEST_CONTROL
+ NemuC_SOURCES += \
+	src-client/GuestSessionImplTasks.cpp \
+	src-client/GuestCtrlPrivate.cpp \
+	src-client/GuestDirectoryImpl.cpp \
+	src-client/GuestFileImpl.cpp \
+	src-client/GuestFsObjInfoImpl.cpp \
+	src-client/GuestProcessImpl.cpp \
+	src-client/GuestSessionImpl.cpp
+endif
+ifdef NEMU_WITH_DRAG_AND_DROP
+ NemuC_SOURCES += \
+	src-client/GuestDnDPrivate.cpp \
+	src-client/GuestDnDSourceImpl.cpp \
+	src-client/GuestDnDTargetImpl.cpp
+endif
+ifdef NEMU_WITH_XPCOM
+ NemuC_SOURCES += \
+	src-client/xpcom/module.cpp
+endif
+ifdef NEMU_WITH_HGCM
+ NemuC_SOURCES += \
+	src-client/HGCMObjects.cpp \
+	src-client/HGCMThread.cpp \
+	src-client/HGCM.cpp
+endif
+ifdef NEMU_WITH_USB
+ NemuC_SOURCES += \
+	src-client/RemoteUSBBackend.cpp
+endif
+ifdef NEMU_WITH_VPX
+ NemuC_SOURCES += \
+	src-client/EbmlWriter.cpp \
+	src-client/VideoRec.cpp
+endif
+ifndef NEMU_WITH_VRDEAUTH_IN_NEMUSVC
+ NemuC_SOURCES += \
+	src-all/AuthLibrary.cpp
+endif
+
+ifeq ($(KBUILD_TARGET),darwin)
+NemuC_ORDERDEPS += $(NemuC_0_OUTDIR)/NemuC.def
+NemuC_CLEAN     += $(NemuC_0_OUTDIR)/NemuC.def
+$$(NemuC_0_OUTDIR)/NemuC.def: $(MAKEFILE_CURRENT)
+	$(RM) -f $@
+	$(APPEND) $@ _NSGetModule
+	$(APPEND) $@ _NemuDriversRegister
+endif
+
+src-client/ConsoleImpl.cpp_DEFS = \
+	$(if $(NEMU_BLEEDING_EDGE),NEMU_BLEEDING_EDGE=\"$(NEMU_BLEEDING_EDGE)\",) \
+	$(if $(NEMU_WITH_OPENSSL_FIPS), NEMU_OPENSSL_FIPS,)
+
+
+src-client/win/NemuC.rc_DEPS = $(NemuC_0_OUTDIR)/NemuC.rgs $(NemuCOM_0_OUTDIR)/VirtualBox.tlb
+NemuC_CLEAN.win  += $(NemuC_0_OUTDIR)/NemuC.rgs
+
+$$(NemuC_0_OUTDIR)/NemuC.rgs: $(NEMU_PATH_MAIN_SRC)/src-all/win/VirtualBox_rgs.xsl $(NEMU_XIDL_FILE) | $$(dir $$@)
+	$(NEMU_XSLTPROC) --stringparam Module NemuC -o $@ $< $(NEMU_XIDL_FILE)
+
+ifdef NEMU_WITH_32_ON_64_MAIN_API
+ #
+ # 32-bit Nemu API Client In-Process module.
+ #
+ # This is currently just a 32-bit version of NemuC.  It might be desirable to
+ # split up NemuC into a simple client and a VM client part later, in which
+ # case this module will be a simple client.
+ #
+ # Note! One important thing is that the typelib for this DLL must be build
+ #       with the /env win32 switch and the NemuC typelib with /env amd64, if
+ #       not they will overwrite each others typelib module entry.
+ #
+ DLLS += NemuClient-x86
+ NemuClient-x86_TEMPLATE = NemuMainComp-x86
+ NemuClient-x86_EXTENDS  = NemuC
+ NemuClient-x86_DEFS = NEMU_COM_INPROC_API_CLIENT $(NemuC_DEFS)
+ NemuClient-x86_INST.win = $(INST_DLL)x86/
+ NemuClient-x86_INCS.win = \
+ 	$(NemuClient-x86_0_OUTDIR) \
+ 	$(NemuCOM-x86_0_OUTDIR) \
+	$(NemuC_INCS.win)
+ NemuClient-x86_SOURCES = \
+ 	src-all/EventImpl.cpp \
+ 	src-all/Global.cpp \
+	src-all/AutoCaller.cpp \
+ 	src-all/VirtualBoxBase.cpp \
+ 	src-all/VirtualBoxErrorInfoImpl.cpp \
+ 	src-client/ClientTokenHolder.cpp \
+ 	src-client/SessionImpl.cpp \
+ 	src-client/VirtualBoxClientImpl.cpp \
+ 	$(NEMU_AUTOGEN_EVENT_CPP) \
+ 	$(NEMU_XML_SCHEMADEFS_CPP)
+ NemuClient-x86_SOURCES.win = \
+ 	src-client/win/dllmain.cpp \
+ 	src-client/win/NemuClient-x86.def \
+ 	src-client/win/NemuClient-x86.rc
+ ifdef NEMU_WITH_XPCOM
+  NemuClient-x86_SOURCES += \
+  	src-client/xpcom/module.cpp
+ endif
+ NemuClient-x86_LIBS = \
+	$(PATH_STAGE_LIB)/NemuAPIWrap-x86$(NEMU_SUFF_LIB)
+ NemuClient-x86_LIBS.win = $(NO_SUCH_VARIABLE)
+ NemuClient-x86_LIBS.win.x86 = $(PATH_TOOL_$(NEMU_VCC_TOOL_STEM)X86_LIB)/delayimp.lib
+ NemuClient-x86_CLEAN.win += $(NemuClient-x86_0_OUTDIR)/NemuClient-x86.rgs
+ src-client/win/NemuClient-x86.rc_DEPS = \
+ 	$(NemuClient-x86_0_OUTDIR)/NemuClient-x86.rgs \
+ 	$(NemuCOM-x86_0_OUTDIR)/VirtualBox-x86.tlb
+
+ $$(NemuClient-x86_0_OUTDIR)/NemuClient-x86.rgs: \
+ 		$(NEMU_PATH_MAIN_SRC)/src-all/win/VirtualBox_rgs.xsl \
+		$(NEMU_XIDL_FILE) | $$(dir $$@)
+	$(NEMU_XSLTPROC) --stringparam Module NemuC -o $@ $< $(NEMU_XIDL_FILE)
+
+endif
+
+
+#
+# NemuCOM - COM Abstraction Layer library
+#
+LIBRARIES += NemuCOM
+NemuCOM_TEMPLATE        = NemuMainLib
+NemuCOM_INTERMEDIATES   = $(NEMU_MAIN_PREREQS) \
+                          $(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+NemuCOM_SOURCES         = \
+	glue/com.cpp \
+	glue/initterm.cpp \
+	glue/string.cpp \
+	glue/AutoLock.cpp \
+	glue/EventQueue.cpp \
+	glue/NativeEventQueue.cpp \
+	glue/ErrorInfo.cpp \
+	glue/errorprint.cpp
+NemuCOM_INCS          += $(NEMU_MAIN_APIWRAPPER_INCS) \
+	include
+ifeq ($(KBUILD_TARGET),win)
+ NemuCOM_DEFS.x86       = _WIN32_WINNT=0x0500
+ NemuCOM_DEFS.amd64     = _WIN32_WINNT=0x0510
+ NemuCOM_SOURCES       += \
+	$(NemuCOM_0_OUTDIR)/VirtualBox_i.c
+else # !win
+ NemuCOM_SOURCES       += \
+	$(NemuCOM_0_OUTDIR)/VirtualBox_XPCOM_i.c \
+	glue/xpcom/helpers.cpp
+endif # !win
+
+glue/com.cpp_DEFS = \
+	$(if $(NEMU_BLEEDING_EDGE),NEMU_BLEEDING_EDGE=\"$(NEMU_BLEEDING_EDGE)\",) \
+	KBUILD_TYPE=\"$(KBUILD_TYPE)\"
+
+# 32-bit version of NemuCOM.
+ifdef NEMU_WITH_32_ON_64_MAIN_API
+ LIBRARIES += NemuCOM-x86
+ NemuCOM-x86_TEMPLATE = NemuMainLib-x86
+ NemuCOM-x86_EXTENDS  = NemuCOM
+endif
+
+
+
+#
+# The NemuExtPackHelperApp.
+#
+ifdef NEMU_WITH_EXTPACK
+ PROGRAMS += NemuExtPackHelperApp
+ NemuExtPackHelperApp_TEMPLATE = NemuR3SetUidToRoot
+ NemuExtPackHelperApp_LDFLAGS.darwin = -framework Security
+ NemuExtPackHelperApp_LDFLAGS.win = /SUBSYSTEM:windows
+ NemuExtPackHelperApp_SOURCES = \
+	src-helper-apps/NemuExtPackHelperApp.cpp \
+	src-all/ExtPackUtil.cpp
+ NemuExtPackHelperApp_SOURCES.win = \
+	src-helper-apps/NemuExtPackHelperApp.rc
+ NemuExtPackHelperApp_LIBS = \
+	$(LIB_RUNTIME)
+endif # NEMU_WITH_EXTPACK
+
+#
+# VolInfo
+#
+ifdef NEMU_WITH_DEVMAPPER
+ PROGRAMS.linux      += NemuVolInfo
+ NemuVolInfo_TEMPLATE = NemuR3SetUidToRoot
+ NemuVolInfo_SOURCES  = src-helper-apps/NemuVolInfo.cpp
+ NemuVolInfo_LIBS     = devmapper
+endif
+
+endif # !NEMU_ONLY_SDK (the ifndef is far above)
+
+
+#
+# Installs com related thing(s) to bin.
+#
+INSTALLS.win += NemuMain-com-inst
+NemuMain-com-inst_INST = $(INST_BIN)
+NemuMain-com-inst_MODE = a+r,u+w
+NemuMain-com-inst_SOURCES = src-all/win/comregister.cmd
+
+
+if defined(NEMU_WITH_HARDENING) && "$(KBUILD_TARGET)" == "linux"
+ #
+ # Installs linux/hardening related things to components.
+ #
+ INSTALLS.linux += NemuMain-hardening-inst
+ NemuMain-hardening-inst_INST = $(INST_BIN)components/
+ NemuMain-hardening-inst_SYMLINKS = \
+	NemuDDU.so=>../NemuDDU.so \
+	NemuREM.so=>../NemuREM.so \
+	NemuRT.so=>../NemuRT.so \
+	NemuVMM.so=>../NemuVMM.so \
+	NemuXPCOM.so=>../NemuXPCOM.so
+endif
+
+
+if defined(NEMU_WITH_MIDL_PROXY_STUB) && "$(KBUILD_TARGET)" == "win"
+ #
+ # Experimental COM proxy + stub DLL.
+ #
+ DLLS += NemuProxyStub
+ NemuProxyStub_TEMPLATE = NEMUMAINCOMP
+ NemuProxyStub_DEFS     = REGISTER_PROXY_DLL
+ NemuProxyStub_DEFS.win.x86 = WIN32
+ NemuProxyStub_SOURCES  = \
+ 	$(NemuCOM_0_OUTDIR)/dlldata.c \
+ 	$(NemuCOM_0_OUTDIR)/VirtualBox_p.c \
+ 	$(NemuCOM_0_OUTDIR)/VirtualBox_i.c \
+ 	src-all/win/NemuProxyStub.def
+
+ ifdef NEMU_WITH_32_ON_64_MAIN_API
+  DLLS += NemuProxyStub-x86
+  NemuProxyStub-x86_TEMPLATE = NemuMainComp-x86
+  NemuProxyStub-x86_DEFS     = REGISTER_PROXY_DLL
+  NemuProxyStub-x86_DEFS.win.x86 = WIN32
+  NemuProxyStub-x86_SOURCES  = \
+  	$(NemuCOM-x86_0_OUTDIR)/dlldata.c \
+  	$(NemuCOM-x86_0_OUTDIR)/VirtualBox_p.c \
+  	$(NemuCOM-x86_0_OUTDIR)/VirtualBox_i.c \
+  	src-all/win/NemuProxyStub.def
+ endif
+endif
+
+
+
+# generate rules
+include $(FILE_KBUILD_SUB_FOOTER)
+
+
+
+#
+# Additions rules.
+#
+
+## @todo this hack ain't cutting it any longer. (the file name is abspath'ed since ages now.)
+glue/xpcom/helpers.cpp: $(NEMU_IDL_TYPELIB.XPCOM)
+
+$(NEMU_IDL_FILE.XPCOM): $(NEMU_PATH_MAIN_SRC)/idl/xpidl.xsl $(NEMU_XIDL_FILE) | $$(dir $$@)
+	$(call MSG_TOOL,xsltproc,NemuSVC,$<,$@)
+	$(QUIET)$(NEMU_XSLTPROC) -o $@ $< $(NEMU_XIDL_FILE)
+
+$(NEMU_IDL_TYPELIB.XPCOM): $(NEMU_IDL_FILE.XPCOM) |  $$(dir $$@) $(NEMU_XPIDL)
+	$(call MSG_TOOL,xpidl,NemuSVC,$<,$@)
+	$(QUIET)$(NEMU_XPIDL_ENV)$(NEMU_XPIDL) -m typelib -I $(NEMU_PATH_XPCOM_IDL) -e $@ $<
+	$(CHMOD) 0644 $@
+## @todo ^^^^^^^^^^^^ fix horrible hack
+
+$(NEMU_IDL_HEADER.XPCOM): $(NEMU_IDL_FILE.XPCOM) | $$(dir $$@) $(NEMU_XPIDL)
+	$(call MSG_TOOL,xpidl,NemuSVC,$<,$@)
+	$(QUIET)$(NEMU_XPIDL_ENV)$(NEMU_XPIDL) -m header  -I $(NEMU_PATH_XPCOM_IDL) -e $@ $<
+
+$(NEMU_IDL_FILE.MSCOM): $(NEMU_PATH_MAIN_SRC)/idl/midl.xsl $(NEMU_XIDL_FILE) | $$(dir $$@)
+	$(call MSG_TOOL,xsltproc,NemuSVC,$<,$@)
+	$(QUIET)$(NEMU_XSLTPROC) -o $@ $(if $(NEMU_WITH_MIDL_PROXY_STUB),-stringparam g_fGenProxy yes,) $< $(NEMU_XIDL_FILE)
+
+# Aliases for testing purposes.
+ifdef NEMU_WITH_XPCOM
+testidl:    $(NEMU_IDL_FILE.XPCOM) $(NEMU_IDL_TYPELIB.XPCOM) $(NemuCOM_0_OUTDIR)/VirtualBox_XPCOM_i.c
+testidlhdr: $(NEMU_IDL_HEADER.XPCOM)
+else
+testidl:    $(NEMU_IDL_FILE.MSCOM) $(NemuCOM_0_OUTDIR)/VirtualBox_i.c \
+	$(if $(NEMU_WITH_32_ON_64_MAIN_API),$(NemuCOM-x86_0_OUTDIR)/VirtualBox_i.c,)
+endif
+
+
+$(NemuCOM_0_OUTDIR)/VirtualBox_XPCOM_i.c: $(NEMU_PATH_MAIN_SRC)/idl/xpidl_iid.xsl $(NEMU_XIDL_FILE) | $$(dir $$@)
+	$(call MSG_TOOL,xsltproc,NemuSVC,$<,$@)
+	$(QUIET)$(NEMU_XSLTPROC) -o $@ $< $(NEMU_XIDL_FILE)
+
+$(NemuCOM_0_OUTDIR)/VirtualBox_i.c \
++ $(NemuCOM_0_OUTDIR)/VirtualBox.h \
+$(if $(NEMU_WITH_MIDL_PROXY_STUB),+ $(NemuCOM_0_OUTDIR)/VirtualBox_p.c + $(NemuCOM_0_OUTDIR)/dlldata.c,) \
++ $(NemuCOM_0_OUTDIR)/VirtualBox.tlb: $(NEMU_IDL_FILE.MSCOM) | $$(dir $$@)
+	$(NEMU_WIN_MIDL) /nologo \
+		$(if-expr "$(KBUILD_TARGET_ARCH)" == "amd64" && "$(KBUILD_HOST)" == "win",/env amd64,/env win32) \
+		/robust /protocol all /target NT51 \
+		/out $(call NEMU_FN_MAKE_WIN_PATH,$(NemuCOM_0_OUTDIR)) \
+		/cpp_cmd $(subst $(EXEC_X86_WIN32),,$(call NEMU_FN_MAKE_WIN_PATH,$(TOOL_$(NEMU_VCC_TOOL)_CC))) \
+		/I $(call NEMU_FN_MAKE_WIN_PATH,$(PATH_SDK_$(NEMU_WINPSDK)_INC)) \
+		/I idl \
+		$(call NEMU_FN_MAKE_WIN_PATH,$<)
+
+$(NemuCOM-x86_0_OUTDIR)/VirtualBox_i.c \
++ $(NemuCOM-x86_0_OUTDIR)/VirtualBox.h \
+$(if $(NEMU_WITH_MIDL_PROXY_STUB),+ $(NemuCOM-x86_0_OUTDIR)/VirtualBox_p.c + $(NemuCOM-x86_0_OUTDIR)/dlldata.c,) \
++ $(NemuCOM-x86_0_OUTDIR)/VirtualBox-x86.tlb: $(NEMU_IDL_FILE.MSCOM) | $$(dir $$@)
+	$(NEMU_WIN_MIDL) /nologo /env win32 /target NT51 \
+		/robust /protocol all \
+		/out $(call NEMU_FN_MAKE_WIN_PATH,$(NemuCOM-x86_0_OUTDIR)) \
+		/tlb $(call NEMU_FN_MAKE_WIN_PATH,$(NemuCOM-x86_0_OUTDIR)/VirtualBox-x86.tlb) \
+		/cpp_cmd $(subst $(EXEC_X86_WIN32),,$(call NEMU_FN_MAKE_WIN_PATH,$(TOOL_$(NEMU_VCC_TOOL_STEM)X86_CC))) \
+		/I $(call NEMU_FN_MAKE_WIN_PATH,$(PATH_SDK_$(NEMU_WINPSDK)_INC)) \
+		/I idl \
+		$(call NEMU_FN_MAKE_WIN_PATH,$<)
+
+#
+# Translation stuff
+#
+NemuSVC_NEMU_HEADERS = \
+	include/collection.h \
+	include/MachineImpl.h
+NemuSVC_NEMU_TRANSLATIONS = \
+	nls/NemuSVC_de.ts
+
+NemuC_NEMU_HEADERS = \
+	include/ConsoleImpl.h
+
+NemuC_NEMU_INTERMEDIATES   = $(NEMU_MAIN_APIWRAPPER_GEN_HDRS)
+NemuC_NEMU_HEADERS += $(NEMU_MAIN_APIWRAPPER_INCS)
+
+NemuC_NEMU_TRANSLATIONS = \
+	nls/NemuC_de.ts
+
+ifdef NEMU_WITH_JMSCOM
+
+#
+# Java glue JAR files
+#
+NEMU_JMSCOM_JAR     = $(NemuJMscom-inst-jar_0_OUTDIR)/nemujmscom.jar
+NEMU_JMSCOM_TARGET := $(PATH_TARGET)/nemujmscom-gen
+NEMU_JMSCOM_GEN     = $(NEMU_JMSCOM_TARGET)/jmscomgen
+NEMU_JMSCOM_JDEST  := $(NEMU_JMSCOM_TARGET)/jdest
+NEMU_GLUE_XSLT_DIR := $(PATH_ROOT)/src/Nemu/Main/glue
+NEMU_JACOB_DIR     := $(PATH_ROOT)/src/libs/jacob-1.17
+
+INSTALLS += NemuJMscom-inst-jar
+NemuJMscom-inst-jar_INST = $(INST_SDK)bindings/mscom/java/
+NemuJMscom-inst-jar_MODE = a+r,u+w
+NemuJMscom-inst-jar_SOURCES = \
+	$(NEMU_JMSCOM_JAR)
+NemuJMscom-inst-jar_CLEAN = \
+	$(NEMU_JMSCOM_JAR) \
+	$(NEMU_JMSCOM_GEN)/jmscomglue.list \
+	$(wildcard \
+		$(NEMU_JMSCOM_GEN)/java/*.java \
+		$(NEMU_JMSCOM_JDEST)/*.class \
+		$(NEMU_JMSCOM_JDEST)/*/*.class \
+		$(NEMU_JMSCOM_JDEST)/*/*/*.class \
+		$(NEMU_JMSCOM_JDEST)/*/*/*/*.class \
+	)
+NemuJMscom-inst-jar_BLDDIRS += $(NEMU_JMSCOM_GEN)/java
+
+$(NEMU_JMSCOM_GEN)/jmscomglue.list: \
+		$(NEMU_XIDL_FILE) \
+		$(NEMU_GLUE_XSLT_DIR)/glue-java.xsl \
+		$(NEMU_FILESPLIT) \
+		| $(NEMU_JMSCOM_GEN)/java/
+	$(call MSG_L1,Generating Java MSCOM glue files from XIDL)
+	$(QUIET)$(RM) -f $(wildcard $(NEMU_JMSCOM_GEN)/java/*.java)
+	$(QUIET)$(NEMU_XSLTPROC) \
+              --stringparam filelistonly ""                    \
+              --stringparam G_nemuApiSuffix $(NEMU_API_SUFFIX) \
+              --stringparam G_nemuGlueStyle mscom              \
+              --stringparam G_nemuDirPrefix ""                 \
+              -o $(NEMU_JMSCOM_GEN)/java/merged.file $(NEMU_GLUE_XSLT_DIR)/glue-java.xsl $<
+	$(QUIET)$(NEMU_FILESPLIT) $(NEMU_JMSCOM_GEN)/java/merged.file $(NEMU_JMSCOM_GEN)/java
+	$(QUIET)echo $(NEMU_JMSCOM_GEN)/java/*.java > $@
+
+$$(NEMU_JMSCOM_JAR): $(NEMU_JMSCOM_GEN)/jmscomglue.list | $$(dir $$@)
+	$(call MSG_TOOL,javac,$(notdir $@),jmscomglue.list,)
+	$(QUIET)$(RM) -Rf $(NEMU_JMSCOM_JDEST)
+	$(QUIET)$(MKDIR) -p $(NEMU_JMSCOM_JDEST)
+	$(call MSG_TOOL,javac,$(notdir $@),...,)
+	$(QUIET)$(NEMU_JAVAC) $(NEMU_JAVAC_OPTS) @$(NEMU_JMSCOM_GEN)/jmscomglue.list \
+		-d $(NEMU_JMSCOM_JDEST) -classpath "$(NEMU_JMSCOM_JDEST)$(NEMU_SEP)$(NEMU_JACOB_DIR)/jacob.jar"
+	$(call MSG_LINK,$(notdir $@),$@)
+	$(QUIET)$(NEMU_JAR) cf $@ -C $(NEMU_JMSCOM_JDEST) .
+
+## @todo compile TestNemu.java (see below) to have sanity checking
+
+endif # NEMU_WITH_JMSCOM
+
+#
+# Install Java glue sample code.
+#
+INSTALLS += javagluesample
+javagluesample_INST = $(INST_SDK)bindings/glue/java/
+javagluesample_MODE = a+r,u+w
+javagluesample_SOURCES = \
+	$(NEMU_PATH_MAIN_SRC)/glue/tests/TestNemu.java=>TestNemu.java \
+	$(NEMU_PATH_MAIN_SRC)/glue/tests/Makefile=>Makefile
+
+#
+# Rules associated with NemuAPIWrap (in typical invocation order).
+# We keep them down here to simplify the use of NemuAPIWrap_0_OUTDIR.
+#
+
+# Generate a make include file which lists the wrapper header and source files.
+$(NemuAPIWrap_NEMU_KMK_FILE).ts \
++| $(NemuAPIWrap_NEMU_KMK_FILE): \
+		$(NEMU_XIDL_FILE) \
+		$(NEMU_PATH_MAIN_SRC)/idl/apiwrap-server-filelist.xsl \
+		$(NEMU_PATH_MAIN_SRC)/Makefile.kmk
+	$(call MSG_GENERATE,,$(NemuAPIWrap_NEMU_KMK_FILE))
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(MKDIR) -p $(@D)
+	$(QUIET)$(NEMU_XSLTPROC) --stringparam KBUILD_HOST $(KBUILD_HOST) \
+		-o $@ $(NEMU_PATH_MAIN_SRC)/idl/apiwrap-server-filelist.xsl $<
+	$(QUIET)$(CP) --changed -fv $@ $(NemuAPIWrap_NEMU_KMK_FILE)
+
+# Generate the header files for the wrappers.
+$(NemuAPIWrap_0_OUTDIR)/apiwrappers-headers \
++| $(NEMU_MAIN_APIWRAPPER_GEN_HDRS): \
+		$(NEMU_XIDL_FILE) \
+               $(NEMU_PATH_MAIN_SRC)/idl/typemap-shared.inc.xsl \
+		$(NemuAPIWrap_NEMU_XSLT) \
+		$(NEMU_FILESPLIT) \
+		| $$(dir $$@)
+	$(call MSG_L1,Generating C++ Server API wrapper header files from XIDL)
+	$(QUIET)$(RM) -f -- $(filter-out $(NEMU_MAIN_APIWRAPPER_GEN_HDRS), $(wildcard $(NemuAPIWrap_0_OUTDIR)/*.h))
+	$(QUIET)$(NEMU_XSLTPROC) --stringparam KBUILD_HOST $(KBUILD_HOST) \
+		--stringparam generating "headers" \
+		-o $@ $(NemuAPIWrap_NEMU_XSLT) $<
+	$(QUIET)$(NEMU_FILESPLIT) $@ $(NemuAPIWrap_0_OUTDIR)
+
+# Generate the DTrace probes for the wrappers and combine them with handcoded probes.
+$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d.ts \
++| $(NemuAPIWrap_0_OUTDIR)/NemuAPI.d: \
+		$(NEMU_XIDL_FILE) \
+               $(NEMU_PATH_MAIN_SRC)/idl/typemap-shared.inc.xsl \
+		$(NemuAPIWrap_NEMU_XSLT) \
+		$(NEMU_FILESPLIT) \
+		| $$(dir $$@)
+	$(call MSG_L1,Generating DTrace Provider for the Nemu API (from XIDL))
+	$(QUIET)$(RM) -f -- "$@" "$@.tmp"
+	$(QUIET)$(NEMU_XSLTPROC) --stringparam KBUILD_HOST $(KBUILD_HOST) \
+		--stringparam generating "dtrace-probes" \
+		-o "$@" $(NemuAPIWrap_NEMU_XSLT) $<
+	$(QUIET)$(SED) -e '' -o "$@.tmp" \
+		"$(NEMU_PATH_MAIN_SRC)/src-all/NemuAPI-start.d" \
+		"$@" \
+		"$(NEMU_PATH_MAIN_SRC)/src-all/NemuAPI-end.d"
+	$(QUIET)$(MV) -- "$@.tmp" "$@"
+	$(QUIET)$(CP) --changed -fv -- "$@" "$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d"
+
+# Generate the wrapper source files - split in two due to long processing time
+$(NemuAPIWrap_0_OUTDIR)/apiwrappers-sources-even \
++| $(NEMU_MAIN_APIWRAPPER_GEN_SRCS_EVEN): \
+		$(NEMU_XIDL_FILE) \
+               $(NEMU_PATH_MAIN_SRC)/idl/typemap-shared.inc.xsl \
+		$(NemuAPIWrap_NEMU_XSLT) \
+		$(NEMU_FILESPLIT) \
+		| $$(dir $$@)
+	$(call MSG_L1,Generating C++ Server API wrapper files from XIDL - part 1)
+	$(QUIET)$(RM) -f -- $(filter-out $(NEMU_MAIN_APIWRAPPER_GEN_SRCS), $(wildcard $(NemuAPIWrap_0_OUTDIR)/*.cpp))
+	$(QUIET)$(NEMU_XSLTPROC) --stringparam KBUILD_HOST $(KBUILD_HOST) \
+		--stringparam generating "sources" \
+		--param reminder 0 \
+		-o $@ $(NemuAPIWrap_NEMU_XSLT) $<
+	$(QUIET)$(NEMU_FILESPLIT) $@ $(NemuAPIWrap_0_OUTDIR)
+
+$(NemuAPIWrap_0_OUTDIR)/apiwrappers-sources-odd \
++| $(NEMU_MAIN_APIWRAPPER_GEN_SRCS_ODD): \
+		$(NEMU_XIDL_FILE) \
+               $(NEMU_PATH_MAIN_SRC)/idl/typemap-shared.inc.xsl \
+		$(NemuAPIWrap_NEMU_XSLT) \
+		$(NEMU_FILESPLIT) \
+		| $$(dir $$@)
+	$(call MSG_L1,Generating C++ Server API wrapper files from XIDL - part 2)
+	$(QUIET)$(RM) -f -- $(filter-out $(NEMU_MAIN_APIWRAPPER_GEN_SRCS), $(wildcard $(NemuAPIWrap_0_OUTDIR)/*.cpp))
+	$(QUIET)$(NEMU_XSLTPROC) --stringparam KBUILD_HOST $(KBUILD_HOST) \
+		--stringparam generating "sources" \
+		--param reminder 1 \
+		-o $@ $(NemuAPIWrap_NEMU_XSLT) $<
+	$(QUIET)$(NEMU_FILESPLIT) $@ $(NemuAPIWrap_0_OUTDIR)
+
+testapiwrappers:: \
+	$(NemuAPIWrap_0_OUTDIR)/apiwrappers-headers \
+	$(NemuAPIWrap_0_OUTDIR)/NemuAPI.d.ts \
+	$(NemuAPIWrap_0_OUTDIR)/apiwrappers-sources-odd \
+	$(NemuAPIWrap_0_OUTDIR)/apiwrappers-sources-even
+
+
+#
+# NLS stuff.
+#
+updatenls::
+	$(NEMU_LUPDATE) $(NemuSVC_SOURCES) $(NemuSVC_NEMU_HEADERS) -ts $(NemuSVC_NEMU_TRANSLATIONS)
+	$(NEMU_LUPDATE) $(NemuC_SOURCES) $(NemuC_NEMU_HEADERS) -ts $(NemuC_NEMU_TRANSLATIONS)
+

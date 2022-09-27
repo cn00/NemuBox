@@ -1,0 +1,150 @@
+#!/bin/sh
+
+#
+# Create a tar archive containing the sources of the nemudrv kernel module
+#
+# Copyright (C) 2007-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <filename.tar.gz> [--without-hardening]"
+    echo "  Export VirtualBox kernel modules to <filename.tar.gz>"
+    exit 1
+fi
+
+NEMU_WITH_HARDENING=1
+if [ "$2" = "--without-hardening" ]; then
+    NEMU_WITH_HARDENING=
+fi
+
+PATH_TMP="`cd \`dirname $1\`; pwd`/.nemu_modules"
+PATH_OUT=$PATH_TMP
+FILE_OUT="`cd \`dirname $1\`; pwd`/`basename $1`"
+PATH_ROOT="`cd \`dirname $0\`/../../../..; pwd`"
+PATH_LINUX="$PATH_ROOT/src/Nemu/HostDrivers/linux"
+PATH_NEMUDRV="$PATH_ROOT/src/Nemu/HostDrivers/Support"
+PATH_NEMUNET="$PATH_ROOT/src/Nemu/HostDrivers/NemuNetFlt"
+PATH_NEMUADP="$PATH_ROOT/src/Nemu/HostDrivers/NemuNetAdp"
+PATH_NEMUPCI="$PATH_ROOT/src/Nemu/HostDrivers/NemuPci"
+
+NEMU_VERSION_MAJOR=`sed -e "s/^ *NEMU_VERSION_MAJOR *= \+\([0-9]\+\)/\1/;t;d" $PATH_ROOT/Config.kmk`
+NEMU_VERSION_MINOR=`sed -e "s/^ *NEMU_VERSION_MINOR *= \+\([0-9]\+\)/\1/;t;d" $PATH_ROOT/Config.kmk`
+NEMU_VERSION_BUILD=`sed -e "s/^ *NEMU_VERSION_BUILD *= \+\([0-9]\+\)/\1/;t;d" $PATH_ROOT/Config.kmk`
+NEMU_VERSION_STRING=$NEMU_VERSION_MAJOR.$NEMU_VERSION_MINOR.$NEMU_VERSION_BUILD
+NEMU_SVN_REV=`sed -e 's/^ *NEMU_SVN_REV_FALLBACK *:= \+\$(patsubst *%:,, *\$Rev: *\([0-9]\+\) *\$ *) */\1/;t;d' $PATH_ROOT/Config.kmk`                                                                                                        NEMU_VENDOR=`sed -e 's/^ *NEMU_VENDOR *= \+\(.\+\)/\1/;t;d' $PATH_ROOT/Config.kmk`                                     NEMU_VENDOR_SHORT=`sed -e 's/^ *NEMU_VENDOR_SHORT *= \+\(.\+\)/\1/;t;d' $PATH_ROOT/Config.kmk`                         NEMU_PRODUCT=`sed -e 's/^ *NEMU_PRODUCT *= \+\(.\+\)/\1/;t;d' $PATH_ROOT/Config.kmk`                                   NEMU_C_YEAR=`date +%Y`
+
+. $PATH_NEMUDRV/linux/files_nemudrv
+. $PATH_NEMUNET/linux/files_nemunetflt
+. $PATH_NEMUADP/linux/files_nemunetadp
+. $PATH_NEMUPCI/linux/files_nemupci
+
+# Temporary path for creating the modules, will be removed later
+mkdir $PATH_TMP || exit 1
+
+# Create auto-generated version file, needed by all modules
+echo "#ifndef ___version_generated_h___" > $PATH_TMP/version-generated.h
+echo "#define ___version_generated_h___" >> $PATH_TMP/version-generated.h
+echo "" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_MAJOR $NEMU_VERSION_MAJOR" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_MINOR $NEMU_VERSION_MINOR" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_BUILD $NEMU_VERSION_BUILD" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_STRING_RAW \"$NEMU_VERSION_MAJOR.$NEMU_VERSION_MINOR.$NEMU_VERSION_BUILD\"" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_VERSION_STRING \"$NEMU_VERSION_STRING\"" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_API_VERSION_STRING \"${NEMU_VERSION_MAJOR}_${NEMU_VERSION_MINOR}\"" >> $PATH_TMP/version-generated.h
+echo "#define NEMU_PRIVATE_BUILD_DESC \"Private build with export_modules\"" >> $PATH_TMP/version-generated.h
+echo "" >> $PATH_TMP/version-generated.h
+echo "#endif" >> $PATH_TMP/version-generated.h
+
+# Create auto-generated revision file, needed by all modules
+echo "#ifndef __revision_generated_h__" > $PATH_TMP/revision-generated.h
+echo "#define __revision_generated_h__" >> $PATH_TMP/revision-generated.h
+echo "" >> $PATH_TMP/revision-generated.h
+echo "#define NEMU_SVN_REV $NEMU_SVN_REV" >> $PATH_TMP/revision-generated.h
+echo "" >> $PATH_TMP/revision-generated.h
+echo "#endif" >> $PATH_TMP/revision-generated.h
+
+# Create auto-generated product file, needed by all modules
+echo "#ifndef ___product_generated_h___" > $PATH_TMP/product-generated.h
+echo "#define ___product_generated_h___" >> $PATH_TMP/product-generated.h
+echo "" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_VENDOR \"$NEMU_VENDOR\"" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_VENDOR_SHORT \"$NEMU_VENDOR_SHORT\"" >> $PATH_TMP/product-generated.h
+echo "" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_PRODUCT \"$NEMU_PRODUCT\"" >> $PATH_TMP/product-generated.h
+echo "#define NEMU_C_YEAR \"$NEMU_C_YEAR\"" >> $PATH_TMP/product-generated.h
+echo "" >> $PATH_TMP/product-generated.h
+echo "#endif" >> $PATH_TMP/product-generated.h
+
+# nemudrv (VirtualBox host kernel module)
+mkdir $PATH_TMP/nemudrv || exit 1
+for f in $FILES_NEMUDRV_NOBIN; do
+    install -D -m 0644 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemudrv/`echo $f|cut -d'>' -f2`"
+done
+for f in $FILES_NEMUDRV_BIN; do
+    install -D -m 0755 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemudrv/`echo $f|cut -d'>' -f2`"
+done
+if [ -n "$NEMU_WITH_HARDENING" ]; then
+    sed -e "s;-DNEMU_WITH_EFLAGS_AC_SET_IN_NEMUDRV;;g" \
+        -e "s;-DIPRT_WITH_EFLAGS_AC_PRESERVING;;g" \
+        < $PATH_NEMUDRV/linux/Makefile > $PATH_TMP/nemudrv/Makefile
+else
+    sed -e "s;-DNEMU_WITH_HARDENING;;g" \
+        -e "s;-DNEMU_WITH_EFLAGS_AC_SET_IN_NEMUDRV;;g" \
+        -e "s;-DIPRT_WITH_EFLAGS_AC_PRESERVING;;g" \
+        < $PATH_NEMUDRV/linux/Makefile > $PATH_TMP/nemudrv/Makefile
+fi
+
+# nemunetflt (VirtualBox netfilter kernel module)
+mkdir $PATH_TMP/nemunetflt || exit 1
+for f in $NEMU_NEMUNETFLT_SOURCES; do
+    install -D -m 0644 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemunetflt/`echo $f|cut -d'>' -f2`"
+done
+if [ -n "$NEMU_WITH_HARDENING" ]; then
+    cat                                   $PATH_NEMUNET/linux/Makefile > $PATH_TMP/nemunetflt/Makefile
+else
+    sed -e "s;-DNEMU_WITH_HARDENING;;g" < $PATH_NEMUNET/linux/Makefile > $PATH_TMP/nemunetflt/Makefile
+fi
+
+# nemunetadp (VirtualBox network adapter kernel module)
+mkdir $PATH_TMP/nemunetadp || exit 1
+for f in $NEMU_NEMUNETADP_SOURCES; do
+    install -D -m 0644 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemunetadp/`echo $f|cut -d'>' -f2`"
+done
+if [ -n "$NEMU_WITH_HARDENING" ]; then
+    cat                                   $PATH_NEMUADP/linux/Makefile > $PATH_TMP/nemunetadp/Makefile
+else
+    sed -e "s;-DNEMU_WITH_HARDENING;;g" < $PATH_NEMUADP/linux/Makefile > $PATH_TMP/nemunetadp/Makefile
+fi
+
+# nemupci (VirtualBox host PCI access kernel module)
+mkdir $PATH_TMP/nemupci || exit 1
+for f in $NEMU_NEMUPCI_SOURCES; do
+    install -D -m 0644 `echo $f|cut -d'=' -f1` "$PATH_TMP/nemupci/`echo $f|cut -d'>' -f2`"
+done
+if [ -n "$NEMU_WITH_HARDENING" ]; then
+    cat                                   $PATH_NEMUPCI/linux/Makefile > $PATH_TMP/nemupci/Makefile
+else
+    sed -e "s;-DNEMU_WITH_HARDENING;;g" < $PATH_NEMUPCI/linux/Makefile > $PATH_TMP/nemupci/Makefile
+fi
+
+install -D -m 0644 $PATH_LINUX/Makefile $PATH_TMP/Makefile
+install -D -m 0755 $PATH_LINUX/build_in_tmp $PATH_TMP/build_in_tmp
+
+# Only temporary, omit from archive
+rm $PATH_TMP/version-generated.h
+rm $PATH_TMP/revision-generated.h
+rm $PATH_TMP/product-generated.h
+
+# Create the archive
+tar -czf $FILE_OUT -C $PATH_TMP . || exit 1
+
+# Remove the temporary directory
+rm -r $PATH_TMP

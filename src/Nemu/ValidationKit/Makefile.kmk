@@ -1,0 +1,272 @@
+# $Id: Makefile.kmk $
+## @file
+# VirtualBox Validation Kit.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+# The contents of this file may alternatively be used under the terms
+# of the Common Development and Distribution License Version 1.0
+# (CDDL) only, as it comes in the "COPYING.CDDL" file of the
+# VirtualBox OSE distribution, in which case the provisions of the
+# CDDL are applicable instead of those of the GPL.
+#
+# You may elect to license modified versions of this file under the
+# terms and conditions of either the GPL or the CDDL or both.
+#
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Make sure our Config.kmk is included.
+ifndef NEMU_VALIDATIONKIT_CONFIG_KMK_INCLUDED
+ include $(PATH_SUB_CURRENT)/Config.kmk
+endif
+
+# Collect install targets
+NEMU_VALIDATIONKIT_INSTALLS := $(INSTALLS)
+
+#
+# Include sub-makefiles.
+#
+include $(PATH_SUB_CURRENT)/tests/Makefile.kmk
+ifneq ($(KBUILD_HOST),os2)	 # need yasm
+ include $(PATH_SUB_CURRENT)/bootsectors/Makefile.kmk
+endif
+include $(PATH_SUB_CURRENT)/utils/Makefile.kmk
+include $(PATH_SUB_CURRENT)/common/Makefile.kmk
+include $(PATH_SUB_CURRENT)/testboxscript/Makefile.kmk
+include $(PATH_SUB_CURRENT)/testdriver/Makefile.kmk
+include $(PATH_SUB_CURRENT)/testmanager/Makefile.kmk
+
+#
+# Globals.
+#
+
+# The current target is enabled by default.
+NEMU_WITH_VALIDATIONKIT_PACKING.$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH) = 1
+
+
+#
+# Install the test driver framework.
+#
+INSTALLS += ValidationKit-testdriver
+ValidationKit-testdriver_TEMPLATE = NemuValidationKitR3
+ValidationKit-testdriver_INST = $(INST_VALIDATIONKIT)testdriver/
+ValidationKit-testdriver_MODE = a+r,u+w
+ValidationKit-testdriver_SOURCES := \
+	$(PATH_SUB_CURRENT)/testdriver/__init__.py \
+	$(PATH_SUB_CURRENT)/testdriver/base.py \
+	$(PATH_SUB_CURRENT)/testdriver/reporter.py \
+	$(PATH_SUB_CURRENT)/testdriver/tst-txsclient.py \
+	$(PATH_SUB_CURRENT)/testdriver/txsclient.py \
+	$(PATH_SUB_CURRENT)/testdriver/nemu.py \
+	$(PATH_SUB_CURRENT)/testdriver/nemucon.py \
+	$(PATH_SUB_CURRENT)/testdriver/nemutestvms.py \
+	$(PATH_SUB_CURRENT)/testdriver/nemuwrappers.py \
+	$(PATH_SUB_CURRENT)/testdriver/winbase.py \
+	$(PATH_SUB_CURRENT)/testdriver/win-nemu-net-uninstall.ps1
+ValidationKit-testdriver_EXEC_SOURCES := \
+	$(PATH_SUB_CURRENT)/testdriver/nemuinstaller.py
+$(PATH_SUB_CURRENT)/testdriver/txsclient.py_NEMU_PYCHECKER_FLAGS = --no-reimport
+
+
+#
+# Packing target.
+#
+ifndef NEMU_WITHOUT_VALIDATIONKIT_ZIP
+
+ NEMU_VALIDATIONKIT_INSTALLS := $(filter-out $(NEMU_VALIDATIONKIT_INSTALLS), $(INSTALLS))
+
+ #
+ # NemuValidationKit.zip.
+ # TODO: Don't pack the python stuff multiple times?  Lazy works for now.
+ #
+ PACKING += $(PATH_OUT)/NemuValidationKit.zip
+ $(PATH_OUT)/NemuValidationKit.zip: \
+ 		$(NEMU_PATH_VALIDATIONKIT)/NemuValidationKit.iso \
+ 		$(NEMU_PATH_VALIDATIONKIT)/ \
+               $$(foreach inst, $$(NEMU_VALIDATIONKIT_INSTALLS), \
+			$$(filter $(PATH_STAGE)/$(INST_VALIDATIONKIT)%, $$($$(inst)_2_STAGE_TARGETS)))
+	$(call MSG_L1,Packing the Test Suite $@)
+	$(QUIET)$(RM) -f $@
+	$(foreach os, darwin freebsd linux os2 solaris win,$(foreach arch, x86 amd64 \
+	,$(if-expr defined(NEMU_WITH_VALIDATIONKIT_PACKING.$(os).$(arch))\
+		,$(NLTAB)$(QUIET)$(REDIRECT) -C $(PATH_OUT_BASE)/$(os).$(arch)/$(KBUILD_TYPE)/ \
+			-- zip$(HOSTSUFF_EXE) -r9 $@ $(INST_VALIDATIONKIT) -x '*.pyc',)))
+
+ #
+ # NemuTestBoxScript.zip - For setting up the testboxes.
+ #
+ PACKING += $(PATH_OUT)/NemuTestBoxScript.zip
+ $(PATH_OUT)/NemuTestBoxScript.zip: \
+ 		$$(testboxscript_2_STAGE_TARGETS) \
+ 		$$(testboxscript-common_2_STAGE_TARGETS) \
+ 		$$(TestBoxHelper_2_STAGE_TARGETS)
+	$(call MSG_L1,Packing the TestBox Script files to $@)
+	$(QUIET)$(RM) -f $@
+	$(foreach os, darwin freebsd linux os2 solaris win,$(foreach arch, x86 amd64 \
+	,$(if-expr defined(NEMU_WITH_VALIDATIONKIT_PACKING.$(os).$(arch))\
+		,$(NLTAB)$(QUIET)$(REDIRECT) -C $(PATH_OUT_BASE)/$(os).$(arch)/$(KBUILD_TYPE)/ \
+			-- zip$(HOSTSUFF_EXE) -r9 $@ $(INST_TESTBOXSCRIPT) -x '*.pyc',)))
+
+endif # !NEMU_WITHOUT_VALIDATIONKIT_ZIP
+
+
+#
+# Automatically lint python code during build.
+#
+if defined(NEMU_WITH_PYLINT) && !defined(NEMU_WITHOUT_AUTO_PYLINT)
+ OTHERS      += $(PATH_TARGET)/pylint.run
+ OTHER_CLEAN += $(PATH_TARGET)/pylint.run
+ $(PATH_TARGET)/pylint.run: \
+ 		$$(filter-out %/testboxscript.o, $$(NEMU_VALIDATIONKIT_PYLINT_TARGETS)) \
+		$$(NEMU_VALIDATIONKIT_PYUNITTEST_TARGETS)
+	$(QUIET)$(APPEND) -t "$@"
+endif
+
+$(evalcall def_nemu_validationkit_process_python_sources,FORCE)
+$(evalcall def_nemu_validationkit_process_js_sources,FORCE)
+include $(FILE_KBUILD_SUB_FOOTER)
+
+
+
+
+#
+# Construct the file spec for creating the Validation Kit guest iso.
+#
+NEMU_VALIDATIONKIT_FILESPEC = \
+	$(NEMU_PATH_VALIDATIONKIT)/nemutxs-readme.txt
+ifneq ($(KBUILD_HOST),os2)
+ NEMU_VALIDATIONKIT_FILESPEC += \
+	$(NEMU_PATH_VALIDATIONKIT)/bootsectors/bootsector-pae.img \
+	$(NEMU_PATH_VALIDATIONKIT)/bootsectors/bootsector-shutdown.img
+endif
+
+# Generate NEMU_PATH_VALIDATIONKIT.os.arch variables.
+$(foreach os, darwin freebsd linux os2 solaris win,$(foreach arch, x86 amd64, \
+	$(eval NEMU_PATH_VALIDATIONKIT.$(os).$(arch) = $(PATH_OUT_BASE)/$(os).$(arch)/$(KBUILD_TYPE)/$(INST_VALIDATIONKIT)$(os)/$(arch)) \
+))
+
+# Common files first.
+define def_nemu_validationkit_common_files
+ ifdef NEMU_WITH_VALIDATIONKIT_PACKING.$(os).$(arch)
+  NEMU_VALIDATIONKIT_FILESPEC += \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/exceptionsR3$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/cpu-alloc-all-mem$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/cpu-numa$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/NetPerf$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/LoadGenerator$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/loadgeneratorR0.r0 \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/TestExecService$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/vts_rm$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/vts_tar$(TMP_SUFF_EXE) \
+      	$$(NEMU_PATH_VALIDATIONKIT.$(os).$(arch))/xmmsaving$(TMP_SUFF_EXE)
+ endif
+endef
+
+TMP_SUFF_EXE=.exe
+$(foreach os, os2 win,$(foreach arch, x86 amd64, \
+	$(eval $(def_nemu_validationkit_common_files)) \
+))
+TMP_SUFF_EXE=
+$(foreach os, darwin freebsd linux solaris,$(foreach arch, x86 amd64, \
+	$(eval $(def_nemu_validationkit_common_files)) \
+))
+
+# OS specific files - Linux
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.linux.x86
+ NEMU_VALIDATIONKIT_FILESPEC += \
+ 	$(NEMU_PATH_VALIDATIONKIT.linux.x86)/UsbTest
+endif
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.linux.amd64
+ NEMU_VALIDATIONKIT_FILESPEC += \
+ 	$(NEMU_PATH_VALIDATIONKIT.linux.amd64)/UsbTest
+endif
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.linux.x86
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.linux.x86)/../nemutxs)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.linux.x86)/../nemutxs-nat)
+
+else ifdef NEMU_WITH_VALIDATIONKIT_PACKING.linux.amd64
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.linux.amd64)/../nemutxs)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.linux.amd64)/../nemutxs-nat)
+endif
+
+# OS specific files - OS/2
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.os2.x86
+ NEMU_VALIDATIONKIT_FILESPEC += \
+ 	$(NEMU_PATH_VALIDATIONKIT.os2.x86)/libc06.dll \
+ 	$(NEMU_PATH_VALIDATIONKIT.os2.x86)/libc061.dll \
+ 	$(NEMU_PATH_VALIDATIONKIT.os2.x86)/libc062.dll \
+ 	$(NEMU_PATH_VALIDATIONKIT.os2.x86)/libc063.dll \
+ 	$(NEMU_PATH_VALIDATIONKIT.os2.x86)/libc064.dll \
+ 	$(NEMU_PATH_VALIDATIONKIT.os2.x86)/libc065.dll
+endif
+
+# OS specific files - Solaris
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.solaris.x86
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.solaris.x86)/../nemutxs.sh)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.solaris.x86)/../nemutxs.xml)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.solaris.x86)/../nemutxs-sol10.xml)
+else ifdef NEMU_WITH_VALIDATIONKIT_PACKING.solaris.amd64
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.solaris.amd64)/../nemutxs.sh)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.solaris.amd64)/../nemutxs.xml)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.solaris.amd64)/../nemutxs-sol10.xml)
+endif
+
+# OS specific files - Windows
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.win.x86
+ NEMU_VALIDATIONKIT_FILESPEC += \
+ 	$(NEMU_PATH_VALIDATIONKIT.win.x86)/ntSetFreq.exe \
+ 	$(NEMU_PATH_VALIDATIONKIT.win.x86)/ntTimeSources.exe
+endif
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.win.amd64
+ NEMU_VALIDATIONKIT_FILESPEC += \
+ 	$(NEMU_PATH_VALIDATIONKIT.win.amd64)/ntSetFreq.exe \
+ 	$(NEMU_PATH_VALIDATIONKIT.win.amd64)/ntTimeSources.exe
+endif
+ifdef NEMU_WITH_VALIDATIONKIT_PACKING.win.x86
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.x86)/../nemutxs.cmd)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.x86)/../nemutxs.reg)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.x86)/../nemutxs-nat.cmd)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.x86)/../nemutxs-nat.reg)
+else ifdef NEMU_WITH_VALIDATIONKIT_PACKING.win.amd64
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.amd64)/../nemutxs.cmd)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.amd64)/../nemutxs.reg)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.amd64)/../nemutxs-nat.cmd)
+ NEMU_VALIDATIONKIT_FILESPEC += $(abspath $(NEMU_PATH_VALIDATIONKIT.win.amd64)/../nemutxs-nat.reg)
+endif
+
+
+#
+# Build the Validation Kit guest ISO.
+#
+$(NEMU_PATH_VALIDATIONKIT)/NemuValidationKit.iso: \
+		$(filter-out %=deleteme=, $(subst =,=deleteme= , $(NEMU_VALIDATIONKIT_FILESPEC))) \
+		$(NEMU_SVN_REV_KMK) \
+		$(NEMU_PATH_VALIDATIONKIT_SRC)/Makefile.kmk
+	$(call MSG_TOOL,mkisofs,,$@)
+	$(QUIET)$(MKDIR) -p $(@D)
+ifneq ($(KBUILD_TARGET),os2)
+	$(ECHO) NEMU_VALIDATIONKIT_FILESPEC $(NEMU_VALIDATIONKIT_FILESPEC)
+endif
+# use iso-level 3 which is the most ISO conforming level with least restrictions; iso-level 4 maps to iso-level 2
+# with some extra restrictions removal (not conforming to ISO9660) which some platforms like Solaris 10 does not like.
+	$(NEMU_MKISOFS) -rational-rock -r -joliet -iso-level 3 \
+		-volid "NEMUVALKIT_$(NEMU_VERSION_STRING_RAW)_$(NEMU_SVN_REV)" -l -graft-points -o $@ \
+		$(foreach spec,$(NEMU_VALIDATIONKIT_FILESPEC) \
+			,$(if $(findstring =,$(spec)),$(spec), $(lastword $(subst /$(INST_VALIDATIONKIT), ,$(spec))=$(spec))))
+
+# Alias for creating the iso.
+.PHONY: validationkit-iso
+validationkit-iso: $(NEMU_PATH_VALIDATIONKIT)/NemuValidationKit.iso
+

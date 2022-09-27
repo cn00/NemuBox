@@ -1,0 +1,581 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+    VirtualBox Windows Installation Script (WiX)
+
+    Copyright (C) 2014-2015 Oracle Corporation
+
+    This file is part of VirtualBox Open Source Edition (OSE), as
+    available from http://www.virtualbox.org. This file is free software;
+    you can redistribute it and/or modify it under the terms of the GNU
+    General Public License (GPL) as published by the Free Software
+    Foundation, in version 2 as it comes in the "COPYING" file of the
+    VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+    hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+-->
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:difxapp="http://schemas.microsoft.com/wix/DifxAppExtension">
+
+    <?include Properties.wxi ?>
+
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+    <!-- The merge module file names -->
+    <?define Property_NemuMergeApp = "$(env.NEMU_WIN_INST_MERGE_APP)" ?>
+    <?if $(env.NEMU_WITH_32_ON_64_MAIN_API) = "yes" ?>
+        <?define Property_NemuMergeCOM32On64 = "$(env.NEMU_WIN_INST_MERGE_COM32ON64)" ?>
+    <?endif ?>
+    <?define Property_NemuMergeUSB = "$(env.NEMU_WIN_INST_MERGE_USB)" ?>
+    <?if $(env.NEMU_WITH_NETFLT) = "yes" ?>
+        <?define Property_NemuMergeNetworkFlt = "$(env.NEMU_WIN_INST_MERGE_NETFLT)" ?>
+    <?endif ?>
+    <?define Property_NemuMergeNetworkAdp = "$(env.NEMU_WIN_INST_MERGE_NETADP)" ?>
+    <?if $(env.NEMU_WITH_NETFLT) = "yes" ?>
+        <?define Property_NemuMergeNetworkLwf = "$(env.NEMU_WIN_INST_MERGE_NETLWF)" ?>
+    <?endif ?>
+    <?define Property_NemuMergeNetworkAdp6 = "$(env.NEMU_WIN_INST_MERGE_NETADP6)" ?>
+    <?if $(env.NEMU_WITH_PYTHON) = "yes" ?>
+        <?define Property_NemuMergePython = "$(env.NEMU_WIN_INST_MERGE_PYTHON)" ?>
+    <?endif ?>
+<?endif ?>
+
+    <Product Id="*"
+             UpgradeCode="C4BAD770-BFE8-4D2C-A592-693028A7215B"
+             Name="$(env.NEMU_PRODUCT) $(env.NEMU_VERSION_STRING)"
+             Language="!(loc.LANG)"
+             Codepage="1252"
+             Version="$(var.Property_Version)"
+             Manufacturer="$(env.NEMU_VENDOR)">
+
+    <Package Id="*"
+             Keywords="Installer"
+             Description="$(env.NEMU_PRODUCT) $(var.Property_VersionExt) installation package"
+             Comments="$(env.NEMU_PRODUCT) installation package"
+             Compressed="yes"
+             Manufacturer="$(env.NEMU_VENDOR)"
+             InstallerVersion="200"
+             InstallPrivileges="elevated"
+             Platform="$(var.Property_Platform)"/>
+
+    <!-- Global properties -->
+    <Property Id="ARPPRODUCTICON">IconVirtualBox</Property>
+    <Property Id="ARPURLINFOABOUT">http://www.virtualbox.org</Property>
+    <Property Id="ARPURLUPDATEINFO">http://www.virtualbox.org</Property>
+
+    <!-- Default property for network adapter type -->
+    <Property Id="NETWORKTYPE" Value="NDIS6" Secure="yes"/>
+    <!-- Force NDIS5 on pre-Vista -->
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "no" ?>
+    <!-- Force NDIS5 on pre-Vista -->
+    <SetProperty Id="NETWORKTYPE" After="CostFinalize" Value="NDIS5">
+      <![CDATA[(VersionNT < 600)]]>
+    </SetProperty>
+<?endif ?>
+
+    <!-- Install the product for all users on the system -->
+    <Property Id="ALLUSERS"><![CDATA[1]]></Property>
+
+    <!-- Force overwriting all files and re-create shortcuts to guarantee a working environment -->
+    <Property Id='REINSTALLMODE' Value='amus'/>
+
+    <!-- VirtualBox properties (can be modified from command line) -->
+
+    <!-- Whether or not a desktop shortcut should be created. -->
+    <Property Id="NEMU_INSTALLDESKTOPSHORTCUT" Value="1" Secure="yes"/>
+    <SetProperty Id="NEMU_INSTALLDESKTOPSHORTCUT" After="AppSearch" Sequence="both"
+                 Value="{}"><![CDATA[NEMU_INSTALLDESKTOPSHORTCUT="0"]]></SetProperty>
+
+    <!-- Whether or not a desktop shortcut for the Quick Launch Bar should be created -->
+    <Property Id="NEMU_INSTALLQUICKLAUNCHSHORTCUT" Value="1" Secure="yes"/>
+    <SetProperty Id="NEMU_INSTALLQUICKLAUNCHSHORTCUT" After="AppSearch" Sequence="both"
+                 Value="{}"><![CDATA[NEMU_INSTALLQUICKLAUNCHSHORTCUT="0"]]></SetProperty>
+
+    <!-- Whether or not registering of known desktop shortcut for the Quick Launch Bar should be created -->
+    <Property Id="NEMU_REGISTERFILEEXTENSIONS" Value="1" Secure="yes"/>
+    <SetProperty Id="NEMU_REGISTERFILEEXTENSIONS" After="AppSearch" Sequence="both"
+                 Value="{}"><![CDATA[NEMU_REGISTERFILEEXTENSIONS="0"]]></SetProperty>
+
+    <!-- Whether or not VirtualBox should be started automatically right after successful installation -->
+    <Property Id="NEMU_START" Value="1" Secure="yes"/>
+    <SetProperty Id="NEMU_START" After="AppSearch" Sequence="both"
+                 Value="{}"><![CDATA[NEMU_START="0"]]></SetProperty>
+
+    <!-- Make sure installation will not start on anything other but the NT family -->
+<?if $(env.BUILD_TARGET_ARCH) = "amd64" ?>
+    <Condition Message="!(loc.Only64Bit)">
+        VersionNT64
+    </Condition>
+<?else ?>
+    <Condition Message="!(loc.Only32Bit)">
+        NOT VersionNT64
+    </Condition>
+
+    <Condition Message="!(loc.WrongOS)">
+        NOT VersionNT=500 AND NOT Version9X AND NOT VersionNT64
+    </Condition>
+
+<?endif ?>
+
+    <Condition Message="!(loc.NeedAdmin)">
+        Privileged
+    </Condition>
+
+    <!-- Detect old innotek installation -->
+    <!-- Force a manual uninstall of an already installed innotek VirtualBox version first -->
+    <Property Id="NEMUINNOTEK">
+        <RegistrySearch Id="RegSearchInnotekVersion" Root="HKLM" Key="SOFTWARE\Innotek\VirtualBox" Name="Version" Type="raw" Win64="$(var.Property_Win64)"/>
+    </Property>
+    <Condition Message="!(loc.InnotekFound)">
+        NOT NEMUINNOTEK
+    </Condition>
+
+
+    <!-- *************************** Upgrade packages only ******************************* -->
+    <!-- Minimum and Maximum specify the range of versions we are supposed to update with this upgrade.
+         IncludeMaximum and IncludeMinimum specify whether the bound value is actually included in the range or not
+         (IncludeMaximum = yes meaning to find versions below or equal to the version specified in Maximum while
+         IncludeMaximum = no only finds those below the Maximum).
+         OnlyDetect tells the installer not to remove the previous product. This is useful as long as we
+         only change files in the package -->
+
+    <Upgrade Id="C4BAD770-BFE8-4D2C-A592-693028A7215B"> <!-- Upgrade of Sun xVM VirtualBox >= v1.6.0 -->
+
+        <!-- Upgrade is flagged if current-install is newer than or equal to package - TODO: should make a dialog appear asking user to confirm downgrade -->
+        <!-- Setting "OnlyDetect" to "no" makes the installer uninstall an already newer installed version -->
+        <UpgradeVersion Property="NEWERVERSIONDETECTED" Minimum="$(var.Property_Version)" IncludeMinimum="no" OnlyDetect="no" />
+
+        <!-- Flag is set if the install will trigger an upgrade of an existing install -->
+        <UpgradeVersion Property="PREVIOUSVERSIONSINSTALLED" Minimum="1.0.0.0" Maximum="$(var.Property_Version)" IncludeMaximum="yes" />
+
+    </Upgrade>
+
+    <!-- The product's icon table -->
+    <Icon Id="IconVirtualBox" SourceFile="$(env.NEMU_WINDOWS_ICON_FILE)" />
+
+    <!-- The media/binary IDs -->
+    <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "no" ?>
+    <?if $(env.NEMU_WITH_COMBINED_PACKAGE) = "yes" ?>
+        <Media Id="2" Cabinet="common.cab" EmbedCab="no" CompressionLevel="high" />
+    <?endif ?>
+<?endif ?>
+    <Binary Id="NemuInstallHelper" SourceFile="$(env.PATH_OUT)\bin\NemuInstallHelper.dll" />
+
+    <!-- Custom actions -->
+
+    <!-- Figure out where a previous installation was, if any -->
+<?if $(env.BUILD_TARGET_ARCH) = "amd64" ?>
+    <CustomAction Id="ca_OriginalTargetDir" Execute="firstSequence" Property="INSTALLDIR"
+                  Value="[ProgramFiles64Folder]\$(env.NEMU_VENDOR_SHORT)\VirtualBox" />
+
+    <Property Id="EXISTINGINSTALLDIR" Secure="yes">
+        <RegistrySearch Id="RegistryGetInstallPath" Root="HKLM" Key="$(var.Property_RegKey)" Name="InstallDir"
+                        Type="raw" Win64="$(var.Property_Win64)"/>
+    </Property>
+    <CustomAction Id="ca_DefaultTargetDir" Execute="firstSequence" Property="INSTALLDIR" Value="[EXISTINGINSTALLDIR]" />
+<?else ?>
+    <CustomAction Id="ca_OriginalTargetDir" Execute="firstSequence" Property="INSTALLDIR"
+                  Value="[ProgramFilesFolder]\$(env.NEMU_VENDOR_SHORT)\VirtualBox" />
+
+    <Property Id="EXISTINGINSTALLDIR" Secure="yes">
+        <RegistrySearch Id="RegistryGetInstallPath" Root="HKLM" Key="$(var.Property_RegKey)" Name="InstallDir"
+                        Type="raw" Win64="$(var.Property_Win64)"/>
+    </Property>
+    <CustomAction Id="ca_DefaultTargetDir" Execute="firstSequence" Property="INSTALLDIR" Value="[EXISTINGINSTALLDIR]" />
+<?endif ?>
+    <CustomAction Id="ca_UninstallTAPInstances" BinaryKey="NemuInstallHelper"
+                  DllEntry="UninstallTAPInstances" Execute="deferred" Return="check" Impersonate="no"/>
+
+    <Property Id="NEMUDEPENDENCY" Secure="yes">
+        <DirectorySearch Id="NemuInstallDir" Path="[EXISTINGINSTALLDIR]">
+            <FileSearch Name="dependency.dep"/>
+        </DirectorySearch>
+    </Property>
+
+    <!--
+                            install upgrade uninstall
+    NEMUDEPENDENCY             0      1/0      1/0
+    UPGRADINGPRODUCTCODE       0       1        0
+    final                      0       1        0
+    not final                  1       0        1
+    -->
+
+    <Condition Message="It was detected an application which has been using currently installed VirtualBox version.
+    You must remove this application before continuing installation.
+    See the file dependency.dep in the VirtualBox installation directory for details. ">
+        NOT (NEMUDEPENDENCY AND UPGRADINGPRODUCTCODE)
+    </Condition>
+
+    <!-- Detect old Sun installation -->
+    <!-- Force a manual uninstall of an already installed Sun VirtualBox version first -->
+    <!--<Property Id="NEMUSUN">
+        <RegistrySearch Id="RegSearchSunVersion" Root="HKLM" Key="SOFTWARE\Sun\VirtualBox" Name="Version" Type="raw" Win64="$(var.Property_Win64)"/>
+    </Property>
+    <Condition Message="!(loc.SunFound)">
+        NOT NEMUSUN
+    </Condition>-->
+
+    <CustomAction Id="ca_StartNemu" Directory="INSTALLDIR" ExeCommand="[INSTALLDIR]\Nemu.exe" Return="asyncNoWait" Impersonate="yes" />
+    <CustomAction Id="ca_CheckSerial" BinaryKey="NemuInstallHelper" DllEntry="CheckSerial" Impersonate="no"/>
+
+    <CustomAction Id="ca_InstallBranding" BinaryKey="NemuInstallHelper" DllEntry="InstallBranding" Execute="deferred" Return="check" Impersonate="no"/>
+    <CustomAction Id="ca_InstallBrandingArgs" Property="ca_InstallBranding" Value="[INSTALLDIR]" Execute="immediate"/>
+
+    <CustomAction Id="ca_UninstallBranding" BinaryKey="NemuInstallHelper" DllEntry="UninstallBranding" Execute="deferred" Return="check" Impersonate="no"/>
+    <CustomAction Id="ca_UninstallBrandingArgs" Property="ca_UninstallBranding" Value="[INSTALLDIR]" Execute="immediate"/>
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "no" ?>
+    <?include NemuMergeAppCA.wxi ?>
+    <?if $(env.NEMU_WITH_32_ON_64_MAIN_API) = "yes" ?>
+        <?include NemuMergeCOM32On64CA.wxi ?>
+    <?endif ?>
+    <?if $(env.NEMU_WITH_NETFLT) = "yes" ?>
+        <?include NemuMergeNetFltCA.wxi ?>
+        <?include NemuMergeNetLwfCA.wxi ?>
+    <?endif ?>
+    <?include NemuMergeNetAdpCA.wxi ?>
+    <?include NemuMergeNetAdp6CA.wxi ?>
+    <?include NemuMergeUSBCA.wxi ?>
+    <?if $(env.NEMU_WITH_PYTHON) = "yes" ?>
+        <?include NemuMergePythonCA.wxi ?>
+    <?endif ?>
+<?endif ?>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+        <Directory Id="$(var.Property_ProgramFiles)" Name="PFiles">
+            <Directory Id="VENDOR" Name="$(env.NEMU_VENDOR_SHORT)">
+                <Directory Id="INSTALLDIR" Name="VirtualBox">
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                <Merge Id="msm_NemuApp" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergeApp)" DiskId="1">
+                    <ConfigurationData Name="argRegesterExtensions" Value="[NEMU_REGISTERFILEEXTENSIONS]"/>
+                    <ConfigurationData Name="argInstallDesktopShortcut" Value="[NEMU_INSTALLDESKTOPSHORTCUT]"/>
+                    <ConfigurationData Name="argInstallQuickLaunchShortcut" Value="[NEMU_INSTALLQUICKLAUNCHSHORTCUT]"/>
+                </Merge>
+    <?if $(env.NEMU_WITH_32_ON_64_MAIN_API) = "yes" ?>
+                <Merge Id="msm_NemuCOM32On64" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergeCOM32On64)" DiskId="1" />
+    <?endif ?>
+<?else ?>
+                <Directory Id="msm_NemuApplicationFolder" FileSource=".">
+                    <?include NemuMergeApp.wxi ?>
+    <?if $(env.NEMU_WITH_32_ON_64_MAIN_API) = "yes" ?>
+                    <?include NemuMergeCOM32On64.wxi ?>
+    <?endif ?>
+                </Directory>
+<?endif ?>
+                <Directory Id="dir_Drivers" Name="drivers">
+                    <Directory Id="dir_USB" Name="USB">
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                        <Merge Id="msm_NemuUSB" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergeUSB)" DiskId="1" />
+<?else ?>
+                        <Directory Id="msm_NemuUSBFolder" FileSource=".">
+                            <?include NemuMergeUSB.wxi ?>
+                        </Directory>
+<?endif ?>
+                    </Directory>
+                    <Directory Id="dir_Network" Name="network">
+<?if $(env.NEMU_WITH_NETFLT) = "yes" ?>
+                        <Directory Id="dir_NetFlt" Name="netflt">
+    <?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                            <Merge Id="msm_NemuNetworkFlt" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergeNetworkFlt)" DiskId="1">
+                            <ConfigurationData Name="passedNetworkType" Value="[NETWORKTYPE]"/> 
+                            </Merge>
+    <?else ?>
+                            <Directory Id="msm_NemuNetworkFltFolder" FileSource=".">
+                                <?include NemuMergeNetFlt.wxi ?>
+                            </Directory>
+    <?endif ?>
+                        </Directory>
+<?endif ?>
+                        <Directory Id="dir_NetAdp" Name="netadp">
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                            <Merge Id="msm_NemuNetworkAdp" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergeNetworkAdp)" DiskId="1">
+                            <ConfigurationData Name="passedNetworkType" Value="[NETWORKTYPE]"/> 
+                            </Merge>
+<?else ?>
+                            <Directory Id="msm_NemuNetworkAdpFolder" FileSource=".">
+                                <?include NemuMergeNetAdp.wxi ?>
+                            </Directory>
+<?endif ?>
+                        </Directory>
+
+<?if $(env.NEMU_WITH_NETFLT) = "yes" ?>
+                        <Directory Id="dir_NetLwf" Name="netlwf">
+    <?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                            <Merge Id="msm_NemuNetworkLwf" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergeNetworkLwf)" DiskId="1">
+                            <ConfigurationData Name="passedNetworkType" Value="[NETWORKTYPE]"/> 
+                            </Merge>
+    <?else ?>
+                            <Directory Id="msm_NemuNetworkLwfFolder" FileSource=".">
+                                <?include NemuMergeNetLwf.wxi ?>
+                            </Directory>
+    <?endif ?>
+                        </Directory>
+<?endif ?>
+                        <Directory Id="dir_NetAdp6" Name="netadp6">
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                            <Merge Id="msm_NemuNetworkAdp6" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergeNetworkAdp6)" DiskId="1">
+                            <ConfigurationData Name="passedNetworkType" Value="[NETWORKTYPE]"/> 
+                            </Merge>
+<?else ?>
+                            <Directory Id="msm_NemuNetworkAdp6Folder" FileSource=".">
+                                <?include NemuMergeNetAdp6.wxi ?>
+                            </Directory>
+<?endif ?>
+                        </Directory>
+                    </Directory>
+                </Directory>
+<?if $(env.NEMU_WITH_PYTHON) = "yes" ?>
+                <Directory Id="dir_SDK" Name="sdk">
+                    <Directory Id="dir_SDKInstall" Name="install">
+    <?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                        <Merge Id="msm_NemuPython" Language="!(loc.LANG)" SourceFile="$(var.Property_NemuMergePython)" DiskId="1" />
+    <?else ?>
+                        <Directory Id="msm_NemuPythonFolder" FileSource=".">
+                            <?include NemuMergePython.wxi ?>
+                        </Directory>
+    <?endif ?>
+                    </Directory>
+                </Directory>
+<?endif ?>
+
+                <!-- Set up special directory IDs for referencing to the start menu
+                     or the Quick Launch bar.
+                     See: http://msdn.microsoft.com/en-us/library/aa368276.aspx
+                          http://wix.mindcapers.com/wiki/Shortcuts_in_WiX -->
+                <Directory Id="ProgramMenuFolder">
+                    <Directory Id="dir_StartMenuNemu" Name="$(env.NEMU_PRODUCT)"/>
+                </Directory>
+
+                <Directory Id="DesktopFolder" Name="Desktop"/>
+
+                <Directory Id="AppDataFolder" Name="AppData">
+                    <Directory Id="dir_AppDataMicrosoft" Name="Microsoft">
+                        <Directory Id="dir_AppDataMSIE" Name="Internet Explorer">
+                            <Directory Id="dir_QuicklaunchFolder" Name="Quick Launch"/>
+                        </Directory>
+                    </Directory>
+                </Directory>
+
+                <!-- Shortcut(s) in start menu -->
+                <Component Id="cp_StartMenuNemu" Guid="C2DC321A-CE63-40EE-8A98-724DF8BD12FB" Win64="$(var.Property_Win64)">
+                    <Shortcut Id="sc_StartMenuNemu" Directory="dir_StartMenuNemu" Name="$(env.NEMU_PRODUCT)" Description="$(env.NEMU_PRODUCT)"
+                              Target="[INSTALLDIR]Nemu.exe" WorkingDirectory="INSTALLDIR"/>
+                    <RegistryValue Root="HKCU" Key="$(var.Property_RegKeyInstall)"
+                                   Type="string" Value="installed" KeyPath="yes" />
+                    <?include $(env.PATH_TARGET)\Shortcuts_StartMenu.wxi ?>
+                </Component>
+
+                <Component Id="cp_DesktopShortcut" Guid="668F8A1A-F5CE-48B3-BB1A-3042EE27B279" Win64="$(var.Property_Win64)">
+                    <Condition>NEMU_INSTALLDESKTOPSHORTCUT</Condition>
+                    <Shortcut Id="sc_DesktopNemu" Directory="DesktopFolder" Name="$(env.NEMU_PRODUCT)" Description="$(env.NEMU_PRODUCT)"
+                              Target="[INSTALLDIR]Nemu.exe" WorkingDirectory="INSTALLDIR"/>
+                    <RegistryValue Root="HKCU" Key="$(var.Property_RegKeyInstall)" Type="string"
+                                   Value="installed" KeyPath="yes" />
+                </Component>
+
+                <Component Id="cp_QuickLaunchNemu" Guid="CC19E026-938A-41CB-8E77-3F33296244B6" Win64="$(var.Property_Win64)">
+                    <CreateFolder/>
+                    <Condition>NEMU_INSTALLQUICKLAUNCHSHORTCUT</Condition>
+                    <Shortcut Id="sc_QuickLaunchNemu" Directory="dir_QuicklaunchFolder" Name="$(env.NEMU_PRODUCT)" Description="$(env.NEMU_PRODUCT)"
+                              Target="[INSTALLDIR]Nemu.exe" WorkingDirectory="INSTALLDIR"/>
+                    <RegistryValue Root="HKCU" Key="$(var.Property_RegKeyInstall)"
+                                   Type="string" Value="installed" KeyPath="yes" />
+                </Component>
+
+                </Directory>
+            </Directory>
+        </Directory>
+    </Directory> <!-- TARGETDIR -->
+
+    <!-- Note: Feature IDs *must not* be renamed to use any prefixes or such,
+               otherwise this will break manual selection using the ADDLOCAL= syntax
+               when using the command line / scripts (see Nemu manual). -->
+    <Feature Id="NemuApplication" Title="VirtualBox Application" Level="1"
+             Description="!(loc.VB_App)"
+             ConfigurableDirectory="INSTALLDIR" TypicalDefault="install" Display="expand"
+             Absent="disallow" AllowAdvertise="no" >
+
+        <!-- Components which are handled only by this installer itself -->
+        <ComponentRef Id="cp_StartMenuNemu" />
+        <ComponentRef Id="cp_DesktopShortcut" />
+        <ComponentRef Id="cp_QuickLaunchNemu" />
+        
+        <!-- Components handled either by the installer itself or
+             the merge module -->
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+        <MergeRef Id="msm_NemuApp" />
+        <?if $(env.NEMU_WITH_32_ON_64_MAIN_API) = "yes" ?>
+            <MergeRef Id="msm_NemuCOM32On64" />
+        <?endif ?>
+<?else ?>
+
+    <?if $(env.NEMU_WITH_QTGUI) = "yes" ?>
+        <ComponentRef Id="cp_RegisterExtensions" />
+    <?endif ?>
+    <?if $(env.NEMU_WITH_DOCS_PACKING) = "yes" ?>
+        <ComponentRef Id="cp_Docs" />
+    <?endif ?>
+    <?if $(env.NEMU_WITH_QTGUI) = "yes" ?>
+        <ComponentRef Id="cp_NLS" />
+    <?endif ?>
+    <?if $(env.NEMU_WITH_32_ON_64_MAIN_API) = "yes" ?>
+        <ComponentRef Id="cp_MainCOM_x86" />
+    <?endif ?>
+        <ComponentRef Id="cp_MainCOM" />
+        <ComponentRef Id="cp_MainBinaries" />
+    <?if $(env.NEMU_WITH_QTGUI) = "yes" ?>
+        <ComponentRef Id="cp_QtAccessible" />
+    <?endif ?>
+    <?if $(env.NEMU_WITH_PYTHON) = "yes" ?>
+        <ComponentRef Id="cp_NemuPyInst" />
+        <ComponentRef Id="cp_NemuPyMod" />
+    <?endif ?>
+
+    <?if $(env.NEMU_WITH_CROGL) = "yes" ?>
+        <ComponentRef Id="cp_NemuCROpenGL" />
+    <?endif ?>
+        <ComponentRef Id="cp_NemuSDLBinaries" />
+    <?if $(env.NEMU_WITH_WEBSERVICES) = "yes" ?>
+        <ComponentRef Id="cp_NemuWebService" />
+    <?endif ?>
+        <ComponentRef Id="cp_NemuCAPI" />
+        <ComponentRef Id="cp_NemuDrv" />
+<?endif ?>
+
+        <Feature Id="NemuUSB" Title="VirtualBox USB Support" Level="1"
+                 Description="!(loc.VB_USBDriver)"
+                 ConfigurableDirectory="INSTALLDIR" TypicalDefault="install" Display="expand"
+                 Absent="allow" AllowAdvertise="no" >
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+            <MergeRef Id="msm_NemuUSB" />
+<?else ?>
+            <ComponentRef Id="cp_USBFilterDriver" />
+            <ComponentRef Id="cp_USBDeviceDriver" />
+<?endif ?>
+        </Feature>
+
+<?if $(env.NEMU_WITH_NETFLT) = "yes" ?>
+        <Feature Id="NemuNetwork" Title="VirtualBox Networking" Level="1"
+                 Description="!(loc.VB_Network)"
+                 ConfigurableDirectory="INSTALLDIR" TypicalDefault="install" Display="expand"
+                 Absent="allow" AllowAdvertise="no" >
+            <Feature Id="NemuNetworkFlt" Title="VirtualBox Bridged Networking" Level="1"
+                     Description="!(loc.VB_NetFltDriver)"
+                     ConfigurableDirectory="INSTALLDIR" TypicalDefault="install" Display="expand"
+                     Absent="allow" AllowAdvertise="no" >
+    <?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                <MergeRef Id="msm_NemuNetworkFlt" />
+                <MergeRef Id="msm_NemuNetworkLwf" />
+    <?else ?>
+                <ComponentRef Id="cp_NetFltDriver" />
+                <ComponentRef Id="cp_NetLwfDriver" />
+    <?endif ?>
+            </Feature>
+            <Feature Id="NemuNetworkAdp" Title="VirtualBox Host-Only Networking" Level="1"
+                     Description="!(loc.VB_NetAdpDriver)"
+                     ConfigurableDirectory="INSTALLDIR" TypicalDefault="install" Display="expand"
+                     Absent="allow" AllowAdvertise="no" >
+    <?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                <MergeRef Id="msm_NemuNetworkAdp" />
+                <MergeRef Id="msm_NemuNetworkAdp6" />
+                <MergeRef Id="msm_NemuNetworkLwf" />
+    <?else ?>
+                <ComponentRef Id="cp_NetAdpDriver" />
+                <ComponentRef Id="cp_NetAdp6Driver" />
+                <ComponentRef Id="cp_NetLwfDriver" />
+    <?endif ?>
+            </Feature>
+
+        </Feature>
+<?endif ?>
+
+<?if $(env.NEMU_WITH_PYTHON) = "yes" ?>
+        <Feature Id="NemuPython" Title="VirtualBox Python 2.x Support" Level="1"
+                 Description="!(loc.VB_Python)"
+                 ConfigurableDirectory="INSTALLDIR" TypicalDefault="install" Display="expand"
+                 Absent="allow" AllowAdvertise="no" >
+    <?if $(env.NEMU_WITH_MSM_INSTALL) = "yes" ?>
+                <MergeRef Id="msm_NemuPython" />
+    <?else ?>
+                <ComponentRef Id="cp_NemuPythonBinding" />
+    <?endif ?>
+        </Feature>
+<?endif ?>
+    </Feature>
+
+    <!-- Include user interface definition -->
+    <?include UserInterface.wxi ?>
+
+    <InstallExecuteSequence>
+
+        <!--
+            To debug the action sequences, do: "msiexec /i <Nemu.msi> /lar <Logfile>"
+
+            InstallUISequence (client side) is:
+                AppSearch
+                LaunchConditions
+                ValidateProductID
+                CostInitialize
+                FileCost
+                CostFinalize
+                ExecuteAction -> will pass control over to "InstallExecuteSequence"
+
+            The first six actions above will be repeated but skipped on the server
+            side if already run on the client side.
+
+            InstallExecuteSequence (server side) is:
+                <First six action from InstallUISequence>
+                .
+                InstallInitialize
+                .
+                InstallFinalize
+
+            The actions between InstallInitialize and InstallFinalize will be gone through twice:
+            - The first time the installer creates an installation script containing all actions in the right
+              sequence which need to get executed in a batch later. At this point the launch conditions for
+              custom actions must be met already!
+            - The second time the generated installation script will be run as-is.
+
+            Also, the InstallUISequence and InstallExecuteSequence tables run in different sessions which
+            need public properties (that is, UPPERCASE properties).
+        -->
+
+        <!-- AppSearch must be done before "RemoveExistingProducts" and before "FindRelatedProducts" -->
+        <AppSearch Sequence="1"></AppSearch>
+        <LaunchConditions After="AppSearch" />
+
+        <!-- First install the new version and then remove the old version. This is more efficient -->
+        <RemoveExistingProducts After="InstallValidate"><![CDATA[PREVIOUSVERSIONSINSTALLED OR NEWERVERSIONDETECTED]]></RemoveExistingProducts>
+
+        <Custom Action="ca_OriginalTargetDir" After="FileCost"><![CDATA[(NOT INSTALLDIR)]]></Custom>
+        <Custom Action="ca_DefaultTargetDir" Before="FileCost" ><![CDATA[NOT INSTALLDIR AND EXISTINGINSTALLDIR]]></Custom>
+
+        <!-- Check + unininstall old TAP instances - we  don't need them anymore -->
+        <Custom Action="ca_UninstallTAPInstances" Before="InstallFiles" >1</Custom>
+
+        <Custom Action="ca_InstallBrandingArgs" Before="ca_InstallBranding" ><![CDATA[NOT REMOVE]]></Custom>
+        <Custom Action="ca_InstallBranding" Before="InstallFinalize" ><![CDATA[NOT REMOVE]]></Custom>
+
+        <!-- Uninstall branding on complete uninstall, not on update -->
+        <Custom Action="ca_UninstallBrandingArgs" Before="ca_UninstallBranding" ><![CDATA[(NOT UPGRADINGPRODUCTCODE) AND (REMOVE="ALL")]]></Custom>
+        <Custom Action="ca_UninstallBranding" Before="InstallFinalize" ><![CDATA[(NOT UPGRADINGPRODUCTCODE) AND (REMOVE="ALL")]]></Custom>
+
+<?if $(env.NEMU_WITH_MSM_INSTALL) = "no" ?>
+        <?include NemuMergeAppSeq.wxi ?>
+        <?if $(env.NEMU_WITH_32_ON_64_MAIN_API) = "yes" ?>
+            <?include NemuMergeCOM32On64Seq.wxi ?>
+        <?endif ?>
+        <?if $(env.NEMU_WITH_NETFLT) = "yes" ?>
+            <?include NemuMergeNetFltSeq.wxi ?>
+            <?include NemuMergeNetLwfSeq.wxi ?>
+        <?endif ?>
+        <?include NemuMergeNetAdpSeq.wxi ?>
+        <?include NemuMergeNetAdp6Seq.wxi ?>
+        <?include NemuMergeUSBSeq.wxi ?>
+        <?if $(env.NEMU_WITH_PYTHON) = "yes" ?>
+            <?include NemuMergePythonSeq.wxi ?>
+        <?endif ?>
+<?endif ?>
+
+    </InstallExecuteSequence>
+
+  </Product>
+</Wix>

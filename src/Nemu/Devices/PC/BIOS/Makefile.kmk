@@ -1,0 +1,148 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the New BIOS ROM.
+#
+
+#
+# Copyright (C) 2012-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+
+ifdef NEMU_WITH_OPEN_WATCOM
+
+ #
+ # NemuPcBios - The PC BIOS.
+ #
+ MISCBINS += NemuPcBios
+ NemuPcBios_TEMPLATE = NemuBios
+ NemuPcBios_DEFS = \
+ 	NEMU_PC_BIOS \
+ 	NEMU_LANBOOT_SEG=0xE200 \
+ 	NEMU_WITH_SCSI \
+ 	NEMU_WITH_AHCI
+ NemuPcBios_LDFLAGS = \
+ 	output raw offset=0xF0000 \
+ 	order \
+ 	 clname DATA segaddr=0xF000 \
+ 	  segment _DATA \
+ 	 clname CODE \
+ 	  segment _TEXT   segaddr=0xF000 offset=0x1600 \
+ 	  segment BIOS32  segaddr=0xF000 offset=0xDA00 \
+ 	  segment BIOSSEG segaddr=0xF000 offset=0xE000
+ NemuPcBios_SOURCES = \
+ 	post.c \
+ 	bios.c \
+ 	print.c \
+ 	ata.c \
+ 	floppy.c \
+ 	floppyt.c \
+ 	eltorito.c \
+ 	boot.c \
+ 	keyboard.c \
+ 	disk.c \
+ 	serial.c \
+ 	system.c \
+ 	invop.c \
+ 	timepci.c \
+ 	ps2mouse.c \
+ 	parallel.c \
+ 	logo.c \
+ 	scsi.c \
+ 	ahci.c \
+ 	apm.c \
+ 	pcibios.c \
+ 	pciutil.c \
+ 	vds.c \
+ 	../../BiosCommonCode/support.asm \
+ 	pcibio32.asm \
+ 	apm_pm.asm \
+ 	$(NemuPcBios32_1_TARGET) \
+ 	orgs.asm
+
+ # For 32-bit C code in PC BIOS.
+ LIBRARIES += NemuPcBios32
+ NemuPcBios32_TEMPLATE = NemuBios32Lib
+ NemuPcBios32_SOURCES = \
+       pci32.c
+
+ #
+ # Updates the alternative source file.
+ #
+ update-pcbios-source +| $(PATH_SUB_CURRENT)/NemuBiosAlternative.asm $(PATH_SUB_CURRENT)/NemuBiosAlternative.md5sum: \
+ 		$$(NemuPcBios_1_TARGET) \
+ 		$(NEMU_MAKE_ALTERNATIVE_SOURCE) \
+		$(NEMU_NEMUCMP)
+ if1of ($(KBUILD_TYPE), release)
+	$(NEMU_MAKE_ALTERNATIVE_SOURCE) \
+		--bios-image $< \
+		--bios-map $(basename $<).map \
+		--bios-sym $(basename $<).sym \
+		--bios-type system \
+		--output $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.asm
+	$(QUIET)yasm -f bin -o $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.bin $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.asm
+	$(NEMU_NEMUCMP) $< $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.bin
+	$(CP) --changed -- $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.asm $(PATH_ROOT)/src/Nemu/Devices/PC/BIOS/NemuBiosAlternative.asm
+	$(REDIRECT) -C $(dir $(NemuPcBios_1_TARGET)) -- \
+		$(MD5SUM_EXT) -bo $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.md5sum $(notdir $(NemuPcBios_1_TARGET))
+	$(CP) --changed -- $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.md5sum $(PATH_ROOT)/src/Nemu/Devices/PC/BIOS/NemuBiosAlternative.md5sum
+	$(RM) -f -- $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.asm $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.bin $(NemuPcBios_0_OUTDIR)/NemuBiosAlternative.md5sum
+ else
+	$(QUIET)$(ECHO) "Fatal error: Can only update NemuBiosAlternative.asm/md5sum with a release build."
+	$(QUIET)exit 1
+ endif
+
+endif # NEMU_WITH_OPEN_WATCOM
+
+
+#
+# The library containing the PC BIOS image.
+#
+LIBRARIES += PcBiosBin
+PcBiosBin_TEMPLATE  = NEMUR3
+PcBiosBin_DEFS      = IN_NEMUDD2
+PcBiosBin_SOURCES   = $(PcBiosBin_0_OUTDIR)/PcBiosBin.c
+PcBiosBin_CLEAN     = $(PcBiosBin_0_OUTDIR)/PcBiosBin.c
+
+ifdef NEMU_WITH_OPEN_WATCOM
+ $$(PcBiosBin_0_OUTDIR)/PcBiosBin.c: $$(NemuPcBios_1_TARGET) $(NEMU_BIN2C) | $$(dir $$@)
+	$(call MSG_TOOL,bin2c,PcBiosBin,$<,$@)
+	$(QUIET)$(NEMU_BIN2C) -min 64 -max 256 -mask 0xffff -ascii -export PcBiosBinary $< $@
+else
+ PcBiosBin_CLEAN    += $(PcBiosBin_0_OUTDIR)/NemuPcBios.rom
+
+ $$(PcBiosBin_0_OUTDIR)/PcBiosBin.c + $$(PcBiosBin_0_OUTDIR)/NemuPcBios.rom: \
+		$(PATH_SUB_CURRENT)/NemuBiosAlternative.asm \
+		$(PATH_SUB_CURRENT)/NemuBiosAlternative.md5sum \
+		$(NEMU_BIN2C) | $$(dir $$@)
+	$(call MSG_TOOL,bin2c,PcBiosBin,$<,$@)
+	$(QUIET)yasm -f bin -o $(PcBiosBin_0_OUTDIR)/NemuPcBios.rom $<
+	$(QUIET)$(REDIRECT) -C $(PcBiosBin_0_OUTDIR) -- \
+		$(MD5SUM_EXT) -c $(basename $<).md5sum
+	$(QUIET)$(NEMU_BIN2C) -min 64 -max 256 -mask 0xffff -ascii -export PcBiosBinary $(PcBiosBin_0_OUTDIR)/NemuPcBios.rom $@
+	$(QUIET)$(RM) -f -- $$(PcBiosBin_0_OUTDIR)/NemuPcBios.rom
+endif
+
+
+ifdef NEMU_WITH_OPEN_WATCOM
+ #
+ # Install the symbol file for the BIOS.
+ #
+ INSTALLS += NemuPcBiosSym
+ NemuPcBiosSym_TEMPLATE = NemuDbgSyms
+ NemuPcBiosSym_SOURCES = $(basename $(NemuPcBios_1_TARGET)).sym
+endif
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

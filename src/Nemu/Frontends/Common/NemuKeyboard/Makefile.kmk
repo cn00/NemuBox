@@ -1,0 +1,90 @@
+# $Id: Makefile.kmk $
+## @file
+# Makefile for the VirtualBox X11 keyboard library
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+if1of ($(KBUILD_TARGET), freebsd linux openbsd netbsd solaris) # X11
+ DLLS        += NemuKeyboard
+ OTHERS      += $(PATH_STAGE_BIN)/nemukeyboard.tar.bz2
+ OTHER_CLEAN += $(PATH_STAGE_BIN)/nemukeyboard.tar.bz2
+endif
+
+
+#
+# NemuKeyboard - keyboard library for X11.
+#
+NemuKeyboard_TEMPLATE = NEMUR3
+NemuKeyboard_SOURCES  = \
+	keyboard.c
+NemuKeyboard_LIBS     = X11
+NemuKeyboard_LIBPATH  = $(NEMU_LIBPATH_X11)
+
+
+#
+# nemukeyboard.tar.gz - the LGPLed keyboard library must always be
+# redistributed with usable sources.
+#
+# This rule will link create a temporary symlink to src/X11/ and tar
+# up the selected files into a tarball that is installed into the
+# bin directory (probably belongs in /usr/shared/somewhere really,
+# but wtf, it's not like we're even trying to be FHS compliant).
+#
+NEMU_KEYBOARD_STAGE_DIR = $(PATH_TARGET)/NemuKeyboard/install
+NEMU_KEYBOARD_DEST_DIR = $(NEMU_KEYBOARD_STAGE_DIR)/NemuKeyboard/
+
+## @todo kBuild need support for copying files into _1_OUTDIR.
+INSTALLS += NemuKeyboard-Files
+NemuKeyboard-Files_INSTTYPE = stage
+NemuKeyboard-Files_INST     = misc-staging/NemuKeyboard/
+NemuKeyboard-Files_MODE     = a+r,u+w
+NemuKeyboard-Files_SOURCES  = \
+		COPYING.LIB \
+		keyboard.c \
+		keyboard-layouts.h \
+		keyboard-list.h \
+		keyboard-tables.h \
+		keyboard-types.h \
+		Makefile \
+		../../../../../include/Nemu/NemuKeyboard.h=>Nemu/NemuKeyboard.h
+
+INSTALLS += NemuKeyboard-Tarball
+NemuKeyboard-Tarball_INST    = $(INST_BIN)
+NemuKeyboard-Tarball_MODE    = a+r,u+w
+NemuKeyboard-Tarball_SOURCES = $(NemuKeyboard-Tarball_0_OUTDIR)/nemukeyboard.tar.bz2
+NemuKeyboard-Tarball_CLEAN   = $(NemuKeyboard-Tarball_0_OUTDIR)/nemukeyboard.tar.bz2
+
+$$(NemuKeyboard-Tarball_0_OUTDIR)/nemukeyboard.tar.bz2: \
+		$$(NemuKeyboard-Files_2_STAGE_TARGETS) \
+		$(MAKEFILE_CURRENT) \
+		| $$(dir $$@)
+	$(call MSG_L1,Packing $@)
+	$(QUIET)$(RM) -f -- $@ $(patsubst %.bz2,%,$@)
+ifdef NEMU_GTAR
+	$(QUIET)$(NEMU_GTAR) --dereference --owner 0 --group 0 --ignore-failed-read \
+		-cjRf $@ \
+ 		-C $(PATH_STAGE)/$(NemuKeyboard-Files_INST).. NemuKeyboard
+else
+	$(QUIET)tar -cjf $@ \
+ 		-C $(PATH_STAGE)/$(NemuKeyboard-Files_INST).. NemuKeyboard
+endif
+	$(QUIET)$(CHMOD) 0644 $@
+
+
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

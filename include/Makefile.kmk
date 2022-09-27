@@ -1,0 +1,150 @@
+# $Id: Makefile.kmk $
+## @file
+# Some hacks to allow syntax and prerequisite include checking of headers.
+# This makefile doesn't and shouldn't build successfully.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+DEPTH = ..
+include $(KBUILD_PATH)/header.kmk
+
+LIBRARIES = SyntaxNemuIncludeR3 SyntaxNemuIncludeR0 SyntaxNemuIncludeRC
+
+# Omit headers that are using C++ features and upsets gcc.
+cpp_features_hdrs := \
+	Nemu/vmm/hm.h \
+	Nemu/vmm/hm_vmx.h \
+	Nemu/HostServices/GuestControlSvc.h \
+	Nemu/NemuCrHgsmi.h \
+	Nemu/NemuUhgsmi.h
+
+# Omit headers that are C++ and ring-3.
+r3_cpp_hdrs := \
+	Nemu/dbggui.h \
+	Nemu/settings.h \
+	Nemu/com/Guid.h \
+	Nemu/HostServices/GuestPropertySvc.h \
+	$(wildcard iprt/*_cpp.h iprt/cpp/*.h Nemu/com/*.h )
+
+# Ring-3 only headers.
+r3_only_hdrs := \
+	Nemu/vrdpapi.h \
+        Nemu/vrdpusb.h \
+	Nemu/NemuHDD.h \
+	Nemu/NemuHDD-Plugin.h \
+	Nemu/NemuCrHgsmi.h \
+	Nemu/NemuUhgsmi.h \
+	Nemu/dbus.h \
+	Nemu/vd.h \
+	Nemu/vd-plugin.h \
+	Nemu/vd-cache-plugin.h \
+	Nemu/vmm/uvm.h \
+	Nemu/vscsi.h \
+	$(wildcard Nemu/ExtPack/*.h ) \
+	iprt/alloca.h \
+	iprt/tcp.h \
+	iprt/localipc.h \
+	iprt/linux/sysfs.h \
+	iprt/socket.h
+
+# We omit a few headers which have platform specific issues or are templates.
+hdrs := $(filter-out \
+	Nemu/HostServices/glext.h \
+	Nemu/HostServices/glxext.h \
+	Nemu/HostServices/wglext.h \
+	Nemu/NemuGuest16.h \
+	Nemu/NemuGL2D.h \
+	Nemu/WinNetConfig.h \
+	Nemu/usblib-win.h \
+	Nemu/usblib-solaris.h \
+	Nemu/VDEPlug.h \
+	$(if-expr "$(KBUILD_TARGET)" != "win", \
+		Nemu/NemuDrvCfg-win.h \
+		Nemu/NemuNetCfg-win.h \
+	,) \
+	\
+	Nemu/dbus-calls.h \
+	Nemu/VDEPlugSymDefs.h \
+	Nemu/NemuKeyboard.h \
+	iprt/runtime-loader.h \
+	iprt/mangling.h \
+	\
+	$(foreach os,$(filter-out $(KBUILD_TARGET),$(KBUILD_OSES)),iprt/$(os)/% Nemu/$(os)/%) \
+	$(xforeach arch,$(KBUILD_ARCHES),iprt/nocrt/$(arch)/%) \
+	, $(wildcard Nemu/*.h Nemu/*/*.h iprt/*.h iprt/*/*.h))
+
+# ring-3, ring-0 and raw-mode context specific exclusions.
+hdrs.r3   := $(filter-out , $(hdrs))
+hdrs-c.r3 := $(filter-out $(cpp_features_hdrs) $(r3_cpp_hdrs), $(hdrs.r3))
+hdrs.r0   := $(filter-out $(r3_cpp_hdrs) $(r3_only_hdrs), $(hdrs))
+hdrs-c.r0 := $(filter-out $(cpp_features_hdrs), $(hdrs.r0))
+hdrs.rc   := $(filter-out \
+	Nemu/NemuGuestLib.h \
+	Nemu/vmm/gvm.h \
+	iprt/thread.h \
+	iprt/mem.h \
+	iprt/memsafer.h \
+	iprt/alloc.h \
+	$(r3_cpp_hdrs) \
+	$(r3_only_hdrs) \
+	, $(hdrs))
+hdrs-c.rc := $(filter-out $(cpp_features_hdrs), $(hdrs.rc))
+
+SyntaxNemuIncludeR3_TEMPLATE = NEMUMAINEXE
+SyntaxNemuIncludeR3_DEFS = NEMU_WITH_HGCM
+SyntaxNemuIncludeR3_CDEFS = NEMU_WITHOUT_UNNAMED_UNIONS
+SyntaxNemuIncludeR3_SOURCES := \
+	$(addprefix $(PATH_TARGET)/,$(subst .h,-c.c,     $(subst /,_,$(hdrs-c.r3)))) \
+	$(addprefix $(PATH_TARGET)/,$(subst .h,-cpp.cpp, $(subst /,_,$(hdrs.r3))))
+
+SyntaxNemuIncludeR0_TEMPLATE = NemuR0
+SyntaxNemuIncludeR0_DEFS = NEMU_WITH_HGCM
+SyntaxNemuIncludeR0_CDEFS = NEMU_WITHOUT_UNNAMED_UNIONS
+SyntaxNemuIncludeR0_SOURCES := \
+	$(addprefix $(PATH_TARGET)/,$(subst .h,-c.c,     $(subst /,_,$(hdrs-c.r0)))) \
+	$(addprefix $(PATH_TARGET)/,$(subst .h,-cpp.cpp, $(subst /,_,$(hdrs.r0))))
+
+SyntaxNemuIncludeRC_TEMPLATE = NemuRc
+SyntaxNemuIncludeRC_DEFS = NEMU_WITH_HGCM
+SyntaxNemuIncludeRC_CDEFS = NEMU_WITHOUT_UNNAMED_UNIONS
+SyntaxNemuIncludeRC_SOURCES := \
+	$(addprefix $(PATH_TARGET)/,$(subst .h,-c.c,     $(subst /,_,$(hdrs-c.rc)))) \
+	$(addprefix $(PATH_TARGET)/,$(subst .h,-cpp.cpp, $(subst /,_,$(hdrs.rc))))
+
+
+# Comment out the next line to simplify header correction.
+NEMU_ROOT_INCLUDE_MAKEFILE = $(PATH_ROOT)/include/Makefile.kmk
+
+include $(FILE_KBUILD_FOOTER)
+
+
+define def_hdr
+$(eval flatname := $(subst /,_,$(basename $(hdr))))
+$$(PATH_TARGET)/$(flatname)-cpp.cpp: $(NEMU_ROOT_INCLUDE_MAKEFILE) | $$(PATH_TARGET)/
+	$(QUIET)$$(APPEND) -t -n $$@ '#include <$(hdr)>' 'int main(int argc, char **argv) {(void)argc; (void)argv; return 0;}'
+
+$$(PATH_TARGET)/$(flatname)-c.c: $(NEMU_ROOT_INCLUDE_MAKEFILE) | $$(PATH_TARGET)/
+	$(QUIET)$$(APPEND) -t -n $$@ '#include <$(hdr)>' 'int main(int argc, char **argv) {(void)argc; (void)argv; return 0;}'
+
+$(subst .h,.o,$(notdir $(hdr)))::
+if1of ($(hdr), $(r3_cpp_hdrs) $(cpp_features_hdrs))
+	$$(MAKE) -f $(MAKEFILE) $(flatname)-cpp.o
+else
+	$$(MAKE) -f $(MAKEFILE) $(flatname)-c.o $(flatname)-cpp.o
+endif
+
+endef
+
+$(foreach hdr,$(hdrs), $(eval $(def_hdr)))
+

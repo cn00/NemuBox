@@ -1,0 +1,51 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the Guest Control Host Service.
+#
+
+#
+# Copyright (C) 2011-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+# Include sub-makefile(s).
+include $(PATH_SUB_CURRENT)/testcase/Makefile.kmk
+
+#
+# The guest control service DLL.
+#
+DLLS += NemuGuestControlSvc
+NemuGuestControlSvc_TEMPLATE  = NEMUR3
+NemuGuestControlSvc_NAME.os2  = NemuGCTL
+NemuGuestControlSvc_DEFS      = NEMU_WITH_HGCM
+NemuGuestControlSvc_INCS      = $(PATH_ROOT)/src/Nemu/Main/include
+NemuGuestControlSvc_INCS.win  = \
+	$(PATH_TOOL_$(NEMU_VCC_TOOL)_ATLMFC_INC) \
+	$(NEMU_PATH_SDK)
+
+NemuGuestControlSvc_SOURCES = \
+	gctrl.cpp \
+	service.cpp
+
+NemuGuestControlSvc_SOURCES.win = \
+	NemuGuestControlSvc.rc
+
+NemuGuestControlSvc_LIBS = \
+	$(LIB_VMM) \
+	$(LIB_RUNTIME) \
+	$(LIB_REM)
+
+NemuGuestControlSvc_LDFLAGS.darwin = \
+	-install_name $(NEMU_DYLD_EXECUTABLE_PATH)/NemuGuestControlSvc.dylib
+
+include $(FILE_KBUILD_SUB_FOOTER)

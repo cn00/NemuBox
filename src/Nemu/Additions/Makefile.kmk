@@ -1,0 +1,352 @@
+# $Id: Makefile.kmk $
+## @file
+# Top-level makefile for the VirtualBox Guest Additions.
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Globals
+#
+NEMU_PATH_ADDITIONS_SRC := $(PATH_SUB_CURRENT)
+
+#
+# Cross building of the additions is generally done by remote building
+# by means of smbfs, cifs, NEMU_ONLY_ADDITIONS=1 and setting KBUILD_TARGET
+# and KBUILD_TARGET_ARCH to the desired target and architecture.
+#
+# Limited support for cross building the windows additions using wine
+# is provided. There are a couple of issues with the approach (lack of
+# signing, no VC++ 8 support, ++) that makes it unsuitable for releases.
+#
+#
+# Note! NEMU_WITH_ADDITIONS is checked for by our parent makefile.
+#
+# Note! NEMU_WITH_X11_ADDITIONS is set in Config.kmk
+#
+# Note! The additions build box will set the NEMU_WITH_ADDITIONS_ISO.win.x86
+#       variables before invoking us from the root makefile.
+#
+#  ==>  All we have to worry about is what to do on the target we're on.
+#
+NEMU_WITH_ADDITIONS_ISO.$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH) = 1
+
+# Include sub-makefiles.
+include $(PATH_SUB_CURRENT)/common/Makefile.kmk
+
+ifndef NEMU_ONLY_VALIDATIONKIT
+ ifdef NEMU_WITH_X11_ADDITIONS
+  include $(PATH_SUB_CURRENT)/x11/Makefile.kmk
+ endif
+
+ ifeq ($(KBUILD_TARGET),freebsd)
+  include $(PATH_SUB_CURRENT)/freebsd/Makefile.kmk
+ endif
+ ifeq ($(KBUILD_TARGET),linux)
+  include $(PATH_SUB_CURRENT)/linux/Makefile.kmk
+ endif
+ ifeq ($(KBUILD_TARGET),os2)
+  include $(PATH_SUB_CURRENT)/os2/Makefile.kmk
+ endif
+ ifeq ($(KBUILD_TARGET),solaris)
+  include $(PATH_SUB_CURRENT)/solaris/Makefile.kmk
+ endif
+ ifeq ($(KBUILD_TARGET),win)
+  include $(PATH_SUB_CURRENT)/WINNT/Makefile.kmk
+ endif
+ ifeq ($(KBUILD_TARGET),darwin)
+  include $(PATH_SUB_CURRENT)/darwin/Makefile.kmk
+ endif
+ ifeq ($(KBUILD_TARGET),haiku)
+  include $(PATH_SUB_CURRENT)/haiku/Makefile.kmk
+ endif
+
+ ifeq ($(KBUILD_TARGET),linux)
+  INSTALLS += LnxAddIso-scripts
+  LnxAddIso-scripts_INST    = $(INST_ADDITIONS)
+  LnxAddIso-scripts_MODE    = a+rx,u+w
+  LnxAddIso-scripts_SOURCES = \
+	$(LnxAddIso-scripts_0_OUTDIR)/runasroot.sh \
+	$(LnxAddIso-scripts_0_OUTDIR)/autorun.sh
+  LnxAddIso-scripts_CLEAN = \
+	$(LnxAddIso-scripts_0_OUTDIR)/runasroot.sh \
+	$(LnxAddIso-scripts_0_OUTDIR)/autorun.sh
+
+  $$(LnxAddIso-scripts_0_OUTDIR)/runasroot.sh: \
+		$(PATH_SUB_CURRENT)/../Installer/linux/runasroot.sh \
+		$(PATH_SUB_CURRENT)/../Installer/linux/sh-utils.sh \
+		| $$(dir $$@)
+	$(QUIET)$(SED) \
+		-e '/#include sh-utils.sh/ {' \
+		-e "r $(PATH_ROOT)/src/Nemu/Installer/linux/sh-utils.sh" \
+		-e 'd' \
+		-e '}' \
+		--output $@ \
+		$<
+	$(QUIET)$(CHMOD) a+rx,u+w $@
+
+  $$(LnxAddIso-scripts_0_OUTDIR)/autorun.sh: \
+		$(PATH_SUB_CURRENT)/linux/installer/autorun.sh \
+		$(PATH_SUB_CURRENT)/../Installer/linux/sh-utils.sh \
+		| $$(dir $$@)
+	$(QUIET)$(SED) \
+		-e '/#include sh-utils.sh/ {' \
+		-e "r $(PATH_ROOT)/src/Nemu/Installer/linux/sh-utils.sh" \
+		-e 'd' \
+		-e '}' \
+		--output $@ \
+		$<
+	$(QUIET)$(CHMOD) a+rx,u+w $@
+ endif # KBUILD_TARGET == linux
+ ifeq ($(KBUILD_TARGET),win)
+  #
+  # Inf2Cat requires all the files referenced in the .inf file
+  # to be present in the directory, so we have to do this from here,
+  # since NemuGuest.sys is being built from the common sources.
+  #
+  INSTALLS += NemuGuest-inf
+  NemuGuest-inf_INST = $(INST_ADDITIONS)
+  NemuGuest-inf_MODE = a+r,u+w
+  NemuGuest-inf_SOURCES = \
+	$(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.inf
+  ifdef NEMU_SIGN_ADDITIONS
+  NemuGuest-inf_SOURCES += \
+	$(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.cat \
+	$(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.sys \
+	$(PATH_TARGET)/NemuGuestCat.dir/NemuControl.exe \
+	$(PATH_TARGET)/NemuGuestCat.dir/NemuTray.exe
+  endif # signing
+  NemuGuest-inf_CLEAN = $(NemuGuest-inf_SOURCES)
+  NemuGuest-inf_BLDDIRS = \
+	$(PATH_TARGET)/NemuGuestCat.dir
+
+  $(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.inf: $(PATH_SUB_CURRENT)/common/NemuGuest/win/NemuGuest.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+	$(call MSG_GENERATE,NemuGuest-inf,$@,$<)
+	$(call NEMU_EDIT_INF_FN,$<,$@)
+
+  $(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.sys:   $$(NemuGuest_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 644 $< $(@D)
+
+  $(PATH_TARGET)/NemuGuestCat.dir/NemuControl.exe: $$(NemuControl_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 755 $< $(@D)
+
+  $(PATH_TARGET)/NemuGuestCat.dir/NemuTray.exe:    $$(NemuTray_1_TARGET) | $$(dir $$@)
+	$(INSTALL) -m 755 $< $(@D)
+
+  $(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.cat: \
+		$(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.inf \
+		$(PATH_TARGET)/NemuGuestCat.dir/NemuGuest.sys \
+		$(PATH_TARGET)/NemuGuestCat.dir/NemuControl.exe \
+		$(PATH_TARGET)/NemuGuestCat.dir/NemuTray.exe
+	$(call MSG_TOOL,Inf2Cat,NemuGuest-inf,$@,$<)
+	$(call NEMU_MAKE_CAT_FN, $(@D),$@)
+ endif # KBUILD_TARGET == win
+
+ # The packing target rule, but only if we're on the local build box.
+ # (NEMU_WITHOUT_ADDITIONS_ISO is used by the additions build box, see the root makefile.)
+ ifndef NEMU_WITHOUT_ADDITIONS_ISO
+  PACKING += $(NEMU_PATH_ADDITIONS_ISO)/NemuGuestAdditions.zip
+ endif
+endif # !NEMU_ONLY_VALIDATIONKIT
+
+include $(FILE_KBUILD_SUB_FOOTER)
+
+#
+# File per-OS/arch file specs for the additions iso (alphabetical order).
+#
+# We test for the NEMU_WITH_ADDITIONS_ISO.os.arch so that we don't have to
+# do the $(if )'ing down where the GUESTADDITIONS_FILESPEC.os.arch down
+# in the dependency list and mkisofs command.
+#
+
+# Darwin / Mac OS X
+## @todo Create .pkg files not run files. The build server shall create a combined packaged, goverend by
+# the NEMU_WITH_COMBINED_DARWIN_GUEST_PACKAGE macro.
+ifdef NEMU_WITH_ADDITIONS_ISO.darwin.x86
+ NEMU_PATH_ADDITIONS.darwin.x86 = $(PATH_OUT_BASE)/darwin.x86/$(KBUILD_TYPE)/dist
+ GUESTADDITIONS_FILESPEC.darwin.x86 = \
+	NemuDarwinAdditions-x86.dmg=$(NEMU_PATH_ADDITIONS.darwin.x86)/NemuDarwinAdditions.dmg
+endif
+
+ifdef NEMU_WITH_ADDITIONS_ISO.darwin.amd64
+ NEMU_PATH_ADDITIONS.darwin.amd64 = $(PATH_OUT_BASE)/darwin.amd64/$(KBUILD_TYPE)/dist
+ GUESTADDITIONS_FILESPEC.darwin.amd64 = \
+	NemuDarwinAdditions-amd64.dmg=$(NEMU_PATH_ADDITIONS.darwin.amd64)/NemuDarwinAdditions.dmg
+endif
+
+# FreeBSD
+ifdef NEMU_WITH_ADDITIONS_ISO.freebsd.amd64
+ NEMU_PATH_ADDITIONS.freebsd.amd64 = $(PATH_OUT_BASE)/freebsd.amd64/$(KBUILD_TYPE)/bin/additions
+ GUESTADDITIONS_FILESPEC.freebsd.amd64 = \
+	NemuFreeBSDAdditions-amd64.tbz=$(NEMU_PATH_ADDITIONS.freebsd.amd64)/NemuFreeBSDAdditions.tbz
+endif
+ifdef NEMU_WITH_ADDITIONS_ISO.freebsd.x86
+ NEMU_PATH_ADDITIONS.freebsd.x86 = $(PATH_OUT_BASE)/freebsd.x86/$(KBUILD_TYPE)/bin/additions
+ GUESTADDITIONS_FILESPEC.freebsd.x86 = \
+	NemuFreeBSDAdditions-x86.tbz=$(NEMU_PATH_ADDITIONS.freebsd.x86)/NemuFreeBSDAdditions.tbz
+endif
+
+# GNU/Linux
+ifdef NEMU_WITH_ADDITIONS_ISO.linux.amd64
+ NEMU_PATH_ADDITIONS.linux.amd64 = $(PATH_OUT_BASE)/linux.amd64/$(KBUILD_TYPE)/bin/additions
+ ifdef NEMU_WITH_COMBINED_LINUX_GUEST_PACKAGE
+  NEMU_LNX_ADD_AMD64_RUN_PKG=NemuLinuxAdditions.run
+ else
+  NEMU_LNX_ADD_AMD64_RUN_PKG=NemuLinuxAdditions-amd64.run
+ endif
+ GUESTADDITIONS_FILESPEC.linux.amd64 = \
+	$(NEMU_LNX_ADD_AMD64_RUN_PKG)=$(NEMU_PATH_ADDITIONS.linux.amd64)/NemuLinuxAdditions.run
+endif
+ifdef NEMU_WITH_ADDITIONS_ISO.linux.x86
+ NEMU_PATH_ADDITIONS.linux.x86 = $(PATH_OUT_BASE)/linux.x86/$(KBUILD_TYPE)/bin/additions
+## @todo 64-bit additions: rename this package, update docs (?) and tests (?). create wrapper? create gnome/kde autorun app (xplatform) ?
+ ifdef NEMU_WITH_COMBINED_LINUX_GUEST_PACKAGE
+  NEMU_LNX_ADD_X86_RUN_PKG=NemuLinuxAdditions.run
+ else
+  NEMU_LNX_ADD_X86_RUN_PKG=NemuLinuxAdditions-x86.run
+ endif
+ GUESTADDITIONS_FILESPEC.linux.x86 = \
+	$(NEMU_LNX_ADD_X86_RUN_PKG)=$(NEMU_PATH_ADDITIONS.linux.x86)/NemuLinuxAdditions.run \
+	runasroot.sh=$(NEMU_PATH_ADDITIONS.linux.x86)/runasroot.sh \
+	autorun.sh=$(NEMU_PATH_ADDITIONS.linux.x86)/autorun.sh
+endif
+
+# IBM OS/2
+ifdef NEMU_WITH_ADDITIONS_ISO.os2.x86
+ NEMU_PATH_ADDITIONS.os2.x86 = $(PATH_OUT_BASE)/os2.x86/$(KBUILD_TYPE)/bin/additions
+ GUESTADDITIONS_FILESPEC.os2.x86 = \
+	OS2/NemuGuest.sys=$(NEMU_PATH_ADDITIONS.os2.x86)/NemuGuest.sys \
+	OS2/NemuService.exe=$(NEMU_PATH_ADDITIONS.os2.x86)/NemuService.exe \
+	OS2/NemuControl.exe=$(NEMU_PATH_ADDITIONS.os2.x86)/NemuControl.exe \
+	OS2/NemuReplaceDll.exe=$(NEMU_PATH_ADDITIONS.os2.x86)/NemuReplaceDll.exe \
+	OS2/libc06.dll=$(NEMU_PATH_ADDITIONS.os2.x86)/libc06.dll \
+	OS2/libc061.dll=$(NEMU_PATH_ADDITIONS.os2.x86)/libc061.dll \
+	OS2/libc062.dll=$(NEMU_PATH_ADDITIONS.os2.x86)/libc062.dll \
+	OS2/libc063.dll=$(NEMU_PATH_ADDITIONS.os2.x86)/libc063.dll \
+	OS2/libc064.dll=$(NEMU_PATH_ADDITIONS.os2.x86)/libc064.dll \
+	OS2/libc065.dll=$(NEMU_PATH_ADDITIONS.os2.x86)/libc065.dll \
+	OS2/readme.txt=$(NEMU_PATH_ADDITIONS.os2.x86)/readme.txt \
+       \
+	OS2/gengradd.dll=$(NEMU_PATH_ADDITIONS.os2.x86)/gengradd.dll \
+	OS2/nemumouse.sys=$(NEMU_PATH_ADDITIONS.os2.x86)/nemumouse.sys
+endif
+
+# Oracle Solaris.
+ifdef NEMU_WITH_ADDITIONS_ISO.solaris.amd64
+ NEMU_PATH_ADDITIONS.solaris.amd64 = $(PATH_OUT_BASE)/solaris.amd64/$(KBUILD_TYPE)/bin/additions
+ GUESTADDITIONS_FILESPEC.solaris.amd64 = \
+	NemuSolarisAdditions-amd64.pkg=$(NEMU_PATH_ADDITIONS.solaris.amd64)/NemuSolarisAdditions.pkg
+endif
+ifdef NEMU_WITH_ADDITIONS_ISO.solaris.x86
+ NEMU_PATH_ADDITIONS.solaris.x86 = $(PATH_OUT_BASE)/solaris.x86/$(KBUILD_TYPE)/bin/additions
+ GUESTADDITIONS_FILESPEC.solaris.x86 = \
+	NemuSolarisAdditions-x86.pkg=$(NEMU_PATH_ADDITIONS.solaris.x86)/NemuSolarisAdditions.pkg
+endif
+ifdef NEMU_WITH_COMBINED_SOLARIS_GUEST_PACKAGE
+ # Build combined 32bit and 64bit solaris additions, not just a single arch.
+ # This assumes that the 32bit build directory contains the combined additions
+ # for 32bit and 64bit solaris. This just modifies variables set above.
+ GUESTADDITIONS_FILESPEC.solaris.x86 = \
+	NemuSolarisAdditions.pkg=$(NEMU_PATH_ADDITIONS.solaris.x86)/NemuSolarisAdditions.pkg
+ GUESTADDITIONS_FILESPEC.solaris.amd64 =
+endif
+
+# Microsoft Windows.
+ifdef NEMU_WITH_ADDITIONS_ISO.win.amd64
+ NEMU_PATH_ADDITIONS.win.amd64 = $(PATH_OUT_BASE)/win.amd64/$(KBUILD_TYPE)/bin/additions
+ GUESTADDITIONS_FILESPEC.win.amd64 = \
+	NemuWindowsAdditions-amd64.exe=$(NEMU_PATH_ADDITIONS.win.amd64)/NemuWindowsAdditions-amd64.exe
+ ifndef NEMU_WITH_ADDITIONS_ISO.win.x86
+  GUESTADDITIONS_FILESPEC.win.amd64 += \
+	cert/oracle-nemu.cer=$(NEMU_PATH_ADDITIONS_SRC)/WINNT/tools/oracle-nemu.cer \
+	cert/NemuCertUtil.exe=$(NEMU_PATH_ADDITIONS.win.amd64)/NemuCertUtil.exe
+ endif
+endif
+
+ifdef NEMU_WITH_ADDITIONS_ISO.win.x86
+ NEMU_PATH_ADDITIONS.win.x86 = $(PATH_OUT_BASE)/win.x86/$(KBUILD_TYPE)/bin/additions
+ GUESTADDITIONS_FILESPEC.win.x86 = \
+	NemuWindowsAdditions-x86.exe=$(NEMU_PATH_ADDITIONS.win.x86)/NemuWindowsAdditions-x86.exe \
+	NemuWindowsAdditions.exe=$(NEMU_PATH_ADDITIONS.win.x86)/NemuWindowsAdditions.exe \
+	AUTORUN.INF=$(NEMU_PATH_ADDITIONS_SRC)/WINNT/Installer/ISO/AUTORUN.INF \
+	32Bit/Readme.txt=$(NEMU_PATH_ADDITIONS_SRC)/WINNT/Installer/ISO/ReadmeDrivers.txt \
+	64Bit/Readme.txt=$(NEMU_PATH_ADDITIONS_SRC)/WINNT/Installer/ISO/ReadmeDrivers.txt \
+	cert/oracle-nemu.cer=$(NEMU_PATH_ADDITIONS_SRC)/WINNT/tools/oracle-nemu.cer \
+	cert/NemuCertUtil.exe=$(NEMU_PATH_ADDITIONS.win.x86)/NemuCertUtil.exe
+endif # win.x86
+
+ifdef NEMU_WITH_ADDITIONS_ISO.haiku.x86
+ NEMU_PATH_ADDITIONS.haiku.x86 = $(PATH_OUT_BASE)/haiku.x86/$(KBUILD_TYPE)/bin/additions
+ # or bfs?
+ GUESTADDITIONS_FILESPEC.haiku.x86 = \
+	NemuHaikuAdditions-x86.run=$(NEMU_PATH_ADDITIONS.haiku.x86)/NemuHaikuAdditions-x86.run
+endif
+
+
+#
+# Build the Guest Additions ISO image.
+#
+ifndef NEMU_WITHOUT_ADDITIONS_ISO
+$(NEMU_PATH_ADDITIONS_ISO)/NemuGuestAdditions.iso: \
+		$(filter-out %=deleteme=,\
+			$(subst =,=deleteme= ,\
+				$(GUESTADDITIONS_FILESPEC.win.x86) \
+				$(GUESTADDITIONS_FILESPEC.win.amd64) \
+				$(GUESTADDITIONS_FILESPEC.solaris.x86) \
+				$(GUESTADDITIONS_FILESPEC.solaris.amd64) \
+				$(GUESTADDITIONS_FILESPEC.os2.x86) \
+				$(GUESTADDITIONS_FILESPEC.linux.x86) \
+				$(GUESTADDITIONS_FILESPEC.linux.amd64) \
+				$(GUESTADDITIONS_FILESPEC.freebsd.x86) \
+				$(GUESTADDITIONS_FILESPEC.freebsd.amd64) \
+				$(GUESTADDITIONS_FILESPEC.haiku.x86) \
+				$(GUESTADDITIONS_FILESPEC.darwin.x86) \
+				$(GUESTADDITIONS_FILESPEC.darwin.amd64) \
+			)\
+		) \
+		$(NEMU_SVN_REV_KMK) \
+		$(NEMU_PATH_ADDITIONS_SRC)/Makefile.kmk
+	$(call MSG_TOOL,mkisofs,,$@)
+	$(QUIET)$(MKDIR) -p $(@D)
+	@# use iso-level 3 which is the most ISO conforming level with least restrictions; iso-level 4 maps to iso-level 2
+	@# with some extra restrictions removal (not conforming to ISO9660) which some platforms like Solaris 10 does not like.
+	$(NEMU_MKISOFS) -rational-rock -joliet -iso-level 3 \
+		-volid "NEMUADDITIONS_$(NEMU_VERSION_STRING_RAW)_$(NEMU_SVN_REV)" -l -graft-points -o $@ \
+		$(GUESTADDITIONS_FILESPEC.win) \
+		$(GUESTADDITIONS_FILESPEC.win.x86) \
+		$(GUESTADDITIONS_FILESPEC.win.amd64) \
+		$(GUESTADDITIONS_FILESPEC.solaris.x86) \
+		$(GUESTADDITIONS_FILESPEC.solaris.amd64) \
+		$(GUESTADDITIONS_FILESPEC.os2.x86) \
+		$(GUESTADDITIONS_FILESPEC.linux.x86) \
+		$(GUESTADDITIONS_FILESPEC.linux.amd64) \
+		$(GUESTADDITIONS_FILESPEC.freebsd.x86) \
+		$(GUESTADDITIONS_FILESPEC.freebsd.amd64) \
+		$(GUESTADDITIONS_FILESPEC.haiku.x86) \
+		$(GUESTADDITIONS_FILESPEC.darwin.x86) \
+		$(GUESTADDITIONS_FILESPEC.darwin.amd64)
+
+$(NEMU_PATH_ADDITIONS_ISO)/NemuGuestAdditions.zip: $(NEMU_PATH_ADDITIONS_ISO)/NemuGuestAdditions.iso
+	$(call MSG_L1,Zipping image $@)
+	$(QUIET)$(RM) -f $@
+	$(QUIET)$(REDIRECT) -C $(NEMU_PATH_ADDITIONS_ISO) -- zip$(HOSTSUFF_EXE) -9 $@ $(notdir $^)
+
+# Alias for creating the iso.
+.PHONY: additions-iso
+additions-iso: $(NEMU_PATH_ADDITIONS_ISO)/NemuGuestAdditions.zip
+
+endif
+

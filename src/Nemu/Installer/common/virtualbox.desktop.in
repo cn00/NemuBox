@@ -1,0 +1,21 @@
+[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Name=@NEMU_PRODUCT@
+GenericName=Virtual Machine
+GenericName[de]=Virtuelle Maschine
+Type=Application
+Exec=VirtualBox %U
+TryExec=VirtualBox
+Keywords=virtualization;
+Keywords[de]=Virtualisierung;
+MimeType=application/x-virtualbox-nemu;application/x-virtualbox-nemu-extpack;application/x-virtualbox-ovf;application/x-virtualbox-ova;
+DocPath=file://@NEMU_DOC_PATH@/UserManual.pdf
+Icon=virtualbox
+Categories=Emulator;System;
+Comment=Run several virtual systems on a single host computer
+Comment[de]=Mehrere virtuelle Maschinen auf einem einzigen Rechner ausführen
+Comment[it]=Esegui più macchine virtuali su un singolo computer
+Comment[pl]=Uruchamianie wielu systemów wirtualnych na jednym komputerze gospodarza
+Comment[sv]=Kör flera virtuella system på en enda värddator
+Comment[ko]=가상 머신

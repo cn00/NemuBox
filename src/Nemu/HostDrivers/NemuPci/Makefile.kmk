@@ -1,0 +1,77 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the PCI passthru driver (NemuPci).
+#
+
+#
+# Copyright (C) 2011-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+if1of ($(KBUILD_TARGET), linux)
+
+ ifdef NEMU_WITH_NEMUDRV
+  #
+  # The driver.
+  # Note! For Linux, this is just a compile test. Don't use the binary!
+  #
+  SYSMODS += NemuPci
+  NemuPci_TEMPLATE       = NEMUR0DRV
+  NemuPci_INST           = $(INST_NEMUPCI)$(if $(eq $(KBUILD_TARGET),darwin),Contents/MacOS/)
+  NemuPci_NAME.linux     = nemupci
+  NemuPci_DEFS           = IN_RT_R0 NEMU_SVN_REV=$(NEMU_SVN_REV) IN_SUP_STATIC
+  NemuPci_DEFS.linux     = KBUILD_MODNAME=KBUILD_STR\(nemupci\) KBUILD_BASENAME=KBUILD_STR\(nemupci\) MODULE
+  NemuPci_INCS.linux    := \
+ 	$(PATH_ROOT)/src/Nemu/Runtime/r0drv/linux
+  NemuPci_INCS           = \
+ 	.
+  NemuPci_SOURCES.linux  = \
+ 	linux/NemuPci-linux.c
+  NemuPci_SOURCES        = \
+ 	NemuPci.c
+  NemuPci_LIBS          += \
+ 	$(PATH_STAGE_LIB)/SUPR0IdcClient$(NEMU_SUFF_LIB)
+ endif
+
+ #
+ # Install the sources.
+ #
+ include $(PATH_SUB_CURRENT)/linux/files_nemupci
+ INSTALLS += NemuPci-src
+ NemuPci-src_INST       = bin/src/nemupci/
+ NemuPci-src_SOURCES    = \
+	$(subst $(DQUOTE),,$(NEMU_NEMUPCI_SOURCES)) \
+ 	$(NemuPci-src_0_OUTDIR)/Makefile
+ NemuPci-src_EXEC_SOURCES = \
+ 	$(PATH_ROOT)/src/Nemu/HostDrivers/linux/do_Module.symvers
+ NemuPci-src_CLEAN      = \
+ 	$(NemuPci-src_0_OUTDIR)/Makefile \
+ 	$(PATH_TARGET)/NemuPciSrc-src-1.dep \
+
+ # Generate the scripts needed for building the kernel module.
+
+ includedep $(PATH_TARGET)/NemuPci-src-1.dep
+$$(NemuPci-src_0_OUTDIR)/Makefile: \
+		$(PATH_SUB_CURRENT)/linux/Makefile \
+		$$(if $$(eq $$(NemuPci/linux/Makefile_NEMU_HARDENED),$$(NEMU_WITH_HARDENING)),,FORCE) \
+		| $$(dir $$@)
+	$(QUIET)$(RM) -f -- $@
+ ifndef NEMU_WITH_HARDENING
+	$(QUIET)$(SED) -e "s;-DNEMU_WITH_HARDENING;;g" --output $@ $<
+ else
+	$(QUIET)$(CP) -f $< $@
+ endif
+	%$(QUIET2)$(APPEND) -t '$(PATH_TARGET)/NemuPci-src-1.dep' 'NemuPci/linux/Makefile_NEMU_HARDENED=$(NEMU_WITH_HARDENING)'
+
+endif # Supported platform.
+include $(FILE_KBUILD_SUB_FOOTER)
+

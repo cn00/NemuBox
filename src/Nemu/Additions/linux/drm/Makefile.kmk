@@ -1,0 +1,85 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for the nemuvideo DRM module (linux kernel OpenGL module).
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+#
+# Populate FILES_NEMUVIDEO_DRM_NOBIN
+#
+INSTALLS += nemuvideo_drm-mod
+if !defined(NEMU_WITH_GUEST_KMS_DRIVER)
+ include $(PATH_SUB_CURRENT)/files_nemuvideo_drm
+else
+ include $(PATH_SUB_CURRENT)/files_nemuvideo_drv
+endif
+nemuvideo_drm-mod_INST         = $(INST_ADDITIONS)src/nemuvideo/
+nemuvideo_drm-mod_SOURCES      = \
+	$(subst $(DQUOTE),,$(FILES_NEMUVIDEO_DRM_NOBIN))
+nemuvideo_drm-mod_EXEC_SOURCES = \
+	$(subst $(DQUOTE),,$(FILES_NEMUVIDEO_DRM_BIN)) \
+	$(PATH_ROOT)/src/Nemu/HostDrivers/linux/do_Module.symvers
+
+
+#
+# The kernel module.
+#
+# Note! Syntax checking only.  Don't bother if drmP.h is missing (introduced
+#       in 2.6.27).  For the mode-setting driver make sure this is supported.
+# Note! The DEBUG_HASH* stuff is for CONFIG_DYNAMIC_DEBUG-enabled kernels.
+#
+if defined(NEMU_WITH_ADDITION_DRIVERS)
+ if !defined(NEMU_WITH_GUEST_KMS_DRIVER)
+  if "$(strip $(foreach inc,$(NEMU_LINUX_INCS),$(wildcard $(inc)/drm/drmP.h)))" != ""
+   SYSMODS += nemuvideo_drm
+  endif
+ else
+  if "$(shell grep -s 'DRIVER_MODESET' $(foreach inc,$(NEMU_LINUX_INCS),$(inc)/drm/drmP.h))" != ""
+   SYSMODS += nemuvideo_drm
+  endif
+ endif
+endif
+
+nemuvideo_drm_TEMPLATE        = NEMUGUESTR0
+nemuvideo_drm_CFLAGS          = -fshort-wchar
+nemuvideo_drm_DEFS            = \
+	MODULE IN_RT_R0 NEMUGUEST NEMU_WITH_HGCM \
+	KBUILD_MODNAME=KBUILD_STR\(nemuvideo\) \
+	KBUILD_BASENAME=KBUILD_STR\(nemuvideo\) \
+	DEBUG_HASH=2 DEBUG_HASH2=3
+if !defined(NEMU_WITH_GUEST_KMS_DRIVER)
+ nemuvideo_drm_SOURCES         = nemuvideo_drm.c
+else
+ nemuvideo_drm_INCS           += \
+   ../../../Runtime/include \
+   ../../../Runtime/r0drv/linux
+ nemuvideo_drm_SOURCES         = \
+   ../../common/NemuVideo/HGSMIBase.cpp \
+   ../../common/NemuVideo/Modesetting.cpp \
+   ../../common/NemuVideo/VBVABase.cpp \
+   ../../../GuestHost/HGSMI/HGSMICommon.cpp \
+   ../../../GuestHost/HGSMI/HGSMIMemAlloc.cpp \
+   ../../../Runtime/common/alloc/heapoffset.cpp \
+ 	nemu_drv.c \
+ 	nemu_fb.c \
+ 	nemu_main.c \
+ 	nemu_mode.c \
+ 	nemu_ttm.c
+endif
+
+include $(FILE_KBUILD_SUB_FOOTER)
+

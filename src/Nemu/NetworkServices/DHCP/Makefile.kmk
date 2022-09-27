@@ -1,0 +1,72 @@
+ # $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for NemuNetDHCP.
+#
+
+#
+# Copyright (C) 2009-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+
+NEMU_PATH_NET_DHCP_SRC := $(PATH_SUB_CURRENT)
+
+#
+# Targets.
+#
+ifdef NEMU_WITH_HARDENING
+ PROGRAMS += NemuNetDHCPHardened
+ DLLS += NemuNetDHCP
+else
+ PROGRAMS += NemuNetDHCP
+endif
+
+
+#
+# Hardened NemuNetDHCP.
+#
+NemuNetDHCPHardened_TEMPLATE = NEMUR3HARDENEDEXE
+NemuNetDHCPHardened_SOURCES = NemuNetDHCPHardened.cpp
+NemuNetDHCPHardened_SOURCES.win = $(NemuNetDHCP_0_OUTDIR)/NemuNetDHCP-icon.rc
+NemuNetDHCPHardened_NAME = NemuNetDHCP
+NemuNetDHCPHardened_LDFLAGS.win = /SUBSYSTEM:windows
+
+
+#
+# NemuNetDHCP
+#
+NemuNetDHCP_TEMPLATE := NEMU$(if-expr defined(NEMU_WITH_HARDENING),MAINDLL,MAINCLIENTEXE)
+NemuNetDHCP_SOURCES = \
+	NemuNetDHCP.cpp \
+	Config.cpp \
+	NetworkManagerDhcp.cpp \
+	$(NEMU_PATH_NET_DHCP_SRC)/../NetLib/NemuNetIntIf.cpp \
+	$(NEMU_PATH_NET_DHCP_SRC)/../NetLib/NemuNetUDP.cpp \
+	$(NEMU_PATH_NET_DHCP_SRC)/../NetLib/NemuNetARP.cpp \
+	$(NEMU_PATH_NET_DHCP_SRC)/../NetLib/NemuNetBaseService.cpp \
+	$(NEMU_PATH_NET_DHCP_SRC)/../NetLib/ComHostUtils.cpp
+NemuNetDHCP_LIBS = \
+	$(LIB_RUNTIME)
+NemuNetDHCP_LDFLAGS.win = /SUBSYSTEM:windows
+
+ifeq ($(KBUILD_TARGET),win)
+# Icon include file.
+NemuNetDHCP_SOURCES     += NemuNetDHCP.rc
+NemuNetDHCP.rc_INCS      = $(NemuNetDHCP_0_OUTDIR)
+NemuNetDHCP.rc_DEPS      = $(NemuNetDHCP_0_OUTDIR)/NemuNetDHCP-icon.rc
+NemuNetDHCP.rc_CLEAN     = $(NemuNetDHCP_0_OUTDIR)/NemuNetDHCP-icon.rc
+$$(NemuNetDHCP_0_OUTDIR)/NemuNetDHCP-icon.rc: $(NEMU_WINDOWS_ICON_FILE) $$(NemuNetDHCP_DEFPATH)/Makefile.kmk | $$(dir $$@)
+	$(RM) -f $@
+	$(APPEND) $@ 'IDI_VIRTUALBOX ICON DISCARDABLE "$(subst /,\\,$(NEMU_WINDOWS_ICON_FILE))"'
+endif # win
+
+include $(FILE_KBUILD_SUB_FOOTER)

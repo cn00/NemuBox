@@ -1,0 +1,160 @@
+# $Id: Makefile.kmk $
+## @file
+# Sub-Makefile for NemuSDL (a simple frontend based on SDL).
+#
+
+#
+# Copyright (C) 2006-2015 Oracle Corporation
+#
+# This file is part of VirtualBox Open Source Edition (OSE), as
+# available from http://www.virtualbox.org. This file is free software;
+# you can redistribute it and/or modify it under the terms of the GNU
+# General Public License (GPL) as published by the Free Software
+# Foundation, in version 2 as it comes in the "COPYING" file of the
+# VirtualBox OSE distribution. VirtualBox OSE is distributed in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
+#
+
+SUB_DEPTH = ../../../..
+include $(KBUILD_PATH)/subheader.kmk
+if !defined(NEMU_WITH_HARDENING) || "$(KBUILD_TARGET)" != "darwin" # No hardened NemuSDL on darwin.
+
+
+ifdef NEMU_WITH_HARDENING
+ #
+ # Hardened NemuSDL
+ #
+ PROGRAMS += NemuSDLHardened
+ NemuSDLHardened_TEMPLATE = NEMUR3HARDENEDEXE
+ NemuSDLHardened_SOURCES = NemuSDLHardened.cpp
+ NemuSDLHardened_NAME = NemuSDL
+ $(call NEMU_SET_VER_INFO_EXE,NemuSDLHardened,VirtualBox Pure SDL Frontend,$(NEMU_WINDOWS_ICON_FILE)) # Version info / description.
+endif
+
+
+#
+# NemuSDL
+#
+ifdef NEMU_WITH_HARDENING
+ DLLS += NemuSDL
+else
+ PROGRAMS += NemuSDL
+endif
+NemuSDL_TEMPLATE  := $(if $(NEMU_WITH_HARDENING),NEMUMAINCLIENTDLL,NEMUMAINCLIENTEXE)
+NemuSDL_SDKS       = LIBSDL
+NemuSDL_SOURCES    = \
+	NemuSDL.cpp \
+	Framebuffer.cpp \
+	Helper.cpp
+NemuSDL_SOURCES.darwin = \
+	NemuSDLMain-darwin.m \
+       Framebuffer-darwin.m
+
+NemuSDL_DEFS       =
+ifdef NEMU_WITH_SDL13
+ NemuSDL_DEFS     += NEMU_WITH_SDL13
+else
+ ifdef NEMU_WITH_SECURELABEL
+  NemuSDL_DEFS    += NEMU_SECURELABEL
+ endif
+endif
+NemuSDL_DEFS.freebsd = NEMUSDL_WITH_X11
+NemuSDL_DEFS.linux = _GNU_SOURCE NEMUSDL_WITH_X11
+NemuSDL_DEFS.solaris = NEMUSDL_WITH_X11
+ifdef NEMU_OPENGL
+ #NemuSDL_DEFS.linux += NEMU_OPENGL
+endif
+NemuSDL_DEFS.win.x86 = _WIN32_WINNT=0x0500
+NemuSDL_DEFS.win.amd64 = _WIN32_WINNT=0x0510
+
+NemuSDL_INCS = \
+	$(NemuSDL_0_OUTDIR)
+ifeq ($(filter-out freebsd linux netbsd openbsd solaris,$(KBUILD_TARGET)),) # X11
+NemuSDL_INCS += \
+	$(NEMU_XCURSOR_INCS)
+endif
+ifneq ($(filter-out win solaris,$(KBUILD_TARGET)),)
+
+NemuSDL_LIBS = \
+	$(LIB_SDK_LIBSDL_SDLMAIN)
+endif
+ifeq ($(filter-out freebsd linux netbsd openbsd solaris,$(KBUILD_TARGET)),) # X11
+NemuSDL_LIBS += \
+	$(PATH_STAGE_DLL)/NemuKeyboard$(NEMU_SUFF_DLL) \
+	$(NEMU_XCURSOR_LIBS) \
+	X11
+NemuSDL_LIBPATH = \
+	$(NEMU_LIBPATH_X11)
+endif
+ifdef NEMU_OPENGL
+ #NemuSDL_LIBS.linux += GL
+endif
+
+NemuSDL_LDFLAGS.darwin = \
+	-framework Foundation -framework AppKit
+
+NemuSDL_CLEAN = $(NemuSDL_0_OUTDIR)/Ico64x01.h
+NemuSDL_INTERMEDIATES = $(NemuSDL_0_OUTDIR)/Ico64x01.h
+
+
+# Convert the pnm-file to a byte array.
+$$(NemuSDL_0_OUTDIR)/Ico64x01.h: $(PATH_ROOT)/src/Nemu/Frontends/NemuSDL/ico64x01.pnm $(NEMU_BIN2C) | $$(dir $$@)
+	$(call MSG_TOOL,bin2c,NemuSDL,$<,$@)
+	$(QUIET)$(NEMU_BIN2C) Ico64x01 $< $@
+
+ifdef NEMU_WITH_HARDENING
+$(call NEMU_SET_VER_INFO_DLL,NemuSDL,VirtualBox Pure SDL Frontend,$(NEMU_WINDOWS_ICON_FILE)) # Version info / description.
+else
+$(call NEMU_SET_VER_INFO_EXE,NemuSDL,VirtualBox Pure SDL Frontend,$(NEMU_WINDOWS_ICON_FILE)) # Version info / description.
+endif
+
+
+#
+# tstSDL
+#
+PROGRAMS += tstSDL
+tstSDL_TEMPLATE = NEMUR3NPEXE
+tstSDL_SDKS = LIBSDL
+tstSDL_INST = $(INST_TESTCASE)
+tstSDL_SOURCES = \
+	NemuSDLTest.cpp
+tstSDL_SOURCES.darwin = \
+	NemuSDLMain-darwin.m
+tstSDL_DEFS = IN_RING3 IN_RT_R3 _GNU_SOURCE
+tstSDL_DEFS.win.x86 = _WIN32_WINNT=0x0500
+ifdef NEMU_OPENGL
+tstSDL_DEFS.linux = NEMU_OPENGL
+endif
+
+tstSDL_LIBS = \
+	$(LIB_RUNTIME)
+ifneq ($(filter-out win solaris,$(KBUILD_TARGET)),)
+tstSDL_LIBS += \
+	$(LIB_SDK_LIBSDL_SDLMAIN)
+endif
+
+ifdef NEMU_OPENGL
+tstSDL_LIBS.linux += GL
+endif
+ifeq ($(filter-out freebsd linux netbsd openbsd solaris,$(KBUILD_TARGET)),) # X11
+tstSDL_LIBPATH = \
+	$(NEMU_LIBPATH_X11)
+endif
+
+tstSDL_LDFLAGS.darwin = \
+	-framework Foundation -framework AppKit
+
+## @todo What was this stuff doing here? The exception config is saying two different things, and why just -O for release builds?
+#tstSDL_CXXFLAGS.win = \
+#	-EHsc
+#tstSDL_CXXFLAGS.linux = \
+#	-DNDEBUG -DTRIMMED -O -Wall -fno-rtti -fno-exceptions \
+#	-Wno-non-virtual-dtor -Wno-long-long -fshort-wchar -pthread -pipe
+# Is this what's intended? Why -fshort-wchar?
+tstSDL_DEFS.linux = NDEBUG TRIMMED
+tstSDL_CXXFLAGS.linux = -O -Wall -Wno-non-virtual-dtor -Wno-long-long -fshort-wchar
+
+
+endif # !NEMU_WITH_HARDENING || "$(KBUILD_TARGET)" != "darwin"
+include $(FILE_KBUILD_SUB_FOOTER)
+
